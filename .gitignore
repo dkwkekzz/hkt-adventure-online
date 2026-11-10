@@ -1,0 +1,5 @@
+node_modules/
+# 엔진의 체크아웃 — scripts/engine.sh 가 engine.lock 의 커밋으로 세운다
+engine/
+# 만들어진 것 — 저장장치의 뿌리(기본 out/storage) · 화면 확인
+out/

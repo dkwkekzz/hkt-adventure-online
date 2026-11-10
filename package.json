@@ -1,0 +1,23 @@
+{
+  "name": "hkt-adventure-online",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "boundary:check": "tsx src/tools/boundary/check.ts",
+    "index": "tsx src/tools/index/main.ts",
+    "check": "tsx src/tools/boundary/check.ts && tsx src/tools/index/main.ts --quiet && tsc --noEmit -p . && vitest run",
+    "test": "npm run check",
+    "engine": "bash scripts/engine.sh",
+    "start": "tsx src/apps/main/main.ts",
+    "shot": "tsx src/tools/shot/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
