@@ -3,14 +3,27 @@
   "apiPort": 8000,
   "tokenTtl": 21600,
   "agentTtl": 300,
+  "keymap": "dataset/adventure-keymap.json",
   "fleet": {
     "engineDir": "engine",
     "dataset": "dataset/corner.json",
-    "keymap": "dataset/adventure-keymap.json",
+    "viewerOut": "out/viewer/viewer.js",
     "beat": 200,
     "sparse": 10,
-    "npc": { "account": "npc", "bodies": ["wolf-pack-1", "blight-pack-1", "wolf-horde-1", "human-mother", "demon-buer"] },
-    "ports": [3100, 3199],
+    "npc": {
+      "account": "npc",
+      "bodies": [
+        "wolf-pack-1",
+        "blight-pack-1",
+        "wolf-horde-1",
+        "human-mother",
+        "demon-buer"
+      ]
+    },
+    "ports": [
+      3100,
+      3199
+    ],
     "publicHost": "localhost",
     "secure": false,
     "clockMs": 5000,

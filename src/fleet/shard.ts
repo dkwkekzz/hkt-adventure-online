@@ -14,12 +14,13 @@ export type ShardState = 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed
 /** Fleet 이 Shard 에 주는 것 — 설정의 값과 함수 셋. Shard 는 Fleet 을 모른다. */
 export interface ShardContext {
   readonly engineDir: string;
-  readonly keymap: string | null;
   readonly beat: number;
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
   readonly publicHost: string;
   readonly secure: boolean;
+  /** 뷰어 페이지의 주소 — 서비스의 Static 이 준다(`…/play`). */
+  readonly pageUrl: string;
   readonly startLimitMs: number;
   readonly stopLimitMs: number;
   readonly commandLimitMs: number;
@@ -28,8 +29,6 @@ export interface ShardContext {
   readonly key: string;
   /** NPC 계정의 토큰을 낸다 — 앱이 준 Signer.issue. */
   readonly issue: (account: string) => string;
-  /** 시작 줄 — 한 번에 하나(흐름 3 규칙). */
-  readonly serial: <T>(job: () => Promise<T>) => Promise<T>;
   readonly log: (line: string) => void;
 }
 
@@ -59,6 +58,7 @@ export class Shard {
   private starting: Promise<void> | null = null;
   private stopping: Promise<void> | null = null;
   private ready: { resolve: () => void; reject: (e: Error) => void } | null = null;
+  private listening = false; // 머리글의 마지막 줄을 보았다 — 이 뒤의 줄만 명령의 답이다
   private lastErr = '';
 
   constructor(account: string, row: Row, ctx: ShardContext) {
@@ -74,7 +74,7 @@ export class Shard {
     if (this.stopping !== null) await this.stopping;
     if (this.state === 'failed' && this.restarts > this.ctx.restartLimit) throw new Error(`샤드가 멈췄다 — ${this.why ?? '까닭 없음'} (운영자: start ${this.account})`);
     if (this.row.port === null) throw new Error('포트가 없다');
-    this.starting = this.ctx.serial(() => this.boot()).finally(() => (this.starting = null));
+    this.starting = this.boot().finally(() => (this.starting = null));
     return this.starting;
   }
 
@@ -88,11 +88,8 @@ export class Shard {
     this.players = 0;
     this.idle = 0;
     this.agentRestarts = 0;
-    const host = Spawner.host(
-      this.ctx.engineDir,
-      { dataset: this.row.dataset, port, store: this.row.storeDir, beat: this.ctx.beat, sparse: this.ctx.sparse, keymap: this.ctx.keymap, grant: this.ctx.npc },
-      this.ctx.key,
-    );
+    this.listening = false;
+    const host = Spawner.host(this.ctx.engineDir, { dataset: this.row.dataset, port, store: this.row.storeDir, beat: this.ctx.beat, sparse: this.ctx.sparse }, this.ctx.key);
     this.host = host;
     host.onLine((stream, line) => this.line('host', stream, line));
     host.onExit((code) => this.exited('host', code));
@@ -120,6 +117,29 @@ export class Shard {
     } finally {
       clearTimeout(limit);
       this.ready = null;
+    }
+    // NPC 묶음을 NPC 계정에 — 주소를 답하기 전이라 어떤 사람의 접속보다 먼저다(흐름 3 의 7)
+    for (const body of this.ctx.npc.bodies) {
+      if ((this.state as ShardState) === 'stopping') break;
+      const answer = await this.command(`grant ${this.ctx.npc.account} ${body}`);
+      if ((this.state as ShardState) === 'stopping' || (this.state as ShardState) === 'stopped') {
+        await host.exited;
+        throw new Error('뜨는 가운데 내렸다');
+      }
+      if (!host.alive) {
+        this.restarts++;
+        this.why = `호스트가 NPC 묶음을 묶는 가운데 끝났다 — exit ${host.exit}${this.lastErr === '' ? '' : ` — ${this.lastErr}`}`;
+        this.state = 'failed';
+        throw new Error(this.why);
+      }
+      if (answer === null || !answer.startsWith('grant — ')) {
+        this.why = `NPC 묶음을 묶지 못했다 — grant ${this.ctx.npc.account} ${body} → ${answer ?? '답 없음'}`;
+        this.restarts = this.ctx.restartLimit + 1; // 같은 설정으로 다시 띄워도 같다
+        host.write('stop');
+        await host.exited;
+        this.state = 'failed';
+        throw new Error(this.why);
+      }
     }
     if ((this.state as ShardState) === 'stopping') {
       await host.exited; // 머리글과 stop 이 엇갈렸다 — 내리는 길이 끝낸다
@@ -153,10 +173,14 @@ export class Shard {
       this.lastStatus = read.status;
       this.players = read.accounts.filter((a) => a !== this.ctx.npc.account).length;
     } else if (text.trim() !== '') this.ctx.log(`${this.account} host ${text}`); // status 는 박자마다 온다 — 기록하지 않는다
-    if (read.kind === 'ready') this.ready?.resolve();
+    if (read.kind === 'ready') {
+      this.listening = true;
+      this.ready?.resolve();
+      return;
+    }
     if (text.startsWith(RESUMED_HEAD)) this.resumed = true;
     const head = this.waiting[0];
-    if (this.state !== 'starting' && head !== undefined && Probe.answers(head.command, text)) {
+    if (this.listening && head !== undefined && Probe.answers(head.command, text)) {
       this.waiting.shift();
       head.resolve(text);
     }
@@ -254,11 +278,9 @@ export class Shard {
     return this.stopping;
   }
 
-  /** address — 흐름 3 의 8. page 는 이 샤드의 dev 가 주는 뷰어 페이지, 자격은 ?token=. */
+  /** address — 흐름 3 의 8. page 는 서비스의 Static 이 주는 뷰어 페이지 — 자격은 ?token=, 이 샤드는 ?ws=. */
   address(token: string): Address {
-    const port = this.row.port;
-    const http = this.ctx.secure ? 'https' : 'http';
-    const ws = this.ctx.secure ? 'wss' : 'ws';
-    return { page: `${http}://${this.ctx.publicHost}:${port}/?token=${encodeURIComponent(token)}`, ws: `${ws}://${this.ctx.publicHost}:${port}` };
+    const ws = `${this.ctx.secure ? 'wss' : 'ws'}://${this.ctx.publicHost}:${this.row.port}`;
+    return { page: `${this.ctx.pageUrl}?token=${encodeURIComponent(token)}&ws=${encodeURIComponent(ws)}`, ws };
   }
 }

@@ -23,7 +23,8 @@ function up(over: Partial<FleetConfig> = {}, vault: VaultSocket = openVault(mkdt
   const config: FleetConfig = {
     engineDir: fakeEngine(),
     dataset: 'dataset/world.json',
-    keymap: 'dataset/keymap.json',
+    viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'),
+    pageUrl: 'http://example.test:8000/play',
     beat: 200,
     sparse: 10,
     npc: NPC,
@@ -47,7 +48,7 @@ function up(over: Partial<FleetConfig> = {}, vault: VaultSocket = openVault(mkdt
 describe('Probe.read · answers', () => {
   it('머리글 · status(사람 칸) · 멈춤 · 답', () => {
     expect(Probe.read('host dataset/x.json · ws://localhost:3000 · beat 200ms').kind).toBe('listening');
-    expect(Probe.read('뷰어: http://localhost:3000/  (?account=이름 으로 자격을 바꾼다)').kind).toBe('ready');
+    expect(Probe.read('명령: pause · resume · save · step · stop · grant <account> <body> · revoke <body> · status  (body 는 번호 또는 이름)').kind).toBe('ready');
     const r = Probe.read('beats 3 · now 9 · 돈다 · 접속 npc(wolf-1, wolf-2) p1(fairy-1, fairy-2) · 명부 wolf-1→npc');
     expect(r).toMatchObject({ kind: 'status', status: { beats: 3, now: 9, paused: false }, accounts: ['npc', 'p1'] });
     expect(Probe.read('beats 0 · now 0 · 멈춤 · 접속 - · 명부 (비었다)')).toMatchObject({ kind: 'status', accounts: [] });
@@ -59,19 +60,20 @@ describe('Probe.read · answers', () => {
 });
 
 describe('Fleet.enter — 흐름 3', () => {
-  it('줄을 내고 호스트를 인자 · 키와 함께 띄우고 NPC 에이전트를 토큰으로 붙여 주소를 답한다', async () => {
+  it('줄을 내고 호스트를 인자 · 키와 함께 띄우고, NPC 묶음을 grant 하고, NPC 에이전트를 토큰으로 붙여 주소를 답한다', async () => {
     const { fleet, vault, config } = up();
     const addr = await fleet.enter('p1', 'hkt1.p1.9.sig');
     const shard = fleet.shardOf('p1')!;
     const port = config.ports[0];
     expect(shard.state).toBe('ready');
-    expect(addr).toEqual({ page: `http://example.test:${port}/?token=hkt1.p1.9.sig`, ws: `ws://example.test:${port}` });
+    const ws = `ws://example.test:${port}`;
+    expect(addr).toEqual({ page: `http://example.test:8000/play?token=hkt1.p1.9.sig&ws=${encodeURIComponent(ws)}`, ws });
     expect(vault.ledger.load('assignment')).toEqual({ rows: { p1: { dataset: 'dataset/world.json', storeDir: shard.row.storeDir, port } } });
     const seen = JSON.parse(readFileSync(join(shard.row.storeDir, 'argv.json'), 'utf8'));
     expect(seen.key).toBe('the-key');
     expect(seen.port).toBeNull(); // 서비스의 PORT 는 새지 않는다
-    expect(seen.argv).toEqual(['dataset/world.json', '--port', String(port), '--store', shard.row.storeDir, '--beat', '200', '--sparse', '10', '--keymap', 'dataset/keymap.json', '--grant', 'npc=b1,b2']);
-    expect(await shard.command('status')).toMatch(/^beats \d+ · now \d+ · 돈다 · 접속 /);
+    expect(seen.argv).toEqual(['dataset/world.json', '--port', String(port), '--store', shard.row.storeDir, '--beat', '200', '--sparse', '10']);
+    expect(await shard.command('status')).toMatch(/^beats \d+ · now \d+ · 돈다 · 접속 .* · 명부 b1→npc b2→npc$/); // NPC 묶음은 주소를 답하기 전에 묶였다
     let text = '';
     await until(() => text.includes('접속 npc('), 3000).catch(() => {});
     for (let i = 0; i < 50 && !text.includes('접속 npc('); i++) text = (await shard.command('status')) ?? ''; // NPC 에이전트가 붙는다
@@ -79,10 +81,21 @@ describe('Fleet.enter — 흐름 3', () => {
     expect(shard.players).toBe(0); // NPC 는 사람이 아니다
   });
 
-  it('겹친 입장은 한 번만 띄우고, 계정마다 다른 포트 · 다른 자리', async () => {
+  it('NPC 묶음을 grant 하지 못하면 failed — 다시 띄우지 않는다', async () => {
+    const { fleet } = up({ dataset: 'dataset/nogrant.json' });
+    await expect(fleet.enter('p1', 't')).rejects.toThrow(/NPC 묶음을 묶지 못했다 — grant npc b1 → 모르는 명령/);
+    expect(fleet.shardOf('p1')!.state).toBe('failed');
+    expect(fleet.shardOf('p1')!.host).toBeNull();
+    await expect(fleet.enter('p1', 't')).rejects.toThrow(/샤드가 멈췄다/);
+  });
+
+  it('겹친 입장은 한 번만 띄우고, 계정마다 다른 포트 · 다른 자리. 여럿을 한꺼번에 띄운다(줄이 없다)', async () => {
     const { fleet, log } = up();
     await Promise.all([fleet.enter('p1', 't'), fleet.enter('p1', 't'), fleet.enter('p2', 't')]);
     expect(log.filter((l) => l.startsWith('p1 fleet 호스트를 띄운다'))).toHaveLength(1);
+    const spawned = log.filter((l) => l.includes('호스트를 띄운다')).map((l) => log.indexOf(l));
+    const firstReady = log.findIndex((l) => l.includes(' host 명령: '));
+    expect(spawned.every((i) => i < firstReady)).toBe(true); // 둘째 호스트는 첫째의 머리글을 기다리지 않고 떴다
     const [a, b] = [fleet.shardOf('p1')!, fleet.shardOf('p2')!];
     expect(a.row.port).not.toBe(b.row.port);
     expect(a.row.storeDir).not.toBe(b.row.storeDir);
@@ -104,6 +117,18 @@ describe('Fleet.enter — 흐름 3', () => {
     const silent = up({ dataset: 'dataset/silent.json', startLimitMs: 300 });
     await expect(silent.fleet.enter('p1', 't')).rejects.toThrow(/머리글이 300ms/);
     expect(silent.fleet.shardOf('p1')!.restarts).toBe(1);
+  });
+});
+
+describe('Fleet.start — 흐름 1 의 6 · 7', () => {
+  it('뷰어를 한 번 묶는다. 엔트리가 없으면 시작 거부', async () => {
+    const { fleet, config } = up();
+    await fleet.start();
+    fleet.clock.stop();
+    expect(readFileSync(config.viewerOut, 'utf8')).toContain('fake viewer');
+    expect(existsSync(`${config.viewerOut}.map`)).toBe(true);
+    const bad = up({ engineDir: fakeEngine({ viewer: false }) });
+    await expect(bad.fleet.start()).rejects.toThrow(/뷰어를 묶지 못했다 — exit 1 — .*Could not resolve/);
   });
 });
 

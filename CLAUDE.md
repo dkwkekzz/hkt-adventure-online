@@ -12,10 +12,10 @@ src/
   account/    계정 (design/02-roles/account.md) — Directory · Signer · Identity · Account · Token
   storage/    저장장치 (design/02-roles/storage.md) — Vault · Ledger. 밖에 내보내는 것은 openVault 하나
   fleet/      함대 (design/02-roles/fleet.md) — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator
-  apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · /health · POST /login · /enter) · stdin 의 Operator · 설정
+  apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · /health · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
   tools/      boundary(경계 검사) · index(설계 색인) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
-service.config.json   서비스의 값 — 엔진 자리 · 데이터셋 · keymap · NPC 묶음 · 포트 범위 · 한계 · 주기. 게임 명사는 여기에만
+service.config.json   서비스의 값 — 엔진 자리 · 데이터셋 · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 한계 · 주기. 게임 명사는 여기에만
 ```
 
 ## 지키는 것
@@ -40,9 +40,10 @@ service.config.json   서비스의 값 — 엔진 자리 · 데이터셋 · keym
  F. fleet/**   은 protocol/ 만 import 한다 — 저장장치는 Vault 소켓, 토큰은 앱이 준 issue 함수
     모듈의 tests/ 는 세움에 다른 모듈의 index.ts 를 쓸 수 있다. 두 모듈을 같이 세우는 조립 테스트는 apps/*/tests/ 에
  P. apps 는 모듈의 index.ts 만 import 하고, 모듈의 객체에 부르는 것은 흐름에서 누가 가 Service · Api 인 단계뿐이다 —
-    directory.resolve · signer.issue · signer.verify · fleet.enter · fleet.tick · fleet.stopAll · fleet.clock.run · fleet.clock.stop · fleet.operator.command
+    directory.resolve · signer.issue · signer.verify · fleet.start · fleet.enter · fleet.stopAll · fleet.clock.stop · fleet.operator.command
  N. 모듈 · 앱 · protocol 의 코드(테스트 밖)와 design 의 책임 · 흐름 문서에 게임 명사가 없다
- E. node:child_process 와 엔진의 진입점 · 인자 짓기(ENGINE_* · devArgv · agentArgv)는 fleet/spawner.ts 에만
+ E. node:child_process 와 엔진의 진입점 · 인자 짓기(ENGINE_* · hostArgv · agentArgv · bundleArgv)는 fleet/spawner.ts 에만.
+    엔진 체크아웃의 파일 자리(VIEWER_*)는 fleet/spawner.ts 와 apps/main/static.ts(뷰어의 페이지 · 실물을 준다)에만
 ```
 
 ## 명령
@@ -54,8 +55,8 @@ npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍는다
 HOST_AUTH_KEY=… npm start [-- config.json]
-                       서비스 — http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → 자기 샤드의 뷰어. stdin 은 Operator(help).
-                       env: PORT(Api 포트) · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_STORAGE · SERVICE_ENGINE
+                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<자기 샤드>. stdin 은 Operator(help).
+                       env: PORT(Api 포트) · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
 npm run shot [-- --url http://localhost:8000 --out out/shot]
                        떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 샤드의 뷰어를 찍는다(playwright 가 깔린 자리에서)
 ```

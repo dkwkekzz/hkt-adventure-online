@@ -16,7 +16,7 @@ Process 의 종료
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | Probe.read(line) | `host ` 머리글이면 listening, dev 의 `뷰어: ` 줄이면 ready. `beats ` 로 시작하면 StatusLine(`readStatus` 와 같은 머리)과 접속한 계정들(`· 접속 ` 뒤 ` · 명부 ` 앞, `-` 면 없다). `멈춤 — ` 이면 halt. 그 밖은 other | Probe 의 답 |
+| 1 | Probe.read(line) | `host ` 머리글이면 listening, 머리글의 마지막 줄 `명령: ` 이면 ready. `beats ` 로 시작하면 StatusLine(`readStatus` 와 같은 머리)과 접속한 계정들(`· 접속 ` 뒤 ` · 명부 ` 앞, `-` 면 없다). `멈춤 — ` 이면 halt. 그 밖은 other | Probe 의 답 |
 | 2 | Shard.line | ready 면 시작을 잇는다(흐름 3 의 6). status 면 lastStatus. 답을 기다리는 명령이 있고 줄이 그 명령의 답이면 그 명령에 준다 | |
 | 3 | Shard.exited(which, code) | 호스트가 0 이면 `stopped`. 2 면 `failed`(데이터셋 거부 · 포트 — 같은 인자로 다시 띄워도 같다). 그 밖이면 `failed` 와 셈(restarts) 하나. 에이전트 프로세스를 함께 끝낸다 | state |
 | 4 | Shard.exited | 에이전트만 끝났고 호스트가 `ready` 면 에이전트를 다시 띄운다. 셈이 한계를 넘으면 샤드를 내리고 `failed` 로 | |

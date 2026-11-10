@@ -48,7 +48,7 @@ export function judgeImport(from: Layer, to: Layer): string | null {
 export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
   directory: ['resolve'],
   signer: ['issue', 'verify'],
-  fleet: ['enter', 'tick', 'stopAll', 'clock.run', 'clock.stop', 'operator.command'],
+  fleet: ['start', 'enter', 'stopAll', 'clock.stop', 'operator.command'],
   vault: [],
 };
 
@@ -66,14 +66,21 @@ export function nounsIn(text: string): string[] {
   return GAME_NOUNS.filter((n) => lower.includes(n));
 }
 
-/** E. 엔진에 닿는 길은 Spawner 하나 — child_process 와 엔진의 진입점 · 인자 짓기는 fleet/spawner.ts 에만. */
+/**
+ * E. 엔진에 닿는 길은 Spawner 하나 — child_process 와 엔진의 진입점 · 인자 짓기는 fleet/spawner.ts 에만.
+ * 엔진 체크아웃의 파일을 읽는 것은 Spawner 와 Static(뷰어의 페이지 · 실물을 준다 — apps/main/static.ts) 둘뿐.
+ */
 export const ENGINE_ONLY = 'fleet/spawner.ts';
-export const ENGINE_NAMES = ['ENGINE_WEB', 'ENGINE_TSX', 'ENGINE_DEV', 'ENGINE_AGENT', 'devArgv', 'agentArgv'] as const;
+export const ENGINE_FILES = 'apps/main/static.ts';
+export const ENGINE_NAMES = ['ENGINE_WEB', 'ENGINE_TSX', 'ENGINE_HOST', 'ENGINE_AGENT', 'ENGINE_ESBUILD', 'VIEWER_ENTRY', 'hostArgv', 'agentArgv', 'bundleArgv'] as const;
+export const ENGINE_FILE_NAMES = ['ENGINE_WEB', 'VIEWER_PAGE', 'VIEWER_ASSETS', 'VIEWER_EXT'] as const;
 
 export function judgeEngine(rel: string, specifier: string, names: readonly string[]): string | null {
   if (rel === ENGINE_ONLY || rel.startsWith('protocol/') || rel.split(/[\\/]/).includes('tests')) return null;
   if (specifier === 'node:child_process' || specifier === 'child_process') return `규칙 E — child_process 는 ${ENGINE_ONLY} 에만`;
-  const hit = names.filter((n) => (ENGINE_NAMES as readonly string[]).includes(n));
-  if (hit.length > 0) return `규칙 E — 엔진의 진입점 · 인자(${hit.join(', ')})는 ${ENGINE_ONLY} 에만`;
+  const run = names.filter((n) => (ENGINE_NAMES as readonly string[]).includes(n) && !(rel === ENGINE_FILES && n === 'ENGINE_WEB'));
+  if (run.length > 0) return `규칙 E — 엔진의 진입점 · 인자(${run.join(', ')})는 ${ENGINE_ONLY} 에만`;
+  const files = names.filter((n) => (ENGINE_FILE_NAMES as readonly string[]).includes(n) && n !== 'ENGINE_WEB');
+  if (files.length > 0 && rel !== ENGINE_FILES) return `규칙 E — 엔진의 파일 자리(${files.join(', ')})는 ${ENGINE_ONLY} · ${ENGINE_FILES} 에만`;
   return null;
 }

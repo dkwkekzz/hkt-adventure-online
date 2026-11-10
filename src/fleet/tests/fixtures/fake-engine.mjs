@@ -1,7 +1,7 @@
-// 가짜 엔진 — 함대의 테스트가 엔진 체크아웃 대신 띄운다. tsx 의 자리에 서서 dev · agent 의 말(엔진 web/ONLINE.md §1)만 흉내 낸다.
-//   dev:   argv 를 <store>/argv.json 에, 머리글(host … · 새 세계 | 저장된 세계에서 이어간다 — now N), stdin 의 Console 글(status · grant · stop …)
+// 가짜 엔진 — 함대의 테스트가 엔진 체크아웃 대신 띄운다. tsx 의 자리에 서서 host · agent 의 말(엔진 web/ONLINE.md §1)만 흉내 낸다.
+//   host:  argv 를 <store>/argv.json 에, 머리글(host … · 새 세계 | 저장된 세계에서 이어간다 — now N · status · 자격 · 명령: …), stdin 의 Console 글(status · grant · stop …)
 //          접속은 http GET /join?account=이름 을 열어 둔 동안 — status 의 접속 칸에 든다. stop · SIGINT 면 <store>/snapshot.json 에 now 를 쓰고 멈춤 — … · exit 0
-//          데이터셋 이름에 refuse 가 있으면 데이터셋 거부 — exit 2. silent 가 있으면 머리글을 찍지 않는다
+//          데이터셋 이름에 refuse 가 있으면 데이터셋 거부 — exit 2. silent 가 있으면 머리글을 찍지 않는다. nogrant 가 있으면 grant 에 모르는 명령으로 답한다
 //   agent: --url 의 포트로 /join?account=<--account> 를 열고, 닫히면 exit 0
 import { createServer, get } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -39,8 +39,6 @@ if (entry === 'apps/agent/main.ts') {
   let beats = 0;
   const links = new Map(); // account → res
   const grants = [];
-  const g = flag('--grant');
-  if (g !== null) grants.push(g);
   const server = createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (u.pathname !== '/join') return void res.end('page');
@@ -72,14 +70,21 @@ if (entry === 'apps/agent/main.ts') {
     console.log(`host ${dataset} · ws://localhost:${port} · beat 200ms · store ${store} · saveEvery 10`);
     console.log(now > 0 ? `저장된 세계에서 이어간다 — now ${now}` : '새 세계');
     console.log(status());
-    if (g !== null) console.log(`grant — ${g}`);
-    console.log(`뷰어: http://localhost:${port}/`);
+    console.log(`자격: ${process.env.HOST_AUTH_KEY ? '서명된 토큰(HOST_AUTH_KEY)' : '이름 글(더미)'}`);
+    console.log('명령: pause · resume · save · step · stop · grant <account> <body> · revoke <body> · status  (body 는 번호 또는 이름)');
   });
   createInterface({ input: process.stdin }).on('line', (line) => {
     const [name, ...rest] = line.trim().split(/\s+/);
     if (name === 'status') console.log(status());
     else if (name === 'stop') stop();
-    else if (name === 'grant') console.log(rest.length < 2 ? 'grant <account> <body 번호 또는 이름>' : `grant — body ${rest[1]} 는 ${rest[0]} 의 것`);
+    else if (name === 'grant' && dataset.includes('nogrant')) console.log(`모르는 명령 grant — …`);
+    else if (name === 'grant') {
+      if (rest.length < 2) console.log('grant <account> <body 번호 또는 이름>');
+      else {
+        grants.push(`${rest[1]}→${rest[0]}`);
+        console.log(`grant — body ${rest[1]} 는 ${rest[0]} 의 것`);
+      }
+    }
     else if (name === 'save') console.log('save — 다음 창 끝에 저장한다');
     else if (name === 'mute') {} // 답하지 않는다 — 한계 시험
     else console.log(`모르는 명령 ${name} — pause · resume · save · step · stop · grant · revoke · status`);

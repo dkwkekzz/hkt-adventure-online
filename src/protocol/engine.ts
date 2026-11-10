@@ -5,31 +5,56 @@
 /** 엔진 체크아웃 안의 앱 자리 — `<engineDir>/web` 에서 돈다. npm 을 사이에 두지 않고 tsx 로 바로(신호 · stdin 이 그대로 닿는다). */
 export const ENGINE_WEB = 'web';
 export const ENGINE_TSX = 'node_modules/.bin/tsx';
-/** `npm run dev` 의 진입점 — 세계 + 뷰어(페이지 · 묶음 · /assets/ · 소켓이 한 포트). */
-export const ENGINE_DEV = 'apps/server/dev.ts';
+/** `npm run host` 의 진입점 — 세계(호스트)만. 포트에 WebSocket 하나를 연다. http 없음. stdin 은 Console. */
+export const ENGINE_HOST = 'apps/server/main.ts';
 /** `npm run agent` 의 진입점 — 주체 프로세스. */
 export const ENGINE_AGENT = 'apps/agent/main.ts';
 /** 서명 키의 환경변수 — 엔진의 Gate 가 이것으로 토큰을 검증한다(stage 1). 서비스의 Signer 도 같은 키를 든다. */
 export const AUTH_ENV = 'HOST_AUTH_KEY';
 
-/** dev 의 인자 — 엔진의 parseHostArgs · dev.ts 가 받는 것 가운데 서비스가 쓰는 것만. */
-export interface DevArgs {
+/** host 의 인자 — 엔진의 parseHostArgs(apps/server/start.ts)가 받는 것 가운데 서비스가 쓰는 것만. */
+export interface HostArgs {
   readonly dataset: string;
   readonly port: number;
   readonly store: string;
   readonly beat: number;
   readonly sparse: number;
-  readonly keymap: string | null;
-  /** `--grant account=b1,b2` — NPC 묶음. 머리글과 같은 박자에 명부에 든다. */
-  readonly grant: { readonly account: string; readonly bodies: readonly string[] } | null;
 }
 
-export function devArgv(a: DevArgs): string[] {
-  const argv = [ENGINE_DEV, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse)];
-  if (a.keymap !== null) argv.push('--keymap', a.keymap);
-  if (a.grant !== null && a.grant.bodies.length > 0) argv.push('--grant', `${a.grant.account}=${a.grant.bodies.join(',')}`);
-  return argv;
+export function hostArgv(a: HostArgs): string[] {
+  return [ENGINE_HOST, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse)];
 }
+
+/**
+ * 뷰어의 묶음 — 엔진의 apps/viewer/bundle.ts 의 bundle(false) 와 같은 esbuild 옵션을 엔진 체크아웃의 esbuild 로 돈다.
+ * 결과는 서비스의 자리(outfile)에 — 엔진 체크아웃의 out/ 를 쓰지 않는다. 엔진을 올리면 bundle.ts 의 옵션과 맞춰 본다.
+ */
+export const ENGINE_ESBUILD = 'node_modules/.bin/esbuild';
+export const VIEWER_ENTRY = 'apps/viewer/browser.ts';
+
+export function bundleArgv(outfile: string): string[] {
+  return [VIEWER_ENTRY, '--bundle', '--format=iife', '--platform=browser', '--target=es2022', '--sourcemap', `--outfile=${outfile}`, '--log-level=warning'];
+}
+
+/**
+ * 뷰어의 정적 자리 — 엔진의 apps/server/dev.ts page() 가 주는 넷과 같다(ONLINE.md §1.6).
+ *   /             apps/viewer/page.html — 페이지는 `viewer.js` 를 상대 경로로 부른다
+ *   /viewer.js    묶음(.map 도)
+ *   /assets/…     assets/ 의 index.json 과 거기 적힌 파일. ext/… 는 저장소 뿌리의 out/character/
+ *   /keymap.json  Keymap 파일(설정의 keymap)
+ * 뷰어는 /assets/ · /keymap.json 을 절대 경로로 부른다 — 페이지는 서비스의 뿌리 아래에 선다.
+ */
+export const VIEWER_PAGE = 'apps/viewer/page.html';
+export const VIEWER_ASSETS = 'assets';
+export const VIEWER_EXT = '../out/character';
+export const ASSET_TYPES: Readonly<Record<string, string>> = {
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.js': 'text/javascript; charset=utf-8',
+  '.gltf': 'model/gltf+json',
+  '.glb': 'model/gltf-binary',
+};
 
 /** agent 의 인자 — `--brain fsm` 은 데이터셋의 두뇌 값으로 NPC 를 돈다. */
 export interface AgentArgs {
@@ -45,10 +70,10 @@ export function agentArgv(a: AgentArgs): string[] {
 /** stdout 의 머리글 첫 줄 — `host <file> · ws://localhost:<port> · …`. 찍히면 소켓이 듣는다. */
 export const HOST_HEAD = 'host ';
 /**
- * dev 가 뜬 뒤의 마지막 줄 — `뷰어: http://localhost:<port>/ …`. 머리글 · status · `--grant` 의 답 글 뒤에 같은 박자로 찍힌다.
- * 서비스는 이것을 준비 신호로 읽는다 — 이 뒤의 줄만 명령의 답이다(앞의 grant · status 글을 답으로 잘못 읽지 않는다).
+ * 머리글의 마지막 줄 — `명령: pause · resume · …`(apps/server/start.ts 의 startHost). 머리글의 status 글 뒤에 같은 박자로 찍힌다.
+ * 서비스는 이것을 준비 신호로 읽는다 — 이 뒤의 줄만 명령의 답이다(머리글의 status 글을 답으로 잘못 읽지 않는다).
  */
-export const READY_HEAD = '뷰어: ';
+export const READY_HEAD = '명령: ';
 /** 멈출 때의 마지막 글 — `멈춤 — beats N · now M · 저장 <dir>`. 뒤에 exit 0. */
 export const HALT_HEAD = '멈춤 — ';
 /** 데이터셋 거부 · 시작 실패의 종료 코드. 같은 인자로 다시 띄워도 같다. */

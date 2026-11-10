@@ -6,13 +6,37 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-export function fakeEngine(): string {
+/** esbuild 의 자리 — --outfile= 에 한 줄을 쓴다. 엔트리가 없으면 1 로 끝난다(묶지 못함). */
+const ESBUILD = `#!/bin/sh
+for a in "$@"; do case "$a" in --outfile=*) out="\${a#--outfile=}";; esac; done
+[ -f "$1" ] || { echo "✘ [ERROR] Could not resolve $1" >&2; exit 1; }
+echo "/* fake viewer */" > "$out"
+echo "{}" > "$out.map"
+`;
+
+export function fakeEngine(opts: { viewer?: boolean } = {}): string {
   const dir = mkdtempSync(join(tmpdir(), 'engine-'));
-  const bin = join(dir, 'web', 'node_modules', '.bin');
+  const web = join(dir, 'web');
+  const bin = join(web, 'node_modules', '.bin');
   mkdirSync(bin, { recursive: true });
   const script = resolve(import.meta.dirname, 'fixtures', 'fake-engine.mjs');
   writeFileSync(join(bin, 'tsx'), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  writeFileSync(join(bin, 'esbuild'), ESBUILD);
   chmodSync(join(bin, 'tsx'), 0o755);
+  chmodSync(join(bin, 'esbuild'), 0o755);
+  // 뷰어의 정적 자리 — 페이지 · 엔트리 · 실물 하나 · 만든 캐릭터 하나 · Keymap
+  if (opts.viewer !== false) {
+    mkdirSync(join(web, 'apps', 'viewer'), { recursive: true });
+    writeFileSync(join(web, 'apps', 'viewer', 'page.html'), '<!doctype html><script src="viewer.js"></script>\n');
+    writeFileSync(join(web, 'apps', 'viewer', 'browser.ts'), '// entry\n');
+  }
+  mkdirSync(join(web, 'assets', 'images'), { recursive: true });
+  writeFileSync(join(web, 'assets', 'index.json'), '{"x":1}\n');
+  writeFileSync(join(web, 'assets', 'images', 'a.png'), 'png');
+  mkdirSync(join(dir, 'out', 'character', 'fairy'), { recursive: true });
+  writeFileSync(join(dir, 'out', 'character', 'fairy', 'b.glb'), 'glb');
+  mkdirSync(join(web, 'dataset'), { recursive: true });
+  writeFileSync(join(web, 'dataset', 'keymap.json'), '{"keys":{}}\n');
   return dir;
 }
 

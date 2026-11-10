@@ -21,10 +21,12 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), ports = portR
     apiPort: 0,
     tokenTtl: 3600,
     agentTtl: 60,
+    keymap: 'dataset/keymap.json',
     fleet: {
       engineDir: fakeEngine(),
       dataset: 'dataset/world.json',
-      keymap: null,
+      viewerOut: join(storageRoot, 'viewer', 'viewer.js'),
+      pageUrl: 'http://play.test/play',
       beat: 200,
       sparse: 10,
       npc: { account: 'npc', bodies: ['b1'] },
@@ -65,6 +67,24 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect((await fetch(base + '/nope')).status).toBe(404);
   });
 
+  it('Static — /play 는 엔진의 뷰어 페이지, /viewer.js 는 시작 때 묶은 것, /assets/ · ext/ · /keymap.json. 뿌리 밖은 없다', async () => {
+    const { base } = await up();
+    const get = async (p: string) => {
+      const r = await fetch(base + p);
+      return { code: r.status, type: r.headers.get('content-type'), text: await r.text() };
+    };
+    expect(await get('/play?token=x&ws=y')).toMatchObject({ code: 200, text: expect.stringContaining('viewer.js') });
+    expect(await get('/viewer.js')).toMatchObject({ code: 200, type: 'text/javascript; charset=utf-8', text: expect.stringContaining('fake viewer') });
+    expect((await get('/viewer.js.map')).code).toBe(200);
+    expect(await get('/assets/index.json')).toMatchObject({ code: 200, type: 'application/json; charset=utf-8', text: '{"x":1}\n' });
+    expect(await get('/assets/images/a.png')).toMatchObject({ code: 200, type: 'image/png' });
+    expect(await get('/assets/ext/fairy/b.glb')).toMatchObject({ code: 200, type: 'model/gltf-binary', text: 'glb' });
+    expect(await get('/keymap.json')).toMatchObject({ code: 200, text: '{"keys":{}}\n' });
+    expect((await get('/assets/%2e%2e/apps/viewer/page.html')).code).toBe(404);
+    expect((await get('/assets/ext/%2e%2e/%2e%2e/web/assets/index.json')).code).toBe(404);
+    expect((await get('/assets/images')).code).toBe(404); // 폴더
+  });
+
   it('login → enter — 같은 주체는 같은 계정 · 같은 샤드, 다른 주체는 다른 샤드. 틀린 토큰 · 제공자는 거절', async () => {
     const { s, post } = await up();
     const a = await post('/login', { provider: 'guest' });
@@ -76,7 +96,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
 
     const ea = await post('/enter', { token: a.body['token'] });
     expect(ea.code).toBe(200);
-    expect(ea.body['page']).toBe(`http://localhost:${s.config.fleet.ports[0]}/?token=${encodeURIComponent(a.body['token']!)}`);
+    expect(ea.body['ws']).toBe(`ws://localhost:${s.config.fleet.ports[0]}`);
+    expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(a.body['token']!)}&ws=${encodeURIComponent(ea.body['ws']!)}`);
     const eb = await post('/enter', { token: b.body['token'] });
     expect(eb.body['ws']).toBe(`ws://localhost:${s.config.fleet.ports[0] + 1}`);
     expect(s.fleet.shards.size).toBe(2);
@@ -106,12 +127,16 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cfg-'));
     const file = join(dir, 'service.config.json');
     const c = config();
-    writeFileSync(file, JSON.stringify({ ...c, storageRoot: 'out/storage', fleet: { ...c.fleet, engineDir: 'engine' } }));
+    const { pageUrl: _, ...fleet } = c.fleet;
+    writeFileSync(file, JSON.stringify({ ...c, storageRoot: 'out/storage', fleet: { ...fleet, engineDir: 'engine', viewerOut: 'out/viewer/viewer.js' } }));
     const read = loadConfig(file, { PORT: '9001', SERVICE_PUBLIC_HOST: 'play.test', SERVICE_SECURE: '1' });
     expect(read.storageRoot).toBe(join(dir, 'out/storage'));
     expect(read.fleet.engineDir).toBe(join(dir, 'engine'));
+    expect(read.fleet.viewerOut).toBe(join(dir, 'out/viewer/viewer.js'));
     expect(read.apiPort).toBe(9001);
     expect(read.fleet.publicHost).toBe('play.test');
     expect(read.fleet.secure).toBe(true);
+    expect(read.fleet.pageUrl).toBe('https://play.test:9001/play');
+    expect(loadConfig(file, { SERVICE_PAGE_URL: 'https://play.test/play' }).fleet.pageUrl).toBe('https://play.test/play');
   });
 });

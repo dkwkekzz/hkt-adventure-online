@@ -6,6 +6,7 @@ import { Fleet } from '../../fleet';
 import { openVault } from '../../storage';
 import type { VaultSocket } from '../../protocol/vault';
 import { openApi } from './api';
+import { Static } from './static';
 import type { ServiceConfig } from './config';
 
 export class Service {
@@ -25,14 +26,14 @@ export class Service {
     this.directory = new Directory(this.vault.ledger); // 흐름 1 의 3
     this.signer = new Signer(key, config.tokenTtl);
     this.fleet = new Fleet(config.fleet, this.vault, key, (account) => this.signer.issue(account, config.agentTtl), log); // 흐름 1 의 4 · 5
-    this.api = openApi({ directory: this.directory, signer: this.signer, fleet: this.fleet, log });
+    this.api = openApi({ directory: this.directory, signer: this.signer, fleet: this.fleet, files: new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap), log });
   }
 
-  /** start — 흐름 1. 키가 없으면 시작 거부. 샤드는 띄우지 않는다. */
+  /** start — 흐름 1. 키가 없으면 시작 거부. 뷰어를 한 번 묶는다. 샤드는 띄우지 않는다. */
   static async start(config: ServiceConfig, key: string | undefined, log: (line: string) => void = (l) => console.log(l)): Promise<Service> {
     if (key === undefined || key === '') throw new Error('HOST_AUTH_KEY 가 없다 — 토큰 없는 서비스는 열지 않는다');
     const service = new Service(config, key, log);
-    service.fleet.clock.run(() => service.fleet.tick()); // 흐름 1 의 6
+    await service.fleet.start(); // 흐름 1 의 6 · 7 — 뷰어를 묶고 박자를 돌린다
     await new Promise<void>((resolve, reject) => {
       service.api.once('error', reject);
       service.api.listen(config.apiPort, () => resolve());

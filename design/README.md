@@ -57,14 +57,21 @@
 - 생애: 프로세스가 만든다. 프로세스와 함께 사라진다.
 
 ### Api
-- 데이터: server(http) · port(불변).
-- 기능: login 은 흐름 2, enter 는 흐름 3 의 머리. `GET /` 는 게스트로 들어가는 페이지 한 장(브라우저가 login · enter 를 부르고 받은 주소로 간다). `GET /health` 는 `ok`.
+- 데이터: server(http) · port(불변) · files(Static).
+- 기능: login 은 흐름 2, enter 는 흐름 3 의 머리. `GET /` 는 게스트로 들어가는 페이지 한 장(브라우저가 login · enter 를 부르고 받은 주소로 간다). `GET /health` 는 `ok`. 그 밖의 GET 은 Static 에 묻는다.
 - 생애: Service.start 가 연다. Service.stop 이 닫는다.
+
+### Static
+- 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(Fleet.start 가 묶은 viewer.js) · keymap(엔진 web 상대의 Keymap 파일, 없으면 null). 전부 불변.
+- 기능: serve(path) 는 엔진의 dev 가 샤드마다 주던 넷을 서비스의 한 주소에서 준다 — `/play`(엔진의 뷰어 페이지) · `/viewer.js(.map)` · `/assets/…`(엔진의 실물, `ext/…` 는 엔진 저장소 뿌리의 out/character/) · `/keymap.json`. 뿌리 밖은 없다. 파일의 안은 보지 않는다.
+- 생애: Service.start 가 만든다.
+- 엔진의 파일을 읽는 것은 Spawner 와 이것 둘뿐이다(경계 규칙 E). 그래서 샤드는 소켓만 연다(엔진의 host).
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Api login | 클라이언트 → 앱 | `POST /login {provider, subject?}` | `{token, subject}` 또는 `{why}` |
 | Api enter | 클라이언트 → 앱 | `POST /enter {token}` | `{page, ws}` 또는 `{why}` |
+| Api static | 브라우저 → 앱 | `GET /play?token=…&ws=…` · `/viewer.js` · `/assets/…` · `/keymap.json` | 파일 |
 
 ## 명세 둘
 

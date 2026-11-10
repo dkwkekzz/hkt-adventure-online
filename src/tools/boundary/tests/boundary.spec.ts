@@ -43,7 +43,8 @@ describe('경계 검사', () => {
       ['N', { 'src/fleet/x.ts': "export const who = 'wolf-pack-1';\n" }, /규칙 N — 게임 명사 wolf/],
       ['N 문서', { 'design/02-roles/x.md': '# 요정이 걷는다\n' }, /규칙 N/],
       ['E', { 'src/fleet/x.ts': "import { spawn } from 'node:child_process';\nexport { spawn };\n" }, /규칙 E — child_process/],
-      ['E 인자', { 'src/apps/main/x.ts': "import { devArgv } from '../../protocol/engine';\nexport { devArgv };\n" }, /규칙 E — 엔진의 진입점/],
+      ['E 인자', { 'src/apps/main/x.ts': "import { hostArgv } from '../../protocol/engine';\nexport { hostArgv };\n" }, /규칙 E — 엔진의 진입점/],
+      ['E 파일', { 'src/apps/main/x.ts': "import { VIEWER_PAGE } from '../../protocol/engine';\nexport { VIEWER_PAGE };\n" }, /규칙 E — 엔진의 파일 자리/],
     ];
     for (const [name, extra, want] of cases) {
       const found = check(tree({ ...base, ...extra }));

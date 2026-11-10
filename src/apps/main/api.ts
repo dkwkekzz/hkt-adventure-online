@@ -9,11 +9,13 @@ import type { Fleet } from '../../fleet';
 import { PROVIDERS } from '../../protocol/api';
 import type { Address, EnterRequest, LoginAnswer, LoginRequest, Refusal } from '../../protocol/api';
 import { PAGE } from './page';
+import type { Static } from './static';
 
 export interface ApiParts {
   readonly directory: Directory;
   readonly signer: Signer;
   readonly fleet: Fleet;
+  readonly files: Static;
   readonly log: (line: string) => void;
 }
 
@@ -66,7 +68,7 @@ const send = (res: ServerResponse, code: number, value: unknown): void => {
   res.end(JSON.stringify(value));
 };
 
-/** http 서버 하나 — GET / · GET /health · POST /login · POST /enter. */
+/** http 서버 하나 — GET / · GET /health · GET /play · /viewer.js · /assets/… · /keymap.json(Static) · POST /login · POST /enter. */
 export function openApi(parts: ApiParts): Server {
   return createServer((req, res) => {
     void (async () => {
@@ -78,6 +80,13 @@ export function openApi(parts: ApiParts): Server {
       if (req.method === 'GET' && path === '/health') {
         res.writeHead(200, { 'content-type': 'text/plain' });
         return void res.end('ok');
+      }
+      if (req.method === 'GET') {
+        const file = parts.files.serve(path);
+        if (file !== null) {
+          res.writeHead(200, { 'content-type': file.type, 'cache-control': 'no-cache' });
+          return void res.end(file.body);
+        }
       }
       if (req.method === 'POST' && (path === '/login' || path === '/enter')) {
         let body: Record<string, unknown>;

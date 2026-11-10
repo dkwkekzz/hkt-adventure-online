@@ -60,7 +60,7 @@ curl -s -X POST http://localhost:8000/login -H 'content-type: application/json' 
 curl -s -X POST http://localhost:8000/enter -H 'content-type: application/json' -d '{"token":"<①의 token>"}'
 ```
 
-답: `{"page":"http://<publicHost>:<port>/?token=…","ws":"ws://<publicHost>:<port>"}`
+답: `{"page":"http://<서비스>/play?token=…&ws=…","ws":"ws://<publicHost>:<port>"}` — page 는 서비스가 주는 뷰어 페이지, ws 는 그 계정의 샤드.
 
 - 그 계정의 샤드가 내려가 있으면 여기서 띄운다. 처음은 몇 초 걸린다.
 - 실패는 `{"why":"…"}` — 토큰이 틀렸거나 만료면 400, 샤드를 띄우지 못하면 503.
@@ -83,7 +83,7 @@ ws.onmessage = (m) => {
 
 엔진이 이미 가진 클라이언트는 이렇게 주입한다.
 
-- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?token=` 을 읽어 `Host 2` 로 보낸다. 페이지와 샤드가 다른 주소면 `?ws=` 를 붙인다.
+- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?ws=` 의 샤드에 붙어 `?token=` 을 `Host 2` 로 보낸다(페이지는 서비스의 주소, 샤드는 다른 포트).
 - 엔진의 에이전트 앱 — `--token` 이 자격이다. `--account` 는 기록의 이름일 뿐이다.
 
 ```bash
@@ -118,7 +118,7 @@ npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brai
 export HOST_AUTH_KEY="$(openssl rand -base64 32)"
 ```
 
-공개 주소로 열면 `/enter` 가 `https://…` · `wss://…` 주소를 답한다.
+공개 주소로 열면 `/enter` 가 `https://…` · `wss://…` 주소를 답한다. 서비스 앞에 프록시가 서서 페이지의 주소가 `https://<호스트>:<PORT>/play` 와 다르면 `SERVICE_PAGE_URL` 로 준다.
 
 ```bash
 SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start

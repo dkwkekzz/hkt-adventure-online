@@ -14,7 +14,10 @@ import type { ShardContext } from './shard';
 export interface FleetConfig {
   readonly engineDir: string;
   readonly dataset: string;
-  readonly keymap: string | null;
+  /** 뷰어의 묶음이 놓일 자리(viewer.js) — Fleet.start 가 한 번 묶는다. Static 이 준다. */
+  readonly viewerOut: string;
+  /** 뷰어 페이지의 주소(`…/play`) — 입장의 답이 든다. */
+  readonly pageUrl: string;
   readonly beat: number;
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
@@ -43,7 +46,7 @@ export class Fleet {
   readonly config: FleetConfig;
   ticks = 0;
   private readonly ctx: ShardContext;
-  private starting: Promise<unknown> = Promise.resolve();
+  private readonly log: (line: string) => void;
 
   /** 흐름 1 의 4 · 5 — 배정 표의 줄마다 Shard 를 stopped 로. 프로세스는 띄우지 않는다. */
   constructor(config: FleetConfig, vault: VaultSocket, key: string, issue: (account: string) => string, log: (line: string) => void = (l) => console.log(l)) {
@@ -55,25 +58,21 @@ export class Fleet {
     this.ports = new Ports(config.ports);
     this.clock = new Clock(config.clockMs);
     this.operator = new Operator(this);
+    this.log = log;
     this.ctx = {
       engineDir: config.engineDir,
-      keymap: config.keymap,
       beat: config.beat,
       sparse: config.sparse,
       npc: config.npc,
       publicHost: config.publicHost,
       secure: config.secure,
+      pageUrl: config.pageUrl,
       startLimitMs: config.startLimitMs,
       stopLimitMs: config.stopLimitMs,
       commandLimitMs: config.commandLimitMs,
       restartLimit: config.restartLimit,
       key,
       issue,
-      serial: <T>(job: () => Promise<T>): Promise<T> => {
-        const next = this.starting.then(job, job);
-        this.starting = next.catch(() => {});
-        return next;
-      },
       log,
     };
     let lost = false;
@@ -85,6 +84,17 @@ export class Fleet {
       this.shards.set(account, new Shard(account, row, this.ctx));
     }
     if (lost) this.assignment.save();
+  }
+
+  /** start — 흐름 1 의 6 · 7. 뷰어를 한 번 묶고(Spawner.bundle) 박자를 돌린다. 묶지 못하면 시작 거부. */
+  async start(): Promise<void> {
+    const job = Spawner.bundle(this.config.engineDir, this.config.viewerOut);
+    const errors: string[] = [];
+    job.onLine((_s, line) => errors.push(line));
+    const code = await job.exited;
+    if (code !== 0) throw new Error(`뷰어를 묶지 못했다 — exit ${code}${errors.length === 0 ? '' : ` — ${errors.slice(-3).join(' / ')}`}`);
+    this.log(`fleet 뷰어를 묶었다 — ${this.config.viewerOut}`);
+    this.clock.run(() => this.tick());
   }
 
   /** enter — 흐름 3 의 2 ~ 8. 줄을 찾거나 내고 Shard 를 띄워 주소를 답한다. token 은 주소의 ?token= 이 든다. */
