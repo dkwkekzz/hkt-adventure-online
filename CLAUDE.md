@@ -6,6 +6,7 @@
 ```text
 design/       설계. 목표 · 모듈 셋 · 연결 넷 · 앱(README.md), 쓰는 방식(method.md), 흐름 일곱(01-flows/), 책임 셋(02-roles/), 피드백(00-feedback/)
 plan/         design 을 src 에 세우는 순서와 상태. 다음 단계는 진행표의 첫 ☐ · ◐
+notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
   protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · vault(Vault · Ledger) · operator. 타입 · 데이터뿐, 아무것도 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Signer · Identity · Account · Token

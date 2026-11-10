@@ -16,4 +16,4 @@ npm run engine
 HOST_AUTH_KEY=change-me npm start
 ```
 
-http://localhost:8000/ 을 열고 「들어가기」. 설계는 [design/README.md](design/README.md), 진행은 [plan/README.md](plan/README.md), 규약은 [CLAUDE.md](CLAUDE.md).
+http://localhost:8000/ 을 열고 「들어가기」. 설계는 [design/README.md](design/README.md), 진행은 [plan/README.md](plan/README.md), 규약은 [CLAUDE.md](CLAUDE.md). 키와 토큰 — 새 클라이언트가 토큰을 받아 붙는 법은 [notes/auth-token.md](notes/auth-token.md).
