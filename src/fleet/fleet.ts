@@ -1,5 +1,6 @@
-// Fleet — 계정마다 샤드 하나 (design/02-roles/fleet.md 의 Fleet). enter 는 흐름 3, tick 은 흐름 5, stopAll 은 흐름 7 의 2.
-// 저장장치에는 Vault 소켓으로만, 토큰은 앱이 준 issue 로만 닿는다. 게임 명사를 모른다 — 데이터셋 · NPC 묶음은 설정 값.
+// Fleet — 세계 하나와 그 프로세스 (design/02-roles/fleet.md 의 Fleet). enter 는 흐름 3, tick 은 흐름 5, stopAll 은 흐름 7 의 2.
+// 사람은 모두 같은 세계에 붙는다 — 계정마다 사람의 묶음 하나는 엔진이 세운다(--party). 입장의 한계는 성능(capacity)뿐이다.
+// 저장장치에는 Vault 소켓으로만, 토큰은 앱이 준 issue 로만 닿는다. 게임 명사를 모른다 — 데이터셋 · 틀 · NPC 묶음은 설정 값.
 
 import type { Address } from '../protocol/api';
 import type { VaultSocket } from '../protocol/vault';
@@ -8,12 +9,18 @@ import { Clock } from './clock';
 import { Operator } from './operator';
 import { Ports } from './ports';
 import { Shard } from './shard';
-import { Spawner } from './spawner';
 import type { ShardContext } from './shard';
+import { Spawner } from './spawner';
 
 export interface FleetConfig {
   readonly engineDir: string;
+  /** 세계의 이름 — Store 자리 · 기록 · 운영자의 글이 이것으로 부른다. */
+  readonly world: string;
   readonly dataset: string;
+  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). */
+  readonly party: string;
+  /** 동시에 세계에 붙는 사람의 상한 — 성능으로 잰 값(엔진의 bench). 그 밖의 입장 제한은 없다. */
+  readonly capacity: number;
   /** 뷰어의 묶음이 놓일 자리(viewer.js) — Fleet.start 가 한 번 묶는다. Static 이 준다. */
   readonly viewerOut: string;
   /** 뷰어 페이지의 주소(`…/play`) — 입장의 답이 든다. */
@@ -25,19 +32,19 @@ export interface FleetConfig {
   readonly publicHost: string;
   readonly secure: boolean;
   readonly clockMs: number;
-  /** 사람의 접속 없이 이만큼 박자가 지나면 내린다. */
+  /** 사람의 접속 없이 이만큼 박자가 지나면 세계를 내린다. */
   readonly idleLimit: number;
   readonly startLimitMs: number;
   readonly stopLimitMs: number;
   readonly commandLimitMs: number;
   readonly restartLimit: number;
-  /** 이만큼 박자마다 내려간 샤드의 자리를 베낀다. 0 이면 베끼지 않는다. */
+  /** 이만큼 박자마다 내려간 세계의 자리를 베낀다. 0 이면 베끼지 않는다. */
   readonly backupEvery: number;
 }
 
 export class Fleet {
   // 데이터 — fleet.md 의 Fleet 줄 그대로
-  readonly shards = new Map<string, Shard>();
+  readonly shards = new Map<string, Shard>(); // 세계의 이름 → Shard. 지금은 하나(config.world)
   readonly assignment: Assignment;
   readonly ports: Ports;
   readonly clock: Clock;
@@ -64,6 +71,7 @@ export class Fleet {
       beat: config.beat,
       sparse: config.sparse,
       npc: config.npc,
+      party: config.party,
       publicHost: config.publicHost,
       secure: config.secure,
       pageUrl: config.pageUrl,
@@ -76,12 +84,12 @@ export class Fleet {
       log,
     };
     let lost = false;
-    for (const [account, row] of this.assignment.all()) {
+    for (const [name, row] of this.assignment.all()) {
       if (row.port !== null && !this.ports.mark(row.port)) {
         row.port = null; // 범위 밖 — 다음 입장이 새로 받는다(흐름 1 규칙)
         lost = true;
       }
-      this.shards.set(account, new Shard(account, row, this.ctx));
+      this.shards.set(name, new Shard(name, row, this.ctx));
     }
     if (lost) this.assignment.save();
   }
@@ -97,34 +105,43 @@ export class Fleet {
     this.clock.run(() => this.tick());
   }
 
-  /** enter — 흐름 3 의 2 ~ 8. 줄을 찾거나 내고 Shard 를 띄워 주소를 답한다. token 은 주소의 ?token= 이 든다. */
+  /**
+   * enter — 흐름 3 의 2 ~ 9. 세계의 줄을 찾거나 내고 Shard 를 띄워 주소를 답한다. 사람이 상한(capacity)에 찼으면 거절 — 그 밖의 거절은 없다.
+   * account 는 기록의 이름 — 어느 묶음을 맡는가는 엔진의 Roster 가 토큰의 Account.id 로 정한다. token 은 주소의 ?token= 이 든다.
+   */
   async enter(account: string, token: string): Promise<Address> {
-    let row = this.assignment.get(account);
+    const name = this.config.world;
+    let row = this.assignment.get(name);
     if (row === null) {
       const port = await this.ports.take();
       if (port === null) throw new Error('빈 포트가 없다');
-      row = { dataset: this.config.dataset, storeDir: this.vault.dirOf(account, this.config.dataset), port };
-      this.assignment.put(account, row);
+      row = { dataset: this.config.dataset, storeDir: this.vault.dirOf(name, this.config.dataset), port };
+      this.assignment.put(name, row);
     } else if (row.port === null) {
       const port = await this.ports.take();
       if (port === null) throw new Error('빈 포트가 없다');
       row.port = port;
-      this.assignment.put(account, row);
+      this.assignment.put(name, row);
     }
-    let shard = this.shards.get(account);
+    let shard = this.shards.get(name);
     if (shard === undefined) {
-      shard = new Shard(account, row, this.ctx);
-      this.shards.set(account, shard);
+      shard = new Shard(name, row, this.ctx);
+      this.shards.set(name, shard);
+    }
+    if (shard.state === 'ready') {
+      await shard.command('status'); // 사람 수를 지금 것으로
+      if (shard.players >= this.config.capacity && !shard.linked.includes(account)) throw new Error(`세계가 가득 찼다 — 사람 ${shard.players} / ${this.config.capacity}`);
     }
     await shard.start();
+    shard.idle = 0;
     return shard.address(token);
   }
 
-  shardOf(account: string): Shard | null {
-    return this.shards.get(account) ?? null;
+  shardOf(name: string): Shard | null {
+    return this.shards.get(name) ?? null;
   }
 
-  /** tick — 흐름 5. status 를 묻고, 사람 없이 쉰 샤드를 내리고, 베낌 때면 내려간 dirty 샤드를 베낀다. */
+  /** tick — 흐름 5. status 를 묻고, 사람 없이 쉰 세계를 내리고, 베낌 때면 내려간 dirty 세계를 베낀다. */
   async tick(): Promise<void> {
     this.ticks++;
     const ready = [...this.shards.values()].filter((s) => s.state === 'ready');
@@ -133,7 +150,7 @@ export class Fleet {
       if (s.state !== 'ready') continue;
       s.idle = s.players === 0 ? s.idle + 1 : 0;
       if (s.idle >= this.config.idleLimit) {
-        this.ctx.log(`${s.account} fleet 사람 없이 ${s.idle} 박자 — 내린다`);
+        this.ctx.log(`${s.name} fleet 사람 없이 ${s.idle} 박자 — 내린다`);
         void s.stop();
       }
     }
@@ -144,15 +161,15 @@ export class Fleet {
     }
   }
 
-  /** 내려간 샤드의 자리를 베낀다 — 흐름 5 의 4 · 흐름 6 의 5. */
+  /** 내려간 세계의 자리를 베낀다 — 흐름 5 의 4 · 흐름 6 의 5. */
   backup(shard: Shard): string {
     const name = this.vault.copy(shard.row.storeDir);
     shard.dirty = false;
-    this.ctx.log(`${shard.account} fleet 베꼈다 — ${name}`);
+    this.ctx.log(`${shard.name} fleet 베꼈다 — ${name}`);
     return name;
   }
 
-  /** stopAll — 흐름 7 의 2. 살아 있는 샤드를 전부 내린다. */
+  /** stopAll — 흐름 7 의 2. 살아 있는 세계를 전부 내린다. */
   async stopAll(): Promise<void> {
     await Promise.all([...this.shards.values()].map((s) => s.stop()));
   }

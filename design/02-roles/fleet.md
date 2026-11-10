@@ -1,6 +1,8 @@
 # 함대 fleet — 책임
 
-함대란, 계정마다 샤드 하나를 두고 그 호스트 프로세스와 에이전트 프로세스를 띄우고 지키고 내리는 것이다.
+함대란, 세계(샤드) 하나를 두고 그 호스트 프로세스와 NPC 에이전트 프로세스를 띄우고 지키고 내리며, 사람의 상한을 지키는 것이다.
+
+- 사람은 모두 같은 세계에 붙는다. 계정마다의 묶음은 엔진이 세운다(`--party` — `ONLINE.md` §1.3). 함대는 계정을 세계에 나누지 않는다.
 
 - 세계 안을 모른다. 호스트의 글은 머리글과 status 의 머리 · 접속 칸만 읽는다.
 - 와이어 글 넷(Link)을 보지 않는다. 클라이언트는 호스트에 바로 붙는다.
@@ -10,13 +12,13 @@
 
 ```text
 Fleet ← Service
-├ Assignment ── Ledger
+├ Assignment ── Ledger (세계의 자리 표)
 ├ Ports
 ├ Spawner (정적)
 ├ Probe (정적)
 ├ Clock
 ├ Operator
-└ Shard × 계정
+└ Shard × 세계(지금 하나)
   ├ Process(host)
   └ Process(agent)
 ```
@@ -24,19 +26,19 @@ Fleet ← Service
 ## 개념
 
 ### Fleet
-- 데이터: shards:map<Account.id, Shard> · assignment · ports · spawner · clock · operator · vault(참조) · issue(Account.id → Token, 앱이 준다) · config:{engineDir, dataset, viewerOut, pageUrl, beat, sparse, npc:{account, bodies}, ports, publicHost, secure, clockMs, idleLimit, startLimitMs, stopLimitMs, commandLimitMs, restartLimit, backupEvery} · ticks:int.
-- 기능: start 는 흐름 1 의 6 — 뷰어를 한 번 묶고(Spawner.bundle) Clock.run. enter(account) 는 Assignment 에서 줄을 찾거나 내고 Shard 를 start 해 주소를 답한다(흐름 3). tick 은 흐름 5. stopAll 은 살아 있는 Shard 를 전부 stop(흐름 7). shardOf(account).
+- 데이터: shards:map<세계 이름, Shard> · assignment · ports · spawner · clock · operator · vault(참조) · issue(Account.id → Token, 앱이 준다) · config:{engineDir, world, dataset, party, capacity, viewerOut, pageUrl, beat, sparse, npc:{account, bodies}, ports, publicHost, secure, clockMs, idleLimit, startLimitMs, stopLimitMs, commandLimitMs, restartLimit, backupEvery} · ticks:int.
+- 기능: start 는 흐름 1 의 6 — 뷰어를 한 번 묶고(Spawner.bundle) Clock.run. enter(account, token) 는 세계의 줄을 Assignment 에서 찾거나 내고, 세계가 ready 면 status 로 사람 수를 읽어 상한이면 거절하고, Shard 를 start 해 주소를 답한다(흐름 3). tick 은 흐름 5. stopAll 은 살아 있는 Shard 를 전부 stop(흐름 7). shardOf(세계 이름).
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Shard
-- 데이터: account(불변) · row:{dataset, storeDir, port}(port 는 revoke-port 가 비운다) · state:`stopped`|`starting`|`ready`|`stopping`|`failed` · host:Process|null · agent:Process|null · lastStatus:StatusLine|null · players:int · idle:int · restarts:int · agentRestarts:int · dirty:bool · why:string|null · waiting(답을 기다리는 명령 줄).
+- 데이터: name(불변, 세계 이름) · row:{dataset, storeDir, port}(port 는 revoke-port 가 비운다) · state:`stopped`|`starting`|`ready`|`stopping`|`failed` · host:Process|null · agent:Process|null · lastStatus:StatusLine|null · linked:list<Account.id>(지난 status 의 접속 — NPC 계정 밖) · players:int · idle:int · restarts:int · agentRestarts:int · dirty:bool · why:string|null · waiting(답을 기다리는 명령 줄).
 - 기능: start 는 흐름 3 의 5 ~ 8. stop 은 흐름 5 의 3. command(글) 은 호스트의 stdin 에 글 한 줄을 쓰고 그 답 글 한 줄을 돌려준다(Probe 가 그 명령의 답으로 읽는 다음 줄. 한계 안에 없으면 null). line(which, 줄) 은 흐름 4 의 2. exited(which, code) 는 흐름 4 의 3 · 4. address(token) 은 `{page: <pageUrl>?token=…&ws=…, ws}`.
-- 생애: Fleet 이 배정 표의 줄마다 또는 enter 가 만든다. 배정 표의 줄이 지워질 때 사라진다.
-- 샤드 하나 = 호스트 하나 = 세계 하나 = Store 자리 하나 = 플레이어 파티 하나.
+- 생애: Fleet 이 자리 표의 줄마다 또는 enter 가 만든다. 자리 표의 줄이 지워질 때 사라진다.
+- 샤드 하나 = 호스트 하나 = 세계 하나 = Store 자리 하나. 사람은 모두 여기 붙는다.
 
 ### Assignment
-- 데이터: rows:map<Account.id, {dataset, storeDir, port}> · ledger(참조).
-- 기능: get(account) · put(account, row) 는 Ledger.save(`assignment`) · remove(account) · all.
+- 데이터: rows:map<세계 이름, {dataset, storeDir, port}> · ledger(참조).
+- 기능: get(world) · put(world, row) 는 Ledger.save(`assignment`) · remove(world) · all.
 - 생애: Fleet 과 함께. 값은 저장장치에.
 
 ### Ports
@@ -46,7 +48,7 @@ Fleet ← Service
 
 ### Spawner
 - 데이터: engineDir(불변). 정적.
-- 기능: missing(engineDir) 는 엔진 체크아웃이 없으면 그 까닭 — Fleet 이 세울 때 묻고 없으면 시작 거부. bundle(engineDir, outfile) 는 엔진 체크아웃의 esbuild(`node_modules/.bin/esbuild`)로 엔진의 bundle.ts 와 같은 옵션을 돌려 뷰어를 outfile 에 묶는다 — 엔진 체크아웃의 out/ 를 쓰지 않는다. host(engineDir, args, key) 는 `<engineDir>/web` 에서 엔진의 `host`(`npm run host` 와 같은 진입점 — `node_modules/.bin/tsx apps/server/main.ts`, npm 을 사이에 두지 않아 신호 · stdin 이 바로 닿는다)를 `<dataset> --port <port> --store <storeDir> --beat <beat> --sparse <sparse>` 와 환경 `HOST_AUTH_KEY` 로 띄운다. agent(shard, npc, token) 은 엔진의 `agent` 를 `--url ws://localhost:<port> --account <npc.account> --token <token> --brain fsm` 으로. 셋 다 Process.
+- 기능: missing(engineDir) 는 엔진 체크아웃이 없으면 그 까닭 — Fleet 이 세울 때 묻고 없으면 시작 거부. bundle(engineDir, outfile) 는 엔진 체크아웃의 esbuild(`node_modules/.bin/esbuild`)로 엔진의 bundle.ts 와 같은 옵션을 돌려 뷰어를 outfile 에 묶는다 — 엔진 체크아웃의 out/ 를 쓰지 않는다. host(engineDir, args, key) 는 `<engineDir>/web` 에서 엔진의 `host`(`npm run host` 와 같은 진입점 — `node_modules/.bin/tsx apps/server/main.ts`, npm 을 사이에 두지 않아 신호 · stdin 이 바로 닿는다)를 `<dataset> --port <port> --store <storeDir> --beat <beat> --sparse <sparse> --party <party>` 와 환경 `HOST_AUTH_KEY` 로 띄운다. agent(shard, npc, token) 은 엔진의 `agent` 를 `--url ws://localhost:<port> --account <npc.account> --token <token> --brain fsm` 으로. 셋 다 Process.
 - 생애: 없음.
 - 엔진의 인자는 `protocol/engine.ts` 가 든다. 거기 없는 인자를 쓰지 않는다.
 
@@ -79,10 +81,10 @@ Fleet ← Service
 | Engine agent | 함대 → 엔진 | agent 의 인자 | 없음(끊기면 exit 0) |
 | Engine command | 함대 → 엔진 | Console 글 한 줄 | 답 글 한 줄 |
 | Engine line | 엔진 → 함대 | stdout · stderr 한 줄 · exit | 없음 |
-| Vault dirOf · copy · restore · list | 함대 → 저장장치 | account · dataset · dir · 사본 이름 | dir · 사본 이름 · 목록 |
+| Vault dirOf · copy · restore · list | 함대 → 저장장치 | 세계 이름 · dataset · dir · 사본 이름 | dir · 사본 이름 · 목록 |
 | Ledger load · save | 함대 → 저장장치 | slot `assignment`(· value) | value 또는 null |
 | Operator | 운영자 → 함대 | 글 한 줄 | 글 한 줄 |
 
 ## 미정
 
-- (미정) 여럿이 한 세계에서 서로 보려면 데이터셋에 플레이어 묶음이 둘 이상 서야 한다(엔진의 컨텐츠 작업). 그때 Shard 가 계정 K 개를 들고 Assignment 가 샤드 id 를 든다. 지금은 K = 1 — 피드백 2.
+- 없음.

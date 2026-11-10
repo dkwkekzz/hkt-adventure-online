@@ -33,8 +33,9 @@ export class Signer {
     if (parts.length !== 4) return null;
     const [head, id, exp, sig] = parts as [string, string, string, string];
     if (head !== TOKEN_HEAD || !ACCOUNT_ID.test(id) || !/^\d{1,12}$/.test(exp)) return null;
-    const want = this.sign(`${head}.${id}.${exp}`);
-    const got = Buffer.from(sig, 'base64url');
+    // 서명은 글 그대로 맞댄다 — base64url 의 끝 글자는 쓰이지 않는 비트가 있어 바이트로 풀어 맞대면 다른 글이 같은 서명으로 통한다
+    const want = Buffer.from(this.sign(`${head}.${id}.${exp}`).toString('base64url'));
+    const got = Buffer.from(sig);
     if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
     if (Number(exp) <= this.now()) return null;
     return id;

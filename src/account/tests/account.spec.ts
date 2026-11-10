@@ -44,6 +44,13 @@ describe('Signer.issue · verify', () => {
     const t = s.issue('p1');
     expect(new Signer('other', 60, () => 0).verify(t)).toBeNull();
     expect(s.verify(t.replace('p1', 'p2'))).toBeNull();
+    // 끝 글자의 쓰이지 않는 비트만 바꾼 글(같은 바이트로 풀린다)도 다른 서명이다
+    const last = t.at(-1)!;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const i = alphabet.indexOf(last);
+    const twin = `${t.slice(0, -1)}${alphabet[(i & ~3) | ((i + 1) & 3)]}`;
+    expect(Buffer.from(twin.split('.')[3]!, 'base64url').equals(Buffer.from(t.split('.')[3]!, 'base64url'))).toBe(true);
+    expect(s.verify(twin)).toBeNull();
     expect(s.verify('p1')).toBeNull();
     expect(s.verify(42)).toBeNull();
     expect(() => s.issue('a.b')).toThrow();

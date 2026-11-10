@@ -24,7 +24,10 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), ports = portR
     keymap: 'dataset/keymap.json',
     fleet: {
       engineDir: fakeEngine(),
+      world: 'main',
       dataset: 'dataset/world.json',
+      party: 'lead-1',
+      capacity: 8,
       viewerOut: join(storageRoot, 'viewer', 'viewer.js'),
       pageUrl: 'http://play.test/play',
       beat: 200,
@@ -85,7 +88,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect((await get('/assets/images')).code).toBe(404); // 폴더
   });
 
-  it('login → enter — 같은 주체는 같은 계정 · 같은 샤드, 다른 주체는 다른 샤드. 틀린 토큰 · 제공자는 거절', async () => {
+  it('login → enter — 같은 주체는 같은 계정, 다른 주체는 다른 계정 · 같은 세계. 틀린 토큰 · 제공자는 거절', async () => {
     const { s, post } = await up();
     const a = await post('/login', { provider: 'guest' });
     expect(a.code).toBe(200);
@@ -99,10 +102,13 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(ea.body['ws']).toBe(`ws://localhost:${s.config.fleet.ports[0]}`);
     expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(a.body['token']!)}&ws=${encodeURIComponent(ea.body['ws']!)}`);
     const eb = await post('/enter', { token: b.body['token'] });
-    expect(eb.body['ws']).toBe(`ws://localhost:${s.config.fleet.ports[0] + 1}`);
-    expect(s.fleet.shards.size).toBe(2);
+    expect(eb.body['ws']).toBe(ea.body['ws']); // 같은 세계
+    expect(s.fleet.shards.size).toBe(1);
 
-    expect((await post('/enter', { token: a.body['token']!.replace(/.$/, 'x') })).code).toBe(400);
+    const t = a.body['token']!;
+    const at = t.lastIndexOf('.') + 1;
+    const bad = `${t.slice(0, at)}${t[at] === 'A' ? 'B' : 'A'}${t.slice(at + 1)}`; // 서명의 첫 글자를 바꾼다
+    expect((await post('/enter', { token: bad })).code).toBe(400);
     expect((await post('/login', { provider: 'oauth' })).code).toBe(400);
     expect((await post('/login', { provider: 'guest', subject: 'a b' })).code).toBe(400);
   });
@@ -116,11 +122,11 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     await first.s.stop();
     await first.s.stop(); // 두 번 불려도 한 번
     const second = await up(c);
-    expect(second.s.fleet.shardOf(a.body['token']!.split('.')[1]!)?.state).toBe('stopped');
+    expect(second.s.fleet.shardOf('main')?.state).toBe('stopped');
     const again = await second.post('/login', { provider: 'guest', subject: a.body['subject'] });
     expect(again.body['token']!.split('.')[1]).toBe(a.body['token']!.split('.')[1]);
     expect((await second.post('/enter', { token: again.body['token'] })).code).toBe(200);
-    expect(second.s.fleet.shardOf(again.body['token']!.split('.')[1]!)?.resumed).toBe(true);
+    expect(second.s.fleet.shardOf('main')?.resumed).toBe(true);
   });
 
   it('loadConfig — 상대 경로는 파일의 자리에서, env 가 몇 칸을 덮는다', () => {

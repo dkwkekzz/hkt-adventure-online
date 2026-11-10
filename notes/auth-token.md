@@ -7,7 +7,7 @@
 
 ## 1. 키 하나가 쓰이는 자리
 
-서비스를 띄울 때 환경변수로 준다. 엔진에 따로 줄 필요는 없다 — 서비스가 샤드를 띄울 때 넘긴다.
+서비스를 띄울 때 환경변수로 준다. 엔진에 따로 줄 필요는 없다 — 서비스가 세계(샤드)를 띄울 때 넘긴다.
 
 ```bash
 HOST_AUTH_KEY=change-me npm start
@@ -16,7 +16,7 @@ HOST_AUTH_KEY=change-me npm start
 | 어디 | 하는 일 | 코드 |
 |---|---|---|
 | 서비스의 Signer | 로그인한 사람에게 토큰을 서명해 낸다. `/enter` 에서 토큰을 푼다 | `src/account/signer.ts` |
-| 엔진(호스트) 프로세스 | 서비스가 샤드를 띄울 때 환경변수 `HOST_AUTH_KEY` 로 넘긴다. 엔진의 Gate 가 이것으로 접속의 토큰을 검증한다 | `src/fleet/spawner.ts` → 엔진 `web/host/gate.ts` |
+| 엔진(호스트) 프로세스 | 서비스가 세계를 띄울 때 환경변수 `HOST_AUTH_KEY` 로 넘긴다. 엔진의 Gate 가 이것으로 접속의 토큰을 검증한다 | `src/fleet/spawner.ts` → 엔진 `web/host/gate.ts` |
 | NPC 에이전트 | 키를 받지 않는다. 서비스가 NPC 계정(`service.config.json` 의 `fleet.npc.account`)의 토큰을 `agentTtl`(300 초)로 내어 `--token` 으로 준다. 에이전트를 다시 띄울 때마다 새로 낸다 | `src/fleet/shard.ts` 의 spawnAgent |
 
 키가 없으면 서비스는 시작하지 않는다(흐름 1 — 토큰 없는 서비스는 외부에 열지 않는다).
@@ -54,16 +54,16 @@ curl -s -X POST http://localhost:8000/login -H 'content-type: application/json' 
 curl -s -X POST http://localhost:8000/login -H 'content-type: application/json' -d '{"provider":"guest","subject":"<저장해 둔 subject>"}'
 ```
 
-### ② 입장 — 샤드의 주소 받기
+### ② 입장 — 세계의 주소 받기
 
 ```bash
 curl -s -X POST http://localhost:8000/enter -H 'content-type: application/json' -d '{"token":"<①의 token>"}'
 ```
 
-답: `{"page":"http://<서비스>/play?token=…&ws=…","ws":"ws://<publicHost>:<port>"}` — page 는 서비스가 주는 뷰어 페이지, ws 는 그 계정의 샤드.
+답: `{"page":"http://<서비스>/play?token=…&ws=…","ws":"ws://<publicHost>:<port>"}` — page 는 서비스가 주는 뷰어 페이지, ws 는 세계(모두 같다).
 
-- 그 계정의 샤드가 내려가 있으면 여기서 띄운다. 처음은 몇 초 걸린다.
-- 실패는 `{"why":"…"}` — 토큰이 틀렸거나 만료면 400, 샤드를 띄우지 못하면 503.
+- 세계가 내려가 있으면 여기서 띄운다. 처음은 몇 초 걸린다.
+- 실패는 `{"why":"…"}` — 토큰이 틀렸거나 만료면 400, 세계를 띄우지 못했거나 동시 접속이 상한(capacity)에 찼으면 503.
 
 ### ③ 주입 — WebSocket 의 첫 글로 토큰을 보낸다
 
@@ -83,7 +83,7 @@ ws.onmessage = (m) => {
 
 엔진이 이미 가진 클라이언트는 이렇게 주입한다.
 
-- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?ws=` 의 샤드에 붙어 `?token=` 을 `Host 2` 로 보낸다(페이지는 서비스의 주소, 샤드는 다른 포트).
+- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?ws=` 의 세계에 붙어 `?token=` 을 `Host 2` 로 보낸다(페이지는 서비스의 주소, 세계는 다른 포트). `Link 1 open` 의 bodies 가 그 계정의 묶음(요정 넷)이다 — 처음 온 계정이면 엔진이 틀에서 하나 낳는다.
 - 엔진의 에이전트 앱 — `--token` 이 자격이다. `--account` 는 기록의 이름일 뿐이다.
 
 ```bash
@@ -99,7 +99,7 @@ npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brai
 |---|---|
 | 4000 | 같은 계정이 다른 곳에서 붙었다 — 나중 접속이 이긴다 |
 | 4002 | 거절 — 토큰이 틀렸거나 만료, 또는 그 세계에 줄 빈 묶음이 없다 |
-| 1001 | 샤드가 내려갔다(쉼 · 운영자 · 서비스 종료) — ② 부터 다시 |
+| 1001 | 세계가 내려갔다(쉼 · 운영자 · 서비스 종료) — ② 부터 다시 |
 
 - 끊긴 뒤 다시 붙을 때 토큰이 만료되었으면 저장한 subject 로 ① 부터 다시.
 
@@ -107,7 +107,7 @@ npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brai
 
 - **토큰 수명** — 사람의 토큰은 `service.config.json` 의 `tokenTtl`(21600 초 = 6 시간). 짧게 두는 것은 페이지 URL(`?token=`)이 브라우저 기록에 남기 때문이다.
 - **토큰은 계정 그 자체다.** 같은 계정으로 두 번째 접속이 오면 먼저 것이 4000 으로 끊긴다. 브라우저로 노는 계정의 토큰으로 봇을 붙이면 브라우저가 밀려난다.
-- **한 세계에 사람은 하나다.** 다른 계정의 토큰으로 남의 샤드에 붙으면 서명이 맞아도 빈 묶음이 없어 4002 다. 봇과 사람이 한 세계에 드는 길은 아직 없다([피드백 2](../design/00-feedback/feedback.md)).
+- **한 세계에 사람 여럿.** 계정마다 자기 묶음을 받는다. 봇(에이전트 앱)도 자기 계정의 토큰으로 붙으면 자기 묶음을 받아 사람과 같은 세계에 든다. 끊은 계정의 묶음은 세계에서 빠져 기다리다 다시 오면 그 자리에 선다.
 - **게스트 subject 는 사실상 비밀번호다.** 아는 사람이 그 계정이 된다. 외부에 널리 열기 전에 진짜 신원 제공자가 필요하다([피드백 1](../design/00-feedback/feedback.md)).
 
 ## 5. 운영
@@ -124,8 +124,8 @@ export HOST_AUTH_KEY="$(openssl rand -base64 32)"
 SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start
 ```
 
-샤드의 포트 범위(`fleet.ports`, 기본 3100 – 3199)가 밖에서 닿아야 하고 TLS 는 플랫폼이 종단한다.
-키를 바꾸면 이미 낸 토큰은 전부 무효가 된다. 서비스를 다시 띄우면 새 샤드는 새 키로 뜬다(도는 샤드는 옛 키 — 내렸다 띄운다).
+세계의 포트(`fleet.ports` 범위의 첫 빈 것, 기본 3100)가 밖에서 닿아야 하고 TLS 는 플랫폼이 종단한다.
+키를 바꾸면 이미 낸 토큰은 전부 무효가 된다. 서비스를 다시 띄우면 세계는 새 키로 뜬다(도는 세계는 옛 키 — 내렸다 띄운다).
 
 ### 서비스 없이 토큰을 직접 만들 때
 

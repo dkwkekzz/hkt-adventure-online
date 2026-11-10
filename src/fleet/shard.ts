@@ -1,4 +1,4 @@
-// Shard — 계정 하나의 세계: 호스트 하나 + 에이전트 하나 + Store 자리 하나 (design/02-roles/fleet.md 의 Shard).
+// Shard — 세계 하나: 호스트 하나 + 에이전트 하나 + Store 자리 하나 (design/02-roles/fleet.md 의 Shard). 사람은 모두 여기 붙는다 — 계정마다 사람의 묶음 하나(엔진의 --party).
 // start 는 흐름 3 의 5 ~ 7, line · exited 는 흐름 4, stop 은 흐름 5 의 3, command 는 Console 글 한 줄과 그 답.
 
 import { EXIT_REFUSED, RESUMED_HEAD } from '../protocol/engine';
@@ -17,6 +17,8 @@ export interface ShardContext {
   readonly beat: number;
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
+  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). 계정마다 그 틀에서 묶음이 선다. */
+  readonly party: string;
   readonly publicHost: string;
   readonly secure: boolean;
   /** 뷰어 페이지의 주소 — 서비스의 Static 이 준다(`…/play`). */
@@ -39,13 +41,14 @@ interface Waiter {
 
 export class Shard {
   // 데이터 — fleet.md 의 Shard 줄 그대로
-  readonly account: string;
+  readonly name: string; // 세계의 이름 — 설정의 world
   row: Row;
   state: ShardState = 'stopped';
   host: Process | null = null;
   agent: Process | null = null;
   lastStatus: StatusLine | null = null;
   players = 0;
+  linked: readonly string[] = []; // 지난 status 의 접속한 계정 — NPC 계정 밖
   idle = 0;
   restarts = 0;
   agentRestarts = 0;
@@ -61,8 +64,8 @@ export class Shard {
   private listening = false; // 머리글의 마지막 줄을 보았다 — 이 뒤의 줄만 명령의 답이다
   private lastErr = '';
 
-  constructor(account: string, row: Row, ctx: ShardContext) {
-    this.account = account;
+  constructor(name: string, row: Row, ctx: ShardContext) {
+    this.name = name;
     this.row = row;
     this.ctx = ctx;
   }
@@ -72,7 +75,7 @@ export class Shard {
     if (this.state === 'ready') return;
     if (this.starting !== null) return this.starting;
     if (this.stopping !== null) await this.stopping;
-    if (this.state === 'failed' && this.restarts > this.ctx.restartLimit) throw new Error(`샤드가 멈췄다 — ${this.why ?? '까닭 없음'} (운영자: start ${this.account})`);
+    if (this.state === 'failed' && this.restarts > this.ctx.restartLimit) throw new Error(`샤드가 멈췄다 — ${this.why ?? '까닭 없음'} (운영자: start ${this.name})`);
     if (this.row.port === null) throw new Error('포트가 없다');
     this.starting = this.boot().finally(() => (this.starting = null));
     return this.starting;
@@ -89,11 +92,11 @@ export class Shard {
     this.idle = 0;
     this.agentRestarts = 0;
     this.listening = false;
-    const host = Spawner.host(this.ctx.engineDir, { dataset: this.row.dataset, port, store: this.row.storeDir, beat: this.ctx.beat, sparse: this.ctx.sparse }, this.ctx.key);
+    const host = Spawner.host(this.ctx.engineDir, { dataset: this.row.dataset, port, store: this.row.storeDir, beat: this.ctx.beat, sparse: this.ctx.sparse, party: this.ctx.party }, this.ctx.key);
     this.host = host;
     host.onLine((stream, line) => this.line('host', stream, line));
     host.onExit((code) => this.exited('host', code));
-    this.ctx.log(`${this.account} fleet 호스트를 띄운다 — pid ${host.pid} · 포트 ${port}`);
+    this.ctx.log(`${this.name} fleet 호스트를 띄운다 — pid ${host.pid} · 포트 ${port}`);
 
     const readied = new Promise<void>((resolve, reject) => (this.ready = { resolve, reject }));
     const limit = setTimeout(() => this.ready?.reject(new Error(`머리글이 ${this.ctx.startLimitMs}ms 안에 오지 않았다`)), this.ctx.startLimitMs);
@@ -155,7 +158,7 @@ export class Shard {
     this.agent = agent;
     let shown = 0;
     agent.onLine((stream, line) => {
-      if (stream === 'stderr' || shown++ < 1) this.ctx.log(`${this.account} agent ${line}`); // 두뇌가 창마다 찍는다 — 첫 줄과 stderr 만
+      if (stream === 'stderr' || shown++ < 1) this.ctx.log(`${this.name} agent ${line}`); // 두뇌가 창마다 찍는다 — 첫 줄과 stderr 만
     });
     agent.onExit((code) => this.exited('agent', code));
   }
@@ -165,14 +168,15 @@ export class Shard {
     if (which !== 'host') return;
     if (stream === 'stderr') {
       this.lastErr = text;
-      this.ctx.log(`${this.account} host ${text}`);
+      this.ctx.log(`${this.name} host ${text}`);
       return;
     }
     const read = Probe.read(text);
     if (read.kind === 'status') {
       this.lastStatus = read.status;
-      this.players = read.accounts.filter((a) => a !== this.ctx.npc.account).length;
-    } else if (text.trim() !== '') this.ctx.log(`${this.account} host ${text}`); // status 는 박자마다 온다 — 기록하지 않는다
+      this.linked = read.accounts.filter((a) => a !== this.ctx.npc.account);
+      this.players = this.linked.length;
+    } else if (text.trim() !== '') this.ctx.log(`${this.name} host ${text}`); // status 는 박자마다 온다 — 기록하지 않는다
     if (read.kind === 'ready') {
       this.listening = true;
       this.ready?.resolve();
@@ -190,7 +194,7 @@ export class Shard {
   exited(which: 'host' | 'agent', code: number): void {
     if (which === 'agent') {
       this.agent = null;
-      this.ctx.log(`${this.account} agent 끝났다 — exit ${code}`);
+      this.ctx.log(`${this.name} agent 끝났다 — exit ${code}`);
       if (this.state !== 'ready' || this.host === null) return;
       this.agentRestarts++;
       if (this.agentRestarts > this.ctx.restartLimit) {
@@ -211,7 +215,7 @@ export class Shard {
     for (const w of this.waiting.splice(0)) w.resolve(null);
     this.agent?.kill();
     const wasStopping = this.state === 'stopping';
-    this.ctx.log(`${this.account} host 끝났다 — exit ${code}`);
+    this.ctx.log(`${this.name} host 끝났다 — exit ${code}`);
     if (this.state === 'starting' || this.ready !== null) {
       if (this.ready === null) return; // boot 가 한계로 끝냈다 — 거기서 센다
       this.ready.reject(new Error(`호스트가 머리글 전에 끝났다 — exit ${code}`));

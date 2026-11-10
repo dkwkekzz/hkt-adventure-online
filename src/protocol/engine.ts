@@ -19,10 +19,12 @@ export interface HostArgs {
   readonly store: string;
   readonly beat: number;
   readonly sparse: number;
+  /** `--party <body>` — 사람의 묶음의 틀. 처음 온 계정마다 그 틀에서 묶음이 서고(빈 것이 없으면 낳는다) 접속한 동안만 세계에 선다(ONLINE.md §1.3). */
+  readonly party: string;
 }
 
 export function hostArgv(a: HostArgs): string[] {
-  return [ENGINE_HOST, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse)];
+  return [ENGINE_HOST, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse), '--party', a.party];
 }
 
 /**
@@ -103,8 +105,8 @@ export function readStatus(text: string): StatusLine | null {
 }
 
 /**
- * status 글의 접속 칸 — `· 접속 ` 뒤 ` · 명부 ` 앞. 아무도 없으면 `-`. 항목은 `계정(body, body)` 이 공백으로 이어진다(괄호 안에도 공백이 있다).
- * 엔진 host/console.ts 의 statusText.
+ * status 글의 접속 칸 — `· 접속 ` 뒤 ` · 명부 ` 앞. 아무도 없으면 `-`. 항목은 `계정(body, body)` 이 공백으로 이어지고,
+ * body 는 이름이 있으면 `이름(번호)` 라 괄호가 겹친다(괄호 안에도 공백이 있다). 엔진 host/console.ts 의 statusText · nameOf.
  */
 export function linkedAccounts(text: string): string[] {
   const from = text.indexOf(' · 접속 ');
@@ -112,7 +114,18 @@ export function linkedAccounts(text: string): string[] {
   if (from < 0 || to < from) return [];
   const field = text.slice(from + ' · 접속 '.length, to).trim();
   if (field === '-' || field === '') return [];
-  return [...field.matchAll(/(?:^|\s)([^\s(]+)\(/g)].map((m) => m[1]!);
+  const out: string[] = [];
+  let depth = 0;
+  let word = '';
+  for (const ch of field) {
+    if (ch === '(') {
+      if (depth === 0 && word !== '') out.push(word);
+      depth++;
+      word = '';
+    } else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (depth === 0) word = ch === ' ' ? '' : word + ch;
+  }
+  return out;
 }
 
 /**

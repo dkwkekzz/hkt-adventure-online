@@ -15,7 +15,7 @@ src/
   apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · /health · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
   tools/      boundary(경계 검사) · index(설계 색인) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
-service.config.json   서비스의 값 — 엔진 자리 · 데이터셋 · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 한계 · 주기. 게임 명사는 여기에만
+service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데이터셋 · 사람의 묶음의 틀(party) · 동시 접속 상한(capacity) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 한계 · 주기. 게임 명사는 여기에만
 ```
 
 ## 지키는 것
@@ -55,8 +55,8 @@ npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍는다
 HOST_AUTH_KEY=… npm start [-- config.json]
-                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<자기 샤드>. stdin 은 Operator(help).
+                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<세계>. 사람은 모두 같은 세계(설정의 world)에 붙고 계정마다 자기 묶음을 맡는다. 입장의 한계는 capacity 뿐. stdin 은 Operator(help).
                        env: PORT(Api 포트) · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
-npm run shot [-- --url http://localhost:8000 --out out/shot]
-                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 샤드의 뷰어를 찍는다(playwright 가 깔린 자리에서)
+npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다)]
+                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를 찍는다(playwright 가 깔린 자리에서)
 ```

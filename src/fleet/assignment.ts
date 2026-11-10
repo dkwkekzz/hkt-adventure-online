@@ -1,4 +1,4 @@
-// Assignment — 배정 표: 계정 → {dataset, storeDir, port} (design/02-roles/fleet.md 의 Assignment). 값은 저장장치의 `assignment` 자리에.
+// Assignment — 세계의 자리 표: 세계의 이름 → {dataset, storeDir, port} (design/02-roles/fleet.md 의 Assignment). 값은 저장장치의 `assignment` 자리에.
 
 import type { LedgerSocket } from '../protocol/vault';
 
@@ -20,17 +20,17 @@ export class Assignment {
     this.rows = new Map(Object.entries(saved?.rows ?? {}).map(([a, r]) => [a, { ...r }]));
   }
 
-  get(account: string): Row | null {
-    return this.rows.get(account) ?? null;
+  get(world: string): Row | null {
+    return this.rows.get(world) ?? null;
   }
 
-  put(account: string, row: Row): void {
-    this.rows.set(account, row);
+  put(world: string, row: Row): void {
+    this.rows.set(world, row);
     this.save();
   }
 
-  remove(account: string): void {
-    this.rows.delete(account);
+  remove(world: string): void {
+    this.rows.delete(world);
     this.save();
   }
 

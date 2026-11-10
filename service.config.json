@@ -6,7 +6,10 @@
   "keymap": "dataset/adventure-keymap.json",
   "fleet": {
     "engineDir": "engine",
-    "dataset": "dataset/corner.json",
+    "world": "main",
+    "dataset": "dataset/glade.json",
+    "party": "fairy-1",
+    "capacity": 32,
     "viewerOut": "out/viewer/viewer.js",
     "beat": 200,
     "sparse": 10,

@@ -15,10 +15,10 @@ Operator.command                                        [함대]
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | Operator.command | `shards` · `status <account>` · `start <account>` · `stop <account>` · `host <account> <Console 글>` · `backup <account>` · `restore <account> <사본>` · `revoke-port <account>`. 모르는 글이면 쓰는 법 | |
-| 2 | `shards` | 배정 표의 줄마다 계정 · state · port · lastStatus 의 머리 · why | 글 |
-| 3 | `status <account>` | 그 샤드의 state 와 lastStatus 전부. 사본 목록(Vault.list) | 글 |
-| 4 | `host <account> <글>` | Shard.command 로 그대로. 답 글을 돌려준다. `stop` 은 넘기지 않고 `stop <account>` 로 | 글 |
+| 1 | Operator.command | `shards` · `status <world>` · `start <world>` · `stop <world>` · `host <world> <Console 글>` · `backup <world>` · `restore <world> <사본>` · `revoke-port <world>`(world 는 설정의 세계 이름). 모르는 글이면 쓰는 법 | |
+| 2 | `shards` | 세계마다 이름 · state · port · lastStatus 의 머리 · why | 글 |
+| 3 | `status <world>` | 그 샤드의 state 와 lastStatus 전부. 사본 목록(Vault.list) | 글 |
+| 4 | `host <world> <글>` | Shard.command 로 그대로. 답 글을 돌려준다. `stop` 은 넘기지 않고 `stop <world>` 로 | 글 |
 | 5 | `backup` · `restore` | 샤드가 `stopped` 또는 `failed` 일 때만. restore 는 자리를 사본으로 바꾸고(기존은 사본 하나로 남긴다) restarts 셈을 0 으로 | 사본 이름 |
 | 6 | `revoke-port` | 샤드가 내려가 있을 때만. 포트를 비우고 다음 입장이 새 포트를 받는다 | |
 | 7 | `start` | Shard.start 와 같다. `failed` 의 셈을 0 으로 한 뒤 | |
@@ -34,7 +34,7 @@ Operator.command                                        [함대]
 
 ## 규칙
 
-- 운영자가 세계의 사실을 보는 자리는 호스트의 status 글 하나다. 명부는 `host <account> grant …` 로만 고친다.
+- 운영자가 세계의 사실을 보는 자리는 호스트의 status 글 하나다. 명부는 `host <world> grant …` 로만 고친다.
 
 ## 미정
 

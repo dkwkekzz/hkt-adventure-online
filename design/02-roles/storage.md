@@ -16,7 +16,7 @@ Ledger ← Vault
 
 ### Vault
 - 데이터: root(불변) · ledger.
-- 기능: dirOf(account, dataset) 은 `<root>/shards/<Account.id>/<dataset 이름>` 을 만들어 준다(dataset 이름은 엔진의 storeName 과 같다 — 파일이면 `.json` 을 뗀 이름, 폴더면 `<이름>-pieces`). copy(dir) 은 `<root>/backups/<Account.id>/<dataset 이름>/<UTC 시각 YYYYMMDDTHHMMSSmmmZ>/` 로 통째 베끼고 그 이름을 준다. restore(dir, 사본) 은 자리를 사본으로 바꾼다(기존은 copy 로 사본 하나로 남긴다). list(dir) 은 그 자리의 사본 이름들(오래된 것부터).
+- 기능: dirOf(owner, dataset) 은 `<root>/shards/<owner>/<dataset 이름>` 을 만들어 준다(owner 는 세계 이름)(dataset 이름은 엔진의 storeName 과 같다 — 파일이면 `.json` 을 뗀 이름, 폴더면 `<이름>-pieces`). copy(dir) 은 `<root>/backups/<Account.id>/<dataset 이름>/<UTC 시각 YYYYMMDDTHHMMSSmmmZ>/` 로 통째 베끼고 그 이름을 준다. restore(dir, 사본) 은 자리를 사본으로 바꾼다(기존은 copy 로 사본 하나로 남긴다). list(dir) 은 그 자리의 사본 이름들(오래된 것부터).
 - 생애: Service.start 가 openVault 로 연다.
 - 안을 읽지 않는다. 디렉터리를 통째로 다룬다. root 밖의 자리는 거절한다.
 
@@ -29,7 +29,7 @@ Ledger ← Vault
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
-| Vault dirOf | 함대 → 저장장치 | account · dataset | dir |
+| Vault dirOf | 함대 → 저장장치 | owner(세계 이름) · dataset | dir |
 | Vault copy | 함대 → 저장장치 | dir | 사본 이름 |
 | Vault restore | 함대 → 저장장치 | dir · 사본 이름 | 없음(없는 사본이면 던진다) |
 | Vault list | 함대 → 저장장치 | dir | 사본 이름들 |
