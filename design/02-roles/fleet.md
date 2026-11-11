@@ -29,17 +29,17 @@ NodeAgent ← Service(노드)
 ## 개념
 
 ### Fleet
-- 데이터: nodes:map<이름, Node> · instances:map<이름, Instance> · assignment · clock · berth(참조, NodeRpc 소켓) · snapshots(참조) · sessions(세션 모듈의 기능 둘 transfer · failover, 앱이 준다) · config:{zones, reportLimitMs, restartLimit, idleLimit, lagLimit}.
-- 기능: start 는 흐름 1. instances(zone) 은 그 존의 ready 인 Instance 들. launch(zone) 은 흐름 3 — 빈 번호의 인스턴스를 예비 용량 있는 Node 에 띄운다(띄우는 가운데의 것이 있으면 그것을 기다린다). drain(instance) 은 `draining` 으로 — 새 세션을 받지 않는다. terminate(instance) 는 내린다. backup(instance) · restore(instance, 백업) · copies(instance) 는 내려간 인스턴스의 Store 를 SnapshotStore 의 copy · restore · list 로 백업하고 복원하고 센다. load(instance, character) · unload(instance, character) 는 그 Node 의 NodeAgent 에 로드 · 언로드를 시킨다. command(instance, 글) 은 Console 글과 그 답. register(node) · heartbeat(node, 보고) 는 노드의 알림을 받는다(흐름 1 · 5). handoff(instance, character, zone) 은 세션 모듈의 transfer 로 넘긴다(흐름 10). exited(instance, code) 와 tick 의 보고 끊김은 흐름 12. tick 은 흐름 5.
+- 데이터: nodes:map<이름, Node> · instances:map<이름, Instance> · assignment · clock · rpc(참조, NodeRpc 소켓) · snapshots(참조) · sessions(세션 모듈의 기능 둘 transfer · failover, 앱이 준다) · config:{zones, reportLimitMs, restartLimit, idleLimit, lagLimit}.
+- 기능: start 는 흐름 1. instances(zone) 은 그 존의 ready 인 Instance 들. launch(zone) 은 흐름 3 — 빈 번호의 인스턴스를 예비 용량 있는 Node 에 띄운다(띄우는 가운데의 것이 있으면 그것을 기다린다). remove(instance) 는 내려간 인스턴스의 표의 줄을 지운다. stats 는 노드 · 인스턴스마다의 state · 사람 수 · 틱 지연(흐름 14). drain(instance) 은 `draining` 으로 — 새 세션을 받지 않는다. terminate(instance) 는 내린다. backup(instance) · restore(instance, 백업) · copies(instance) 는 내려간 인스턴스의 Store 를 SnapshotStore 의 copy · restore · list 로 백업하고 복원하고 센다. load(instance, character) · unload(instance, character) 는 그 Node 의 NodeAgent 에 로드 · 언로드를 시킨다. command(instance, 글) 은 Console 글과 그 답. register(node) · heartbeat(node, 보고) 는 노드의 알림을 받는다(흐름 1 · 5). handoff(instance, character, zone) 은 세션 모듈의 transfer 로 넘긴다(흐름 10). exited(instance, code) 와 tick 의 보고 끊김은 흐름 12. tick 은 흐름 5.
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Node
-- 데이터: name(불변) · address(NodeRpc 의 주소) · slots:int(띄울 수 있는 인스턴스의 수 — 코어) · used:int · host(내부망에서 호스트가 보이는 이름) · seen(마지막 보고 시각).
+- 데이터: name(불변) · address(NodeRpc 의 주소) · build(그 노드의 엔진 커밋) · term(받아들인 활성의 번호) · slots:int(띄울 수 있는 인스턴스의 수 — 코어) · used:int · host(내부망에서 호스트가 보이는 이름) · seen(마지막 보고 시각).
 - 기능: 없음.
 - 생애: Fleet.register 이 만든다. 보고가 한계(`reportLimitMs`)를 넘겨 끊기면 사라진다.
 
 ### Instance
-- 데이터: name(불변, `<존>-<번호>`) · zone(불변) · node · port · state:`starting`|`ready`|`draining`|`stopping`|`stopped`|`failed` · players:int · lag:int(틱 지연) · idle:int · restarts:int · dirty:bool · why:string|null.
+- 데이터: name(불변, `<존>-<번호>`) · zone(불변) · node · port · build(그 노드의 빌드) · state:`starting`|`ready`|`draining`|`stopping`|`stopped`|`failed` · players:int · lag:int(틱 지연) · idle:int · restarts:int · dirty:bool · why:string|null.
 - 기능: address 는 `ws://<node.host>:<port>`(내부망).
 - 생애: Fleet.launch 가 만들거나 Fleet.start 가 표의 줄마다 `stopped` 로 만든다. 표의 줄이 지워질 때 사라진다.
 - 인스턴스 하나 = 호스트 하나 = Store 자리 하나. `draining` 은 새 세션을 받지 않는다.
@@ -50,8 +50,8 @@ NodeAgent ← Service(노드)
 - 생애: Fleet 과 함께.
 
 ### NodeAgent
-- 데이터: name(불변, 이 노드의 이름) · shards:map<인스턴스 이름, GameServer> · ports · clock · snapshots · characters(참조) · berth(참조) · issue(NPC 계정 → Token, 앱이 준다) · config:{engineDir, beat, sparse, slots, spool(캐릭터 파일의 자리), checkinEvery, 한계들}.
-- 기능: start 는 컨트롤 플레인에 register 를 보내고 Clock.run(흐름 1). launch(spec) 는 SnapshotStore.pull 로 Store 를 받고 Ports.take 뒤 GameServer.start(흐름 3). stop(instance) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop, SnapshotStore.push 로 올린 뒤 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. command(instance, 글). load(instance, character) 는 CharacterStore.checkout 으로 값과 lease 를 받아 GameServer.load(흐름 9 · 10). unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin 으로 저장하고 lease 를 푼다(흐름 10 · 11). tick 은 흐름 5 — status · 스냅샷 저장 · 보고. stopAll 은 흐름 7.
+- 데이터: name(불변, 이 노드의 이름) · shards:map<인스턴스 이름, GameServer> · ports · clock · snapshots · characters(참조) · rpc(참조) · issue(NPC 계정 → Token, 앱이 준다) · config:{engineDir, beat, sparse, slots, spool(캐릭터 파일의 자리), checkinEvery, 한계들}.
+- 기능: stats 는 이 서버의 GameServer 마다의 state · 틱 지연(흐름 14). start 는 컨트롤 플레인에 register 를 보내고 Clock.run(흐름 1). launch(spec) 는 SnapshotStore.pull 로 Store 를 받고 Ports.take 뒤 GameServer.start(흐름 3). stop(instance) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop, SnapshotStore.push 로 올린 뒤 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. command(instance, 글). load(instance, character) 는 CharacterStore.checkout 으로 값과 lease 를 받아 GameServer.load(흐름 9 · 10). unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin 으로 저장하고 lease 를 푼다(흐름 10 · 11). tick 은 흐름 5 — status · 스냅샷 저장 · 보고. stopAll 은 흐름 7.
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### GameServer

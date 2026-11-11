@@ -20,7 +20,7 @@ SessionManager.tick 이 본 게이트웨이의 끊김                           
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
 | 1 | Fleet.exited(instance, code) | 내리는 가운데였으면 `stopped`(값은 이미 거뒀다), 아니면 `failed` 와 셈 하나. 코드 2 면(같은 인자로 다시 띄워도 같다) 셈을 한계 위로 | Instance |
-| 1′ | Fleet.tick | 보고가 끊긴 Node 의 Instance 를 전부 `failed` 로 하고 Node 을 지운다 | |
+| 1′ | Fleet.tick | 보고가 끊긴 Node 의 Instance 를 전부 `failed` 로 하고 Node 를 지운다 | |
 | 2 | Fleet → CharacterStore.expire(instance) | 그 인스턴스가 든 lease 를 전부 비운다. 값은 마지막으로 저장한 것이다 | |
 | 3 | Fleet → SessionManager.failover(instance) | Presence.of 의 캐릭터마다 같은 존의 다른 인스턴스로 SessionManager.transfer — 언로드(흐름 10 의 3)는 건너뛴다. 배정되면 게이트웨이가 뒤를 바꿔 잇는다 | 사람이 다시 배정된다 |
 | 4 | SessionManager → SessionRpc kick | 배정할 슬롯이 없는 캐릭터는 게이트웨이가 닫고(1001) 세션을 지운다. 클라이언트는 다시 입장한다(흐름 3 — 대기열일 수 있다) ✕ | |
@@ -40,6 +40,9 @@ SessionManager.tick 이 본 게이트웨이의 끊김                           
 - 유실되는 것은 마지막으로 저장한 뒤의 진행뿐이다(흐름 5 의 2).
 - 끊긴 줄 알았던 노드의 호스트가 살아 있어도 값이 둘이 되지 않는다. lease 의 번호가 달라 그 호스트의 저장은 거절되고, 노드는 그 캐릭터를 지운다(흐름 5 의 2). 그 노드가 다시 알리면 컨트롤 플레인은 표에 없는 인스턴스를 내리게 한다(흐름 1 의 8).
 - 컨트롤 플레인이 죽은 동안에는 이 흐름이 돌지 않는다. 붙어 있는 사람은 그대로 놀고, 죽은 호스트의 사람은 컨트롤 플레인이 다시 설 때까지 기다린다.
+
+- 다시 배정하는 곳은 같은 빌드의 인스턴스뿐이다(흐름 10 의 2).
+- 컨트롤 플레인 자신의 죽음은 흐름 13 이다.
 
 ## 미정
 

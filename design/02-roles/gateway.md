@@ -17,7 +17,7 @@ Gateway ← Service(게이트웨이)
 
 ### Gateway
 - 데이터: name(불변) · address(불변, 밖에서 보는 주소) · connections:map<Character.id, Connection> · limiter · rpc(참조, SessionRpc 소켓) · verify(토큰 → id, 앱이 준다).
-- 기능: accept(socket) 은 흐름 9 — 첫 글의 토큰을 풀고 SessionRpc 의 attach 로 세션을 확인해 Connection 을 연다. 같은 캐릭터의 옛 Connection 이 있으면 닫는다(나중 접속이 이긴다). reroute(character, address, token) 은 그 Connection 의 뒤를 바꾼다(흐름 10 · 12). kick(character, why) 는 그 Connection 을 닫는다. heartbeat 는 이 게이트웨이가 살아 있음과 붙은 캐릭터들을 SessionRpc 로 알린다(흐름 5). stop 은 Connection 을 전부 닫는다.
+- 기능: accept(socket) 은 흐름 9 — 첫 글의 토큰을 풀고 SessionRpc 의 attach 로 세션을 확인해 Connection 을 연다. 같은 캐릭터의 옛 Connection 이 있으면 닫는다(나중 접속이 이긴다). reroute(character, address, token) 은 그 Connection 의 뒤를 바꾼다(흐름 10 · 12). kick(character, code, why) 는 그 Connection 을 닫는다 — detach 를 보내지 않는다. stats 는 열린 접속의 수 · 버린 글의 수(흐름 14). heartbeat 는 이 게이트웨이가 살아 있음과 붙은 캐릭터들을 SessionRpc 로 알린다(흐름 5). stop 은 Connection 을 전부 닫는다.
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Connection

@@ -4,7 +4,7 @@
 엔진이 밖에 내놓은 면의 사실(CLI · 머리글 · Console · Link · Store · 자격)은 엔진의 `web/ONLINE.md` §1 이 전부다 — `npm run engine` 뒤 `engine/web/ONLINE.md` 에 있다.
 
 ```text
-design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연결 일곱) · 앱(README.md), 쓰는 방식(method.md), 흐름 열둘(01-flows/), 책임 다섯(02-roles/), 피드백(00-feedback/). src 가 아직 따라오지 않은 것은 plan 의 ☐
+design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연결 일곱) · 앱(README.md), 쓰는 방식(method.md), 흐름 열넷(01-flows/), 책임 다섯(02-roles/), 피드백(00-feedback/). src 가 아직 따라오지 않은 것은 plan 의 ☐
 plan/         design 을 src 에 세우는 순서와 상태. 다음 단계는 진행표의 첫 ☐ · ◐
 notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/

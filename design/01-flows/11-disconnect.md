@@ -19,7 +19,7 @@ Queue.next                                              ⇒ 흐름 5 의 8
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
 | 1 | Connection.close | upstream 을 닫는다. 호스트는 그 묶음을 무대 밖에 둔다(엔진의 끊김). 컨트롤 플레인에 SessionRpc detach | |
-| 2 | SessionManager.disconnect(character) | Session 를 `grace` 로, 만료는 `graceMs` 뒤 | Session ◇ |
+| 2 | SessionManager.disconnect(character) | Session 을 `grace` 로, 만료는 `graceMs` 뒤 | Session ◇ |
 | 3 | (재접속 유예 안에 다시 온다) | 흐름 3 의 2 → 흐름 9. 로드를 건너뛰고 같은 인스턴스에 잇는다 | |
 | 4 | SessionManager.tick → Fleet.unload | 재접속 유예가 지났다. NodeAgent.unload — GameServer.unload 으로 값을 언로드하고 CharacterStore.checkin(release)으로 저장한다 | 값이 스토리지에 |
 | 5 | SessionManager → Presence.drop · Database.put | 세션을 지우고 마지막 존을 적는다. 그 존에 기다리는 사람이 있으면 Queue.next | |

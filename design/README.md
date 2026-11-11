@@ -100,6 +100,8 @@
 | 플릿 | NodeAgent · GameServer · Ports · Process · Probe | | | | ● |
 | 플릿 | Spawner | ●(bundle) | | | ●(host · agent) |
 | 스토리지 | Database | ● | | ● | |
+| 스토리지 | LeaderLock | ●(holder) | ●(holder) | ●(acquire · renew) | ●(holder) |
+| 앱 | Monitor | ● | ● | ● | ● |
 | 스토리지 | CharacterStore | | | ●(expire) | ●(checkout · checkin) |
 | 스토리지 | SnapshotStore | | | ●(copy · restore · list) | ●(pull · push · copy · prune) |
 | 앱 | Api · Static | ● | | | |
@@ -185,7 +187,7 @@
 
 ### Service
 - 데이터: role:`api`|`gateway`|`control`|`node`|`main`(불변) · config(불변) · 그 role 이 든 모듈의 객체 · 듣는 서버.
-- 기능: start 는 흐름 1. stop 은 흐름 7. 두 번 불려도 한 번.
+- 기능: start 는 흐름 1. stop 은 흐름 7. 두 번 불려도 한 번. elect 는 흐름 13 — 컨트롤 플레인만.
 - 생애: 프로세스가 만든다. 프로세스와 함께 사라진다.
 
 ### Api
@@ -197,6 +199,11 @@
 - 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(묶은 viewer.js) · keymap(없으면 null). 전부 불변.
 - 기능: serve(path) 는 뷰어의 페이지 · 묶음 · 실물 · Keymap 을 준다. 뿌리 밖은 없다. 파일의 안은 보지 않는다.
 - 생애: API 서버의 Service.start 가 만든다.
+
+### Monitor
+- 데이터: role(불변) · build(불변) · 그 role 의 모듈의 stats(참조).
+- 기능: health 는 이 프로세스가 지금 제 일을 할 수 있는가(흐름 14). metrics 는 수치의 글.
+- 생애: Service.start 가 만든다. 프로세스마다 하나.
 
 ### Operator
 - 데이터: fleet · sessions · directory(참조).
@@ -232,5 +239,7 @@
 | [10 존 이동](01-flows/10-transfer.md) | 호스트의 이동 요청 줄 | 노드 → 컨트롤 플레인 → 노드 → 게이트웨이 | 값을 언로드해 다른 인스턴스에 로드하고 게이트웨이가 뒤를 바꿔 잇는다 |
 | [11 접속 종료](01-flows/11-disconnect.md) | 클라이언트의 소켓이 닫힌다 | 게이트웨이 → 컨트롤 플레인 → 노드 | 재접속 유예가 지나면 값을 언로드하고 세션을 지운다 |
 | [12 장애 복구](01-flows/12-failover.md) | 호스트의 죽음 또는 노드 · 게이트웨이의 보고가 끊김 | 컨트롤 플레인 | lease 를 끊고 그 사람들을 다른 인스턴스에 다시 배정한다 |
+| [13 컨트롤 플레인 전환](01-flows/13-leader.md) | 컨트롤 플레인의 Clock | 컨트롤 플레인 | 활성 하나가 LeaderLock 을 잡고, 놓치면 대기가 잡아 표를 다시 세운다 |
+| [14 관측](01-flows/14-observe.md) | 수집기 · load balancer 의 http 요청 | 넷 다 | 프로세스가 제 일을 할 수 있는가와 수치를 답한다 |
 
 쓰는 방식은 [method.md](method.md).

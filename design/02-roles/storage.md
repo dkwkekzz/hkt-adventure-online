@@ -11,6 +11,7 @@
 ```text
 SnapshotStore  ← Service(노드 · 컨트롤 플레인)     (openStorage)
 Database ← Service(API 서버 · 컨트롤 플레인)
+LeaderLock ← Service(컨트롤 플레인 · 노드 · 게이트웨이 · API 서버)
 CharacterStore ← Service(노드 · 컨트롤 플레인)
 ```
 
@@ -32,6 +33,11 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 - 기능: checkout(character, holder, file) 은 lease 가 비었거나 만료됐으면 번호를 하나 올린 Lease 를 내고 값을 file 에 내려 준다(값이 아직 없으면 file 을 만들지 않는다). 남이 들고 있으면 null. checkin(character, lease, file, release) 는 lease 의 번호가 지금의 것과 같을 때만 file 을 값으로 저장한다 — 다르면 거절(false). release 가 참이면 lease 를 비운다. 저장하면 lease 의 만료를 늦춘다. expire(holder) 는 그 holder 가 든 lease 를 전부 비운다(값은 마지막 checkin 의 것).
 - 생애: openStorage 와 함께.
 
+### LeaderLock
+- 데이터: 없음. 값은 스토리지에 — 이름마다 {holder(주소), term:int(늘기만 한다), until}.
+- 기능: acquire(name, holder, ttl) 는 비었거나 만료됐으면 term 을 하나 올려 잡고 그 term 을 준다. 남이 들고 있으면 null. renew(name, holder, term) 은 제 것이면 만료를 늦춘다 — 아니면 false. holder(name) 은 지금 든 자의 주소와 term.
+- 생애: openStorage 와 함께.
+
 ### Lease
 - 데이터: character · holder(인스턴스 이름) · n:int(늘기만 한다) · until(만료 시각). 불변.
 - 기능: 없음.
@@ -47,6 +53,8 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 | CharacterStore checkout | 플릿(NodeAgent) → 스토리지 | Character.id · holder · file | Lease 또는 null |
 | CharacterStore checkin | 플릿(NodeAgent) → 스토리지 | Character.id · Lease · file · release | 됨 |
 | CharacterStore expire | 플릿(Fleet) → 스토리지 | holder | 없음 |
+| LeaderLock acquire · renew | 컨트롤 플레인 → 스토리지 | 이름 · holder · ttl · term | term 또는 null |
+| LeaderLock holder | 노드 · 게이트웨이 · API 서버 → 스토리지 | 이름 | 주소 · term |
 
 ## 미정
 

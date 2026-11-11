@@ -29,3 +29,6 @@ stage 1 ~ 12 는 세계 하나 · 프로세스 하나의 서비스를 세웠다.
 | 17 책임 — 플릿 · 인스턴스 여럿 | online | Fleet(컨트롤 플레인) · Instance · 예비 용량(spare) · drain · terminate. 흐름 10 · 12 가 한 서버에서 선다 | 한 존의 두 인스턴스 사이로 사람이 옮겨지고(`drain`) 접속이 끊기지 않는다 | ☐ |
 | 18 책임 — 플릿 · 노드 | online | NodeAgent · Node 과 NodeRpc 소켓. 프로세스 넷(api · gateway · control · node)으로 갈라 띄운다 | 두 서버의 노드가 한 컨트롤 플레인에 알리고, 한 서버를 끄면 사람이 다른 노드로 옮겨진다 | ☐ |
 | 19 앱 — Operator | online | 흐름 6 의 명령 전부와 내부 주소의 Operator 소켓 | `close` · `drain` 으로 엔진을 바꿔 띄우는 동안 사람이 끊기지 않는다 | ☐ |
+| 20 책임 — 컨트롤 플레인 전환 | online | LeaderLock 과 Service.elect, 글마다의 term. 흐름 13 | 활성을 죽이면 대기가 잡고, 붙어 있던 사람은 끊기지 않으며 새 입장이 다시 된다 | ☐ |
+| 21 앱 — Monitor | online | `/health` · `/metrics` 와 모듈마다의 stats. 흐름 14 | 프로세스 넷의 `/metrics` 에 세션 수 · 틱 지연이 찍힌다 | ☐ |
+| 22 책임 — 빌드 | online | Session · Instance · Node 의 build. 같은 빌드끼리만 배정(흐름 3 · 10 · 12) | 옛 빌드의 인스턴스를 `drain` 하면 옛 뷰어가 닫히고 다시 받으면 새 빌드로 들어온다 | ☐ |
