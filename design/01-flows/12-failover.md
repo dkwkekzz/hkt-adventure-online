@@ -20,7 +20,7 @@ SessionManager.tick 이 본 게이트웨이의 끊김                  [세션 �
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | Fleet.exited(node, instance, epoch, code, uploaded) | 알린 노드 · 세대가 표의 것과 다르면 버린다(다른 곳에 다시 뜬 뒤의 낡은 호스트다). uploaded 면(노드가 내려서 Store 를 올린 뒤에 알렸다 — 흐름 7 의 3) Assignment.put 으로 줄을 `stopped` 로 적고 여기서 끝난다. 그 밖은 코드가 0 이어도 죽은 것이다 — `failed` 와 셈 하나. 코드 2 면(같은 인자로 다시 띄워도 같다) 셈을 한계 위로. 줄에 적는다 | Instance |
+| 1 | Fleet.exited(node, instance, epoch, code, uploaded) | 알린 노드 · 세대가 표의 것과 다르면 버린다(다른 곳에 다시 뜬 뒤의 낡은 호스트다). uploaded 이거나 내리는 가운데(`stopping`)였으면 Assignment.put 으로 줄을 `stopped` 로 적고 여기서 끝난다(uploaded 가 아니면 노드가 올리지 못한 것이다 — 그 서버의 자리가 가장 새것이고 노드가 다시 올린다, 흐름 5 의 3′). 그 밖은 코드가 0 이어도 죽은 것이다 — `failed` 와 셈 하나. 코드 2 면(같은 인자로 다시 띄워도 같다) 셈을 한계 위로. 줄에 적는다 | Instance |
 | 1′ | Fleet.tick | 보고가 끊긴 Node 의 도는 Instance 를 전부 `failed` 로 하고 Node 를 지운다. 그 앞에 LeaderLock.renew 로 아직 활성인가를 확인한다(흐름 5 의 9) |  |
 | 2 | Fleet → CharacterStore.expire(instance) | 그 인스턴스가 든 lease 를 전부 비우고 번호를 올린다. 값은 마지막으로 저장한 것이다. 그 호스트가 살아 있어도 뒤늦은 저장은 전부 거절된다. 옛 term 의 것이면 스토리지가 거절한다 |  |
 | 3 | Fleet → SessionManager.failover(instance) | 그 인스턴스의 세션(Presence.of)과 그리로 옮기던 세션마다. `active` 는 같은 존의 다른 인스턴스로 SessionManager.transfer — 언로드는 없다. 그동안 게이트웨이의 Connection 은 `rerouting` 으로 클라이언트의 소켓을 든 채 기다린다(흐름 9 의 규칙). `pending` 은 인스턴스만 바꾼다. `grace` 는 지운다 — 값은 스토리지에 있다. 그리로 옮기던 세션은 그 이동이 로드의 실패로 간다(흐름 10 의 6) | 사람이 다시 배정된다 |

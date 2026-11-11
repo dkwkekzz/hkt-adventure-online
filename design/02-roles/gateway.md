@@ -17,8 +17,8 @@ Gateway ← Service(게이트웨이)
 ## 개념
 
 ### Gateway
-- 데이터: name(불변) · address(불변, 밖에서 보는 주소) · connections:map<Character.id, Connection> · limiter · rpc(참조, SessionRpc 소켓) · verify(토큰 → id, 앱이 준다) · lock(참조 — LeaderLock 의 holder, 활성 컨트롤 플레인을 찾는다) · term(받아들인 활성 컨트롤 플레인의 번호) · seq:int(보고의 순번) · closing:bool.
-- 기능: accept(socket) 은 흐름 9 — 첫 글의 토큰을 풀고 SessionRpc 의 attach 로 세션을 확인해 Connection 을 연다. 같은 캐릭터의 옛 Connection 이 있으면 닫는다(나중 접속이 이긴다). reroute(character, instance, address, token) 은 그 Connection 의 뒤를 바꾼다(흐름 10 · 12). 이미 그 인스턴스에 이어져 있으면 아무것도 하지 않는다. kick(character, code, why) 는 그 Connection 을 닫는다 — detach 를 보내지 않는다. 없는 캐릭터면 아무것도 하지 않는다. heartbeat 는 이 게이트웨이의 이름 · 주소 · closing 과 든 접속마다 캐릭터와 이어진 인스턴스의 이름을 SessionRpc 로 알린다(흐름 5). 보고마다 seq 가 오르고 attach 의 글에도 그때의 seq 를 싣는다. stop 은 closing 을 세워 heartbeat 를 한 번 보낸 뒤 Connection 을 전부 닫는다(흐름 7). stats 는 열린 접속의 수 · 버린 글의 수 · 뒤를 바꿔 이은 수(흐름 14).
+- 데이터: name(불변) · address(불변, 밖에서 보는 주소) · connections:map<Character.id, Connection> · limiter · rpc(참조, SessionRpc 소켓) · verify(토큰 → id, 앱이 준다) · lock(참조 — LeaderLock 의 holder, 활성 컨트롤 플레인을 찾는다) · term(받아들인 활성 컨트롤 플레인의 번호) · boot(이 프로세스가 뜬 때의 표지) · seq:int(보고의 순번) · closing:bool.
+- 기능: accept(socket) 은 흐름 9 — 첫 글의 토큰을 풀고 SessionRpc 의 attach 로 세션을 확인해 Connection 을 연다. 같은 캐릭터의 옛 Connection 이 있으면 닫는다(나중 접속이 이긴다). reroute(character, instance, address, token) 은 그 Connection 의 뒤를 바꾼다(흐름 10 · 12). upstream 이 그 인스턴스에 열려 있으면 아무것도 하지 않는다 — 닫혀서 기다리는 가운데(`rerouting`)면 같은 인스턴스라도 다시 잇는다. kick(character, code, why) 는 그 Connection 을 닫는다 — detach 를 보내지 않는다. 없는 캐릭터면 아무것도 하지 않는다. heartbeat 는 이 게이트웨이의 이름 · 주소 · closing 과 든 접속마다 캐릭터와 이어진 인스턴스의 이름(upstream 이 닫혀 기다리는 가운데면 없음)을 SessionRpc 로 알린다(흐름 5). boot 를 함께 싣는다. 보고마다 seq 가 오르고 attach 의 글에도 그때의 seq 를 싣는다. stop 은 closing 을 세워 heartbeat 를 한 번 보낸 뒤 Connection 을 전부 닫는다(흐름 7). stats 는 열린 접속의 수 · 버린 글의 수 · 뒤를 바꿔 이은 수(흐름 14).
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Connection

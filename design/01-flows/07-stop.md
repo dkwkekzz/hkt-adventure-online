@@ -23,7 +23,7 @@ Service.stop                                            [앱]
 |---|---|---|---|---|
 | 1 | node | NodeAgent.stopAll | closing 을 세워 NodeRpc heartbeat 를 보낸다 | |
 | 2 | control | Fleet.heartbeat → SessionManager.migrate | Node 를 closing 으로 적는다 — 그 노드에는 띄우지도 배정하지도 않는다. 그 노드의 인스턴스마다 세션을 같은 존의 다른 인스턴스로 옮긴다(흐름 10 의 2 부터). 사람의 접속은 끊기지 않는다 | |
-| 3 | node | NodeAgent.stop(instance) | 인스턴스가 비었거나 한계(`closingMs`)가 지나면 내린다. 남은 캐릭터를 GameServer.unload 해 CharacterStore.checkin(release)으로 저장하고(저장하지 못한 것은 spool 에 남아 다음 시작의 recover 가 한다), GameServer.stop(호스트가 저장하고 끝난다. 한계 안에 끝나지 않으면 Process.kill), Ports.free, SnapshotStore.push 로 Store 를 세대와 함께 올리고 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. 그 뒤에 NodeRpc exited 를 uploaded 로 알린다 | 값 · Store 가 스토리지에 |
+| 3 | node | NodeAgent.stop(instance) | 인스턴스가 비었거나 한계(`closingMs`)가 지나면 내린다. 남은 캐릭터를 GameServer.unload 해 CharacterStore.checkin(release)으로 저장하고(저장하지 못한 것은 spool 에 남아 다음 시작의 recover 가 한다), GameServer.stop(호스트가 저장하고 끝난다. 한계 안에 끝나지 않으면 Process.kill), Ports.free, SnapshotStore.push 로 Store 를 세대와 함께 올리고 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. 그 뒤에 NodeRpc exited 를 uploaded 로 알린다(올리지 못했으면 uploaded 아님으로 알리고 남은 동안 다시 올린다 — 프로세스가 끝나면 그 서버의 자리에 남아 다음에 그 노드에 뜰 때 쓰인다) | 값 · Store 가 스토리지에 |
 | 4 | control | Fleet.exited | 표의 줄을 `stopped` 로 적는다(흐름 12 의 1). 옮기지 못하고 남았던 세션은 흐름 5 의 8 이 지우고 게이트웨이가 닫는다 — 돌아온 클라이언트는 다른 인스턴스에 들어간다 | |
 | 5 | gateway | Gateway.stop | closing 을 실은 heartbeat 를 먼저 보내 새 Ticket 이 이 게이트웨이를 가리키지 않게 한 뒤, Connection 마다 Connection.close(1001). 컨트롤 플레인에 detach 가 간다 — 닫힌 사람은 재접속 유예 안에 다른 게이트웨이로 돌아오고 값은 언로드되지 않는다 | ⇒ 흐름 11 |
 | 6 | control | Service | 활성이면 LeaderLock.resign 으로 놓는다 — 대기가 바로 잡는다(흐름 13). Clock.stop. SessionRpc · NodeRpc · Operator 를 닫는다. 인스턴스는 내리지 않는다 | |

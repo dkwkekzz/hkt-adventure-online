@@ -77,9 +77,9 @@
 
 | 프로세스 | 든 모듈 | 듣는 것 | 상태 | 늘리는 법 |
 |---|---|---|---|---|
-| API 서버 api | 계정 · 스토리지(Database) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
+| API 서버 api | 계정 · 스토리지(Database · LeaderLock 의 holder) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
 | 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) · 스토리지(LeaderLock 의 holder) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
-| 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issue) · 스토리지(Database · CharacterStore · SnapshotStore 의 백업) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
+| 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issueWith · verify) · 스토리지(Database · CharacterStore · SnapshotStore 의 주인 · 백업 · LeaderLock) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
 | 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issue — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
 
 - 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
@@ -92,23 +92,25 @@
 
 | 모듈 | 개념 | API 서버 | 게이트웨이 | 컨트롤 플레인 | 노드 |
 |---|---|---|---|---|---|
-| 계정 | Directory | ● | | ●(owner · banned · ban · unban · list · sweep) | |
-| 계정 | Signer | ●(issue · verify) | ●(verify) | ●(issueWith · verify — 운영자의 키로) | ●(issue — NPC) |
+| 계정 | Directory | ● | | ●(owner · banned · owns · remove · ban · unban · list · sweep) | |
+| 계정 | Signer | ●(issue · verify) | ●(verify) | ●(issueWith · verify — 운영자의 키로) | ●(issueWith — NPC) |
 | 게이트웨이 | Gateway · Connection · RateLimiter | | ● | | |
 | 세션 모듈 | SessionManager · Zone · Session · Presence · Queue | | | ● | |
 | 플릿 | Fleet · Node · Instance · Assignment | | | ● | |
 | 플릿 | NodeAgent · GameServer · Ports · Process · Probe | | | | ● |
 | 플릿 | Spawner | ●(bundle) | | | ●(host · agent) |
+| 플릿 | Clock | | ● | ● | ● |
 | 스토리지 | Database | ● | | ● | |
 | 스토리지 | LeaderLock | ●(holder) | ●(holder) | ●(acquire · renew · resign) | ●(holder) |
 | 앱 | Monitor | ● | ● | ● | ● |
 | 스토리지 | CharacterStore | | | ●(expire · erase · versions · rollback) | ●(checkout · checkin · release) |
-| 스토리지 | SnapshotStore | | | ●(claim · epochOf · copy · restore · list) | ●(pull · push · epochOf · copy · prune) |
+| 스토리지 | SnapshotStore | | | ●(claim · epochOf · copy · restore · list · purge) | ●(pull · push · epochOf · copy · prune) |
 | 앱 | Api · Static | ● | | | |
 | 앱 | Operator | | | ● | |
 
 - 같은 프로세스 안의 모듈은 앱이 넘긴 값(함수)으로 만난다 — 컨트롤 플레인 안의 세션 모듈 ↔ 플릿, API 서버 안의 Api → 계정.
 - 다른 프로세스의 모듈은 내부망의 소켓으로 만난다 — SessionRpc(API 서버 · 게이트웨이 ↔ 컨트롤 플레인) · NodeRpc(컨트롤 플레인 ↔ 노드). 선언은 같고 나르는 길만 다르다.
+- Clock 은 플릿의 개념이지만 간격마다 부르는 것뿐이다. 앱이 하나씩 만들어 그 프로세스의 tick · heartbeat · elect 에 건다 — 게이트웨이 모듈은 플릿을 import 하지 않는다.
 - 스토리지는 모든 프로세스가 같은 것을 본다. 프로세스끼리 값을 직접 주고받지 않고 스토리지를 사이에 두는 자리는 캐릭터의 값(CharacterStore)과 인스턴스의 Store(SnapshotStore)다.
 
 ### 서버의 구성
@@ -156,14 +158,14 @@
 |---|---|---|---|
 | Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | `protocol/api.ts` |
 | Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다. 나머지는 그대로 | 엔진의 것 — `protocol/engine.ts` |
-| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
+| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget(캐릭터를 지운다). 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
 | NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload · reload. 노드의 register · heartbeat · handoff · exited | `protocol/node.ts` |
 | Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 이동 요청 줄, 캐릭터 파일 | `protocol/engine.ts` |
-| SnapshotStore · Database · CharacterStore | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease | `protocol/storage.ts` |
+| SnapshotStore · Database · CharacterStore · LeaderLock | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease · 활성 컨트롤 플레인의 잠금 | `protocol/storage.ts` |
 | Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
 
-- 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 다섯(instances · launch · load · unload · reload)을, 플릿은 세션 모듈이 내놓은 기능 넷(transfer · failover · migrate · reconcile)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
-- SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름과 세대로, load · unload · reload 는 캐릭터와 세션의 일의 번호(op)로, attach · detach 는 캐릭터와 게이트웨이의 이름으로 알아본다(이미 된 것이면 됨을 답하고, 지난 번호의 것이면 버린다).
+- 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 다섯(instances · launch · load · unload · reload)을, 플릿은 세션 모듈이 내놓은 기능 여섯(transfer · failover · migrate · reconcile · count · waiting)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
+- SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름과 세대로, load · unload · reload 는 캐릭터와 일의 번호(term 과 그 활성이 올리는 수)로, attach · detach 는 캐릭터와 게이트웨이의 이름으로 알아본다(이미 된 것이면 됨을 답하고, 지난 번호의 것이면 버린다).
 - 컨트롤 플레인이 보내는 글에는 term 이 실린다(흐름 13). 받는 쪽은 더 작은 term 의 글을 버린다.
 - 노드와 게이트웨이는 든 것을 간격마다 전부 알린다(heartbeat). 컨트롤 플레인은 그 보고와 제 표를 맞춘다(흐름 5) — 글 하나가 사라져도 한 주기 뒤에는 맞는다. 인스턴스에 닿는 글에는 세대(epoch)가 실리고, 표와 다른 세대의 것은 버려진다.
 - 서명 키(`HOST_AUTH_KEY`)는 API 서버(계정 · 캐릭터의 토큰을 낸다) · 게이트웨이(푼다) · 컨트롤 플레인(호스트에 줄 토큰을 낸다) · 노드(호스트를 띄우고 NPC 의 토큰을 낸다)가 든다. 운영자의 토큰은 다른 키(`OPERATOR_KEY`)이고 컨트롤 플레인만 든다.

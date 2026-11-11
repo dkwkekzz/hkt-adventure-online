@@ -36,7 +36,7 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 
 ### SnapshotStore
 - 데이터: local(불변, 이 서버의 뿌리) · remote(객체 저장소의 자리).
-- 기능: pull(instance, dataset) 은 올라가 있는 그 인스턴스의 Store 를 이 서버의 `<local>/stores/<instance>/<dataset 이름>` 에 내려 받아 그 dir 를 준다(없으면 빈 디렉터리). claim(instance, epoch) 은 그 인스턴스 자리의 주인을 그 세대로 적는다(띄우기 전에 컨트롤 플레인이 한다 — 작은 세대로는 못 바꾼다). push(dir, instance, epoch) 는 그 자리를 객체 저장소에 올린다 — 주인의 세대와 같을 때만 받는다(다른 곳에 다시 뜬 뒤의 낡은 호스트가 덮지 못한다). 올린 내용에는 그 세대가 붙는다. epochOf(instance) 는 주인의 세대와 올라가 있는 내용의 세대. copy(instance) 는 올라가 있는 자리의 백업 하나를 남기고 그 이름(UTC 시각)을 준다. restore(instance, 백업, epoch) 은 올라가 있는 자리를 백업으로 바꾸고(기존은 백업 하나로 남긴다) 주인과 내용의 세대를 준 세대로 적는다 — 어느 서버에 남은 자리보다도 새것이 된다. copy · prune 도 주인의 세대와 같은 세대를 든 자의 것만 받는다(컨트롤 플레인의 것은 내려간 인스턴스에만). list(instance) 는 백업 이름들(오래된 것부터). prune(instance, keep) 은 새것 keep 개를 남기고 지운다.
+- 기능: pull(instance, dataset) 은 올라가 있는 그 인스턴스의 Store 를 이 서버의 `<local>/stores/<instance>/<dataset 이름>` 에 내려 받아 그 dir 를 준다(없으면 빈 디렉터리). claim(instance, epoch, term) 은 그 인스턴스 자리의 주인을 그 세대로 적는다(띄우기 전에 컨트롤 플레인이 한다 — 작은 세대로는 못 바꾸고, LeaderLock 의 지금 term 이 준 term 과 같을 때만 한다). push(dir, instance, epoch) 는 그 자리를 객체 저장소에 올린다 — 주인의 세대와 같을 때만 받는다(다른 곳에 다시 뜬 뒤의 낡은 호스트가 덮지 못한다). 올린 내용에는 그 세대가 붙는다. 올림은 통째로 되거나 안 된다 — 새 자리에 다 올린 뒤 가리키는 것을 바꾸고, 주인의 세대 대조는 그 바꿈과 한 번에 한다. pull 은 끝난 올림만 본다. epochOf(instance) 는 주인의 세대와 올라가 있는 내용의 세대. copy(instance) 는 올라가 있는 자리의 백업 하나를 남기고 그 이름(UTC 시각)을 준다. restore(instance, 백업, epoch) 은 올라가 있는 자리를 백업으로 바꾸고(기존은 백업 하나로 남긴다) 주인과 내용의 세대를 준 세대로 적는다 — 어느 서버에 남은 자리보다도 새것이 된다. copy · prune 도 주인의 세대와 같은 세대를 든 자의 것만 받는다(컨트롤 플레인의 것은 내려간 인스턴스에만). list(instance) 는 백업 이름들(오래된 것부터). prune(instance, keep) 은 새것 keep 개를 남기고 지운다. purge(instance, term) 은 그 인스턴스의 자리와 백업을 전부 지운다(줄이 지워진 인스턴스에만). 컨트롤 플레인이 부르는 restore · copy · purge 는 claim 처럼 term 을 본다.
 - 생애: Service.start 가 openStorage 로 연다.
 - 올리는 것에는 세대(epoch)가 붙는다. 한 인스턴스의 자리를 쓰는 자는 표의 그 세대의 호스트 하나다.
 - 도는 인스턴스의 Store 자리는 올리지 않는다 — 올리는 것은 엔진이 `backup` 으로 낸 사본의 dir 다(흐름 5 의 4). 뿌리 밖의 자리는 거절한다.
@@ -65,7 +65,7 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
-| SnapshotStore claim | 플릿(Fleet) → 스토리지 | 인스턴스 이름 · epoch | 됨 또는 거절 |
+| SnapshotStore claim · purge | 플릿(Fleet) → 스토리지 | 인스턴스 이름 · epoch · term | 됨 또는 거절 |
 | SnapshotStore pull · push · epochOf | 플릿(NodeAgent · Fleet) → 스토리지 | 인스턴스 이름 · epoch · dataset · dir | dir · 됨 또는 거절 · epoch |
 | SnapshotStore copy · restore · list · prune | 플릿(NodeAgent · Fleet) → 스토리지 | 인스턴스 이름 · 백업 이름 · keep | 백업 이름 · 목록 |
 | Database get · put · remove · all | 계정 · 세션 모듈 · 플릿 · Operator → 스토리지 | table · key(· value) | value 또는 null |

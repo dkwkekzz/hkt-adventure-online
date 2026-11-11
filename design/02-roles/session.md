@@ -20,8 +20,8 @@ SessionManager ← Service(컨트롤 플레인)
 ## 개념
 
 ### SessionManager
-- 데이터: zones:map<이름, Zone> · presence · queues:map<존, Queue> · sessions:map<Character.id, Session> · fleet(플릿의 기능 다섯 instances · launch · load · unload · reload, 앱이 준다) · accounts(계정의 기능 둘 owner · banned, 앱이 준다) · issue(Character.id · 서명 키의 자리 → Token, 앱이 준다) · gates:map<게이트웨이의 이름, {address, seen, closing}> · characters(참조 — CharacterStore 의 erase · versions · rollback) · db(참조 — 표 `lastZone` · `zones`) · settling:bool(막 활성이 됐다 — 흐름 13) · config:{entry(처음 서는 존), graceMs, pendingMs, queueMs, gateLimitMs}.
-- 기능: enter(character, build) 는 흐름 3 — 존을 정하고 세션을 잡아 Ticket 을 주거나, 빈 슬롯이 없으면 Queue 에 세워 순번을 준다. attach(character, gate) 는 흐름 9 — 세션을 확인하고 값을 로드시킨 뒤 호스트의 주소와 토큰을 준다. transfer(character, zone, spot, why, from) 은 흐름 10 — 가는 곳에 슬롯을 잡고(Session.to) 언로드 · 로드 · 바꿔 잇기를 차례로 한다. why 는 누가 불렀나(`move` 사람의 이동 · `migrate` 비움 · `failover` 장애 복구), from 은 사람의 이동을 알린 인스턴스. disconnect(character, gate) 는 흐름 11 — 세션이 `active` 이고 그 게이트웨이가 접속 표의 것일 때만 재접속 유예를 건다. failover(instance) 는 흐름 12. migrate(instance) 는 그 인스턴스의 세션을 같은 존의 다른 인스턴스로 옮긴다(흐름 6 · 7). reconcile(instance, loaded) 는 노드가 알린 로드된 캐릭터들과 세션을 맞춘다(흐름 5). heartbeat(gate, connections, closing) 는 게이트웨이가 알린 접속들과 세션을 맞춘다(흐름 5). close(zone) · open(zone) 은 그 존의 입장과 사람이 건너오는 이동을 막고 푼다. 표 `zones` 에 적는다. kick(character, why) 는 게이트웨이에 닫으라 하고 값을 언로드시키고 세션을 지우고 대기열에서도 뺀다(Queue.drop). forget(character) 는 세션이 없을 때만 그 캐릭터의 값과 마지막 존을 지우고 대기열에서 뺀다(흐름 8). versions(character) · rollback(character, 때) 는 세션이 없을 때만 CharacterStore 의 그것을 부른다(흐름 6). tick 은 세션의 만료 · 대기열 · 끊긴 게이트웨이(흐름 5). stats 는 존마다의 세션 수 · 대기열 길이(흐름 14).
+- 데이터: zones:map<이름, Zone> · presence · queues:map<존, Queue> · sessions:map<Character.id, Session> · fleet(플릿의 기능 다섯 instances · launch · load · unload · reload, 앱이 준다) · accounts(계정의 기능 넷 owner · banned · owns · remove, 앱이 준다) · issue(Character.id · 서명 키의 자리 → Token, 앱이 준다) · gates:map<게이트웨이의 이름, {address, seen, closing}> · characters(참조 — CharacterStore 의 erase · versions · rollback) · db(참조 — 표 `lastZone` · `zones`) · ops:int(일의 번호 — 이 활성이 load · unload · reload 를 시킬 때마다 하나 오르는 수 하나. term 과 함께 실려, 세션이 지워지거나 컨트롤 플레인이 바뀌어도 뒤에 낸 것이 언제나 크다) · settling:bool(막 활성이 됐다 — 흐름 13) · config:{entry(처음 서는 존), graceMs, pendingMs, queueMs, gateLimitMs}.
+- 기능: enter(character, build) 는 흐름 3 — 존을 정하고 세션을 잡아 Ticket 을 주거나, 빈 슬롯이 없으면 Queue 에 세워 순번을 준다. attach(character, gate) 는 흐름 9 — 세션을 확인하고 값을 로드시킨 뒤 호스트의 주소와 토큰을 준다. transfer(character, zone, spot, why, from) 은 흐름 10 — 가는 곳에 슬롯을 잡고(Session.to) 언로드 · 로드 · 바꿔 잇기를 차례로 한다. why 는 누가 불렀나(`move` 사람의 이동 · `migrate` 비움 · `failover` 장애 복구), from 은 사람의 이동을 알린 인스턴스. disconnect(character, gate) 는 흐름 11 — 세션이 `active` 이고 그 게이트웨이가 접속 표의 것일 때만 재접속 유예를 건다. failover(instance) 는 흐름 12. migrate(instance) 는 그 인스턴스의 세션을 같은 존의 다른 인스턴스로 옮긴다(흐름 6 · 7). reconcile(instance, loaded) 는 노드가 알린 로드된 캐릭터들과 세션을 맞춘다(흐름 5). heartbeat(gate, connections, closing) 는 게이트웨이가 알린 접속들과 세션을 맞춘다(흐름 5). close(zone) · open(zone) 은 그 존의 입장과 사람이 건너오는 이동을 막고 푼다. 표 `zones` 에 적는다. kick(character, why) 는 게이트웨이에 닫으라 하고 값을 언로드시키고 세션을 지우고 대기열에서도 뺀다(Queue.drop). forget(account, character) 는 흐름 8 의 지움 — 그 캐릭터가 그 계정의 것이고 세션이 없을 때만, 캐릭터의 줄(계정의 remove) · 값(CharacterStore 의 erase) · 마지막 존을 지우고 대기열에서 뺀다. 그 캐릭터에 닿는 다른 일과 겹치지 않는다(한 번에 하나). versions(character) · rollback(character, 때) 는 세션이 없을 때만 CharacterStore 의 그것을 부른다(흐름 6). tick 은 세션의 만료 · 대기열 · 끊긴 게이트웨이(흐름 5). count(instance) 는 그 인스턴스에 잡힌 슬롯의 수, waiting(zone) 은 그 존의 대기열에 선 사람의 빌드들 — 플릿에 내놓는다. stats 는 존마다의 세션 수 · 대기열 길이(흐름 14).
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Zone
@@ -30,7 +30,7 @@ SessionManager ← Service(컨트롤 플레인)
 - 생애: 설정의 줄마다 SessionManager 가 만든다.
 
 ### Session
-- 데이터: character(불변) · account(그 캐릭터의 계정 — 한 계정에 세션 하나) · build(불변, 클라이언트의 빌드) · instance · to:인스턴스|null(옮기는 가운데 잡아 둔 가는 곳) · state:`pending`(입장이 잡았다 — 값은 아직 어디에도 로드되지 않았다)|`active`(게이트웨이가 이었다)|`grace`(끊겼다 — 재접속 유예. 값은 인스턴스에 있다) · until(만료 시각 또는 null) · busy:bool · op:int(이 캐릭터의 일의 번호 — load · unload · reload 마다 오르고 글에 실린다) · since:{node, gate}(이 세션이 마지막으로 바뀐 때의 그 노드 · 게이트웨이의 보고 순번).
+- 데이터: character(불변) · account(그 캐릭터의 계정 — 한 계정에 세션 하나) · build(불변, 클라이언트의 빌드) · instance · to:인스턴스|null(옮기는 가운데 잡아 둔 가는 곳) · state:`pending`(입장이 잡았다 — 값은 아직 어디에도 로드되지 않았다)|`active`(게이트웨이가 이었다)|`grace`(끊겼다 — 재접속 유예. 값은 인스턴스에 있다) · until(만료 시각 또는 null) · busy:bool · since:{node, gate}(이 세션이 마지막으로 바뀐 때의 그 노드 · 게이트웨이의 보고 순번).
 - 기능: 없음.
 - 생애: SessionManager.enter 가 만든다. 언로드 뒤 · 만료 · 맞춤으로 사라진다.
 
@@ -54,7 +54,7 @@ SessionManager ← Service(컨트롤 플레인)
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | SessionRpc enter | API 서버 → 컨트롤 플레인 | Character.id · 빌드 | Ticket · 순번 또는 까닭 |
-| SessionRpc forget | API 서버 → 컨트롤 플레인 | Character.id | 됨 또는 까닭 |
+| SessionRpc forget | API 서버 → 컨트롤 플레인 | Account.id · Character.id | 됨 또는 까닭 |
 | SessionRpc attach · detach · heartbeat | 게이트웨이 → 컨트롤 플레인 | [gateway.md](gateway.md) 의 소켓 표 | |
 | SessionRpc reroute · kick | 컨트롤 플레인 → 게이트웨이 | [gateway.md](gateway.md) 의 소켓 표 | |
 | Database get · put | 세션 모듈 → 스토리지 | 표 `lastZone` · `zones` 의 줄 하나 | 값 또는 null |
