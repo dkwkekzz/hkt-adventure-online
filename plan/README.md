@@ -24,7 +24,7 @@ stage 1 ~ 12 는 세계 하나 · 프로세스 하나의 서비스를 세웠다.
 | 12 책임 — 플릿 · 한 세계 | online | 세계 하나(설정의 world)에 사람 모두. 호스트는 `--party`, 입장의 한계는 capacity(성능)뿐. 자리 표는 세계 이름으로. 운영자의 글은 `<world>` | 셋이 같은 세계에 붙어 각자의 묶음을 받고 다시 띄워도 이어진다(`engine.spec.ts`). 둘의 브라우저가 서로를 본다(화면) | ☑ |
 | 13 책임 — 세션 모듈 | online | SessionManager · Zone · Session · Presence · Queue. 흐름 3 이 세션 · 대기열로 선다. 상한은 세션이 센다 | 상한을 넘는 입장이 순번을 받고 슬롯이 나면 들어온다 | ☐ |
 | 14 책임 — 계정 · 캐릭터 | online | Directory 의 list · create · owns · ban, 계정의 토큰과 캐릭터의 토큰. 흐름 8 | 한 계정이 캐릭터 둘을 만들어 따로 들어간다. 차단된 계정은 거절 | ☐ |
-| 15 책임 — 엔진의 캐릭터 이관(handoff) | proto | 피드백 4 — 로드 · 언로드 · 스냅샷의 Console 글, 이동 요청 줄, status 의 지연 칸, 뷰어의 다시 온 `Link 1`. 엔진 저장소의 설계가 먼저 | 엔진의 `npm run check` — 한 호스트에서 언로드한 묶음이 다른 호스트에 그대로 선다 | ☐ |
+| 15 책임 — 엔진의 면 | proto | 엔진 plan 267(통째 저장 · `backup`) · 268(묶음의 건넴 — `--handoff` · `load` · `unload` · `keep`) · 269(떠남 줄 · status 의 지연) · 270(뷰어의 다시 열림). 설계는 엔진 저장소에 섰다(dkwkekzz/hkt-adventure-proto#144). 닫힐 때마다 `engine.lock` 을 올리고 `protocol/engine.ts` 에 베낀다 | 엔진의 `npm run check` — 한 호스트에서 `unload` 한 묶음이 다른 호스트에 `load` 로 그대로 선다 | ☐ |
 | 16 책임 — 스토리지 · 캐릭터의 값 | online | CharacterStore · Lease. GameServer 의 load · unload · copy, NodeAgent 의 박자(흐름 5 의 2) | 호스트를 죽여도 캐릭터가 마지막으로 저장한 값으로 다시 선다. 옛 lease 의 저장은 거절 | ☐ |
 | 17 책임 — 플릿 · 인스턴스 여럿 | online | Fleet(컨트롤 플레인) · Instance · 예비 용량(spare) · drain · terminate. 흐름 10 · 12 가 한 서버에서 선다 | 한 존의 두 인스턴스 사이로 사람이 옮겨지고(`drain`) 접속이 끊기지 않는다 | ☐ |
 | 18 책임 — 플릿 · 노드 | online | NodeAgent · Node 과 NodeRpc 소켓. 프로세스 넷(api · gateway · control · node)으로 갈라 띄운다 | 두 서버의 노드가 한 컨트롤 플레인에 알리고, 한 서버를 끄면 사람이 다른 노드로 옮겨진다 | ☐ |

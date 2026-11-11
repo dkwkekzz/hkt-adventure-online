@@ -36,7 +36,7 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 - 데이터: local(불변, 이 서버의 뿌리) · remote(객체 저장소의 자리).
 - 기능: pull(instance, dataset) 은 그 인스턴스의 Store 를 이 서버의 `<local>/stores/<instance>/<dataset 이름>` 에 내려 받아 그 dir 를 준다(없으면 빈 디렉터리). push(dir) 는 그 자리를 객체 저장소의 그 인스턴스 자리에 올린다. copy(instance) 는 올라가 있는 자리의 백업 하나를 남기고 그 이름(UTC 시각)을 준다. restore(instance, 백업) 은 올라가 있는 자리를 백업으로 바꾼다(기존은 백업 하나로 남긴다). list(instance) 는 백업 이름들(오래된 것부터). prune(instance, keep) 은 새것 keep 개를 남기고 지운다.
 - 생애: Service.start 가 openStorage 로 연다.
-- 도는 인스턴스의 자리는 올리지도 백업하지도 않는다. 뿌리 밖의 자리는 거절한다.
+- 도는 인스턴스의 Store 자리는 올리지 않는다 — 올리는 것은 엔진이 `backup` 으로 낸 사본의 dir 다(흐름 5 의 7′). 뿌리 밖의 자리는 거절한다.
 
 ### Database
 - 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `characters` · `bans` · `lastZone` · `instances`.
