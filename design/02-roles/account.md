@@ -16,7 +16,7 @@ Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인)
 
 ### Directory
 - 데이터: db(참조). 값은 스토리지에 — `accounts`(Identity.key → Account.id) · `characters`(Account.id → list<Character>) · `bans`(Account.id → until).
-- 기능: resolve(identity) 는 있으면 그 Account.id, 없으면 새 id 를 짓고 적는다. list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다(계정마다의 한계 `characterLimit` 를 넘으면 거절). owns(account, character) 는 그 캐릭터가 그 계정의 것인가. remove(account, character) 는 그 캐릭터의 줄을 지운다. ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가.
+- 기능: resolve(identity) 는 있으면 그 Account.id, 없으면 새 id 를 짓고 적는다. list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다(계정마다의 한계 `characterLimit` 를 넘으면 거절). owns(account, character) 는 그 캐릭터가 그 계정의 것인가. remove(account, character) 는 그 캐릭터의 줄을 지운다. ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가. owner(character) 는 그 캐릭터의 Account.id. touch(account) 는 seen 을 지금으로. close(account) 는 캐릭터가 없을 때 계정의 줄을 지운다. sweep(before) 는 캐릭터가 없고 seen 이 before 보다 오랜 계정들을 지운다.
 - 생애: Service.start 가 Database 를 주어 만든다. 프로세스와 함께 사라진다.
 
 ### Identity
@@ -35,8 +35,8 @@ Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인)
 - 생애: Directory.create 가 짓고 스토리지에 남는다.
 
 ### Signer
-- 데이터: key:string(불변, 엔진의 `HOST_AUTH_KEY` 와 같다) · ttl:int(불변, 초).
-- 기능: issue(id, ttl) → Token. id 는 Account.id 또는 Character.id. verify(token) → id 또는 null(서명 · 만료 · 모양이 틀리면).
+- 데이터: key:string(불변, 엔진의 `HOST_AUTH_KEY` 와 같다) · ttl:int(불변, 초). keys:list<string>(불변 — 첫 것이 key, 나머지는 바꾸는 동안 푸는 데만 쓰는 옛 키).
+- 기능: issue(id, ttl) → Token. id 는 Account.id 또는 Character.id. verify(token) → id 또는 null(서명 · 만료 · 모양이 틀리면). issue 는 첫 키로, verify 는 keys 의 어느 것으로든. issueWith(id, ttl, key) 는 그 키로 낸다 — 옛 키로 뜬 호스트에 줄 토큰.
 - 생애: Service.start 가 만든다. 키가 비면 만들지 않는다(시작 거부).
 
 ### Token

@@ -27,16 +27,18 @@
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | NodeAgent.tick → GameServer.command(`status`) | ready 인 GameServer 마다. 답은 흐름 4 가 읽는다 | 사람 수 · 지연 |
-| 2 | NodeAgent → GameServer.snapshot · CharacterStore.checkin | 저장 주기(`checkinEvery` 박자)마다, 든 캐릭터마다 값을 캐릭터 파일에 스냅샷으로 쓰게 하고 그 lease 로 저장한다(release 아님). 거절되면(lease 의 번호가 다르다 — 이 인스턴스는 그 캐릭터의 lease 를 잃었다) GameServer.unload 로 세계에서 지우고 값은 버린다 | 캐릭터의 값 |
+| 1 | NodeAgent.tick → GameServer.command(`status`) | ready 인 GameServer 마다. 답은 흐름 4 가 읽는다. 답이 잇달아 `statusMiss` 번 없으면 멈춘 것으로 보고 Process.kill ⇒ 흐름 4 의 4 | 사람 수 · 지연  |
+| 2 | NodeAgent → GameServer.snapshot · CharacterStore.checkin | 저장 주기(`checkinEvery` 박자)마다, 든 캐릭터마다 값을 캐릭터 파일에 스냅샷으로 쓰게 하고 그 lease 로 저장한다(release 아님). 거절되면(lease 의 번호가 다르다 — 이 인스턴스는 그 캐릭터의 lease 를 잃었다) GameServer.unload 로 세계에서 지우고 값은 버린다. 스토리지에 닿지 않아 저장하지 못한 것은 다음 주기에 다시 한다 — lease 의 번호가 같으면 만료가 지났어도 받는다 | 캐릭터의 값  |
 | 3 | NodeAgent → NodeRpc heartbeat | 인스턴스마다 state · players · lag · 접속한 캐릭터들 | |
 | 4 | Fleet.heartbeat(node, 보고) | Node 의 seen, Instance 의 players · lag. 사람이 없으면 idle 셈 하나, 있으면 0 | |
 | 5 | Fleet.tick | 보고가 한계(`reportLimitMs`)를 넘겨 끊긴 Node 는 흐름 12 | |
 | 6 | Fleet.tick → Fleet.launch | 존마다, 빈 슬롯의 합(Zone.capacity × 인스턴스 수 − 배정된 수)이 Zone.spare 보다 작으면 하나 더 띄운다. 지연(lag)이 한계를 넘은 인스턴스는 빈 슬롯이 없는 것으로 센다 | Instance |
 | 7 | Fleet.tick → Fleet.terminate | idle 이 한계(`idleLimit`)를 넘었고 내려도 그 존의 예비 용량이 남으면 내린다. NodeAgent.stop 이 든 값을 전부 언로드하고 호스트를 내리고 SnapshotStore.push 로 Store 를 올리고 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. 호스트가 한계 안에 끝나지 않으면 Process.kill. 포트는 Ports.free | `stopped`   |
 | 7′ | NodeAgent.tick → GameServer.backup · SnapshotStore.push · SnapshotStore.copy · SnapshotStore.prune | 백업 주기(`backupEvery` 박자)마다 ready 인 GameServer 에 Console `backup <dir>` 을 쓰고 `backup 끝 — ` 줄을 기다린 뒤(흐름 4), 그 dir 를 올리고 백업 하나를 남기고 오래된 것을 지운다. 호스트는 멈추지 않는다 | 존의 값의 백업 |
+| 7″ | NodeAgent.tick → CharacterStore.checkin | 언로드는 했으나 스토리지에 닿지 않아 저장하지 못한 캐릭터 파일(NodeAgent 의 held)을 다시 저장한다. 저장될 때까지 파일을 지우지 않고 lease 를 쥔다 | |
+| 7‴ | Fleet.tick → Directory.sweep | 하루에 한 번, 캐릭터가 없고 오래 오지 않은 계정을 지운다 | |
 | 8 | SessionManager.tick | `pending` 인 채 만료된 Session 은 지운다. `grace` 가 만료된 Session 은 흐름 11 의 4 로. 슬롯이 난 존마다 Queue.next 로 맨 앞을 꺼내 Session 을 `pending` 으로 잡는다. 물은 지 한계(`queueMs`)를 넘긴 대기열의 캐릭터는 Queue.stale 의 것을 Queue.drop — 창을 닫은 사람이 줄에 남지 않는다 |  |
-| 9 | Gateway.heartbeat → SessionManager.heartbeat(gate, characters) | 게이트웨이의 이름 · 주소 · 붙은 캐릭터들. 세션 모듈은 그 게이트웨이의 seen 을 고치고, 접속 표에 없는 캐릭터는 배정된 인스턴스(노드의 보고)와 맞춰 되찾는다 | 접속 표 |
+| 9 | Gateway.heartbeat → SessionManager.heartbeat(gate, characters) | 게이트웨이의 이름 · 주소 · 붙은 캐릭터들. 세션 모듈은 그 게이트웨이의 seen 을 고치고, 접속 표에 없는 캐릭터는 배정된 인스턴스(노드의 보고)와 맞춰 되찾는다. 게이트웨이는 같은 간격에 Connection.ping 도 한다 | 접속 표  |
 
 ## 멈추는 자리
 

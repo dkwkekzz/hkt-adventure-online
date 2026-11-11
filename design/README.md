@@ -163,6 +163,8 @@
 | Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
 
 - 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 넷(instances · launch · load · unload)을, 플릿은 세션 모듈이 내놓은 기능 둘(transfer · failover)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
+- SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름으로, load · unload 는 캐릭터와 lease 의 번호로, attach · detach 는 캐릭터로 알아본다(이미 된 것이면 됨을 답한다).
+- 컨트롤 플레인이 보내는 글에는 term 이 실린다(흐름 13). 받는 쪽은 더 작은 term 의 글을 버린다.
 - 호스트의 `HOST_AUTH_KEY` 는 컨트롤 플레인과 노드가 든다. 게이트웨이 · API 서버는 푸는 것(verify)만 한다.
 
 ### 엔진의 면
@@ -180,6 +182,7 @@
 | 이동 요청 줄 — 묶음이 다른 존으로 가는 자리에 닿으면 stdout 에 `떠남 — <account> → <to>`. to 는 컨텐츠의 글이고 서비스는 `<존>` 또는 `<존>@<공간>` 으로 읽는다 | 흐름 4 · 10 | 엔진의 설계(`world.md` RuleKind depart) — 엔진 plan 269. 어느 자리가 어느 존으로 가는가는 엔진의 피드백 192 |
 | status 글의 꼬리 ` · 지연 N`(지난 창이 박자를 넘긴 ms) | 흐름 5 | 엔진의 설계(`host.md` Driver.lag) — 엔진 plan 269 |
 | 뷰어가 같은 선에 다시 온 `Link 1` 의 열림을 새 열림으로 받는다 | 흐름 10 | 엔진의 설계(`viewer.md` Client.reopen) — 엔진 plan 270 |
+| 뷰어가 닫힌 뒤 돌아갈 주소 — 페이지의 `?exit=<주소>` 가 있으면 닫힘 코드를 붙여 그리로 간다 | 흐름 11 · 12 | 엔진의 설계(`viewer.md` Client) — 엔진 plan 270 |
 | 통째 저장과 백업 — 한 번의 저장이 통째로 되거나 안 된다. Console `backup <dir>` 이 다음 창 끝의 저장을 dir 에 베끼고 stdout 에 `backup 끝 — <dir> · now N` | 흐름 5 | 엔진의 설계(`host.md` Store.commit · backup) — 엔진 plan 267 |
 
 ## 앱
@@ -193,7 +196,7 @@
 
 ### Api
 - 데이터: server(http) · port(불변) · files(Static).
-- 기능: login 은 흐름 2. characters · create · choose · delete 는 흐름 8. enter 는 흐름 3 의 머리. `GET /` 는 들어가는 페이지 한 장. `GET /health` 는 이 프로세스가 듣는가. 그 밖의 GET 은 Static 에 묻는다.
+- 기능: login 은 흐름 2. characters · create · choose · delete · close 는 흐름 8. enter 는 흐름 3 의 머리. `GET /` 는 들어가는 페이지 한 장. `GET /health` 는 이 프로세스가 듣는가. 그 밖의 GET 은 Static 에 묻는다.
 - 생애: API 서버의 Service.start 가 연다. Service.stop 이 닫는다.
 
 ### Static
@@ -207,14 +210,14 @@
 - 생애: Service.start 가 만든다. 프로세스마다 하나.
 
 ### Operator
-- 데이터: fleet · sessions · directory(참조).
+- 데이터: fleet · sessions · directory(참조). signer(참조) · db(참조 — 표 `audit`) · operators:set<이름>(불변, 설정).
 - 기능: command(글 한 줄) → 답 글 한 줄. 흐름 6.
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Api login | 클라이언트 → API 서버 | `POST /login {provider, subject?}` | `{token, subject}` 또는 `{why}` |
-| Api characters · create · choose · delete | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
+| Api characters · create · choose · delete · close | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
 | Api enter | 클라이언트 → API 서버 | `POST /enter {token}`(캐릭터의 토큰) | `{page, gate}` · `{wait: 순번}` 또는 `{why}` |
 | Api static | 브라우저 → API 서버 | `GET /play` · `/viewer.js` · `/assets/…` · `/keymap.json` | 파일 |
 

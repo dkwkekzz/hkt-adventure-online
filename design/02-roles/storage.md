@@ -19,8 +19,8 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 
 | 개념 | 뒤 | 어디에 |
 |---|---|---|
-| Database | MongoDB | 표 하나 = collection 하나 — `accounts` · `characters` · `bans` · `lastZone` · `instances`. 줄 하나 = document 하나(`_id` 가 key) |
-| CharacterStore | MongoDB | collection `characterValues` — 캐릭터마다 document 하나: 값(binary)과 lease `{holder, n, until}`. 값이 document 의 한계(16MB)를 넘으면 GridFS 에 두고 document 는 그 id 를 든다 |
+| Database | MongoDB | 표 하나 = collection 하나 — `accounts` · `characters` · `bans` · `lastZone` · `instances` · `audit`. 줄 하나 = document 하나(`_id` 가 key) |
+| CharacterStore | MongoDB | collection `characterValues`(지난 값은 `characterHistory`) — 캐릭터마다 document 하나: 값(binary)과 lease `{holder, n, until}`. 값이 document 의 한계(16MB)를 넘으면 GridFS 에 두고 document 는 그 id 를 든다 |
 | LeaderLock | MongoDB | collection `locks` — 이름마다 document 하나 `{holder, term, until}` |
 | SnapshotStore | object storage(S3 호환) | 인스턴스의 Store 디렉터리와 그 백업. 파일이 크고 통째로 오르내린다 |
 
@@ -28,6 +28,8 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 - 줄 하나의 쓰기는 document 하나의 원자적 갱신(`findOneAndUpdate`)이다. 여러 document 를 묶는 트랜잭션에 기대지 않는다.
 - lease 의 번호 대조(checkin)와 LeaderLock 의 잡기(acquire)는 조건을 건 갱신 하나다 — 조건이 맞는 document 가 없으면 거절이다.
 - 쓰기는 majority 로 확인받는다. MongoDB 는 replica set 으로 뜬다 — 서버 하나가 사라져도 lease 와 캐릭터의 값이 남아야 한다.
+- lease 와 LeaderLock 의 만료는 스토리지(MongoDB)의 시각으로 센다. 프로세스마다의 시계가 달라도 같은 답이다.
+- MongoDB 자신의 백업 · 되돌리기는 제품의 일이다(replica set · 주기 스냅샷). 서비스가 하는 것은 캐릭터의 지난 값(CharacterStore 의 이력)과 Store 의 백업이다.
 - 게임 상태(세계의 안)는 MongoDB 에 풀어 넣지 않는다. 캐릭터의 값도 Store 도 서비스에게는 불투명한 덩어리다.
 
 ## 개념
@@ -39,13 +41,13 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 - 도는 인스턴스의 Store 자리는 올리지 않는다 — 올리는 것은 엔진이 `backup` 으로 낸 사본의 dir 다(흐름 5 의 7′). 뿌리 밖의 자리는 거절한다.
 
 ### Database
-- 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `characters` · `bans` · `lastZone` · `instances`.
+- 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `characters` · `bans` · `lastZone` · `instances` · `audit`.
 - 기능: get(table, key) · put(table, key, value) · remove(table, key) · all(table). 줄 하나의 쓰기는 통째로 되거나 안 된다.
 - 생애: openStorage 와 함께.
 
 ### CharacterStore
-- 데이터: 없음. 값은 스토리지에 — 캐릭터마다 값(파일 하나, 불투명)과 Lease.
-- 기능: checkout(character, holder, file) 은 lease 가 비었거나 만료됐으면 번호를 하나 올린 Lease 를 내고 값을 file 에 내려 준다(값이 아직 없으면 file 을 만들지 않는다). 남이 들고 있으면 null. checkin(character, lease, file, release) 는 lease 의 번호가 지금의 것과 같을 때만 file 을 값으로 저장한다 — 다르면 거절(false). release 가 참이면 lease 를 비운다. 저장하면 lease 의 만료를 늦춘다. erase(character) 는 lease 가 비었을 때만 그 캐릭터의 값을 지운다 — 누가 들고 있으면 거절. expire(holder) 는 그 holder 가 든 lease 를 전부 비운다(값은 마지막 checkin 의 것).
+- 데이터: 없음. 값은 스토리지에 — 캐릭터마다 값(파일 하나, 불투명)과 Lease. 캐릭터마다 지난 값 몇 개(`valueKeep` — 하루에 하나씩)도 둔다.
+- 기능: checkout(character, holder, file) 은 lease 가 비었거나 만료됐으면 번호를 하나 올린 Lease 를 내고 값을 file 에 내려 준다(값이 아직 없으면 file 을 만들지 않는다). 남이 들고 있으면 null. checkin(character, lease, file, release) 는 lease 의 번호가 지금의 것과 같을 때만 file 을 값으로 저장한다 — 다르면 거절(false). release 가 참이면 lease 를 비운다. 저장하면 lease 의 만료를 늦춘다. erase(character) 는 lease 가 비었을 때만 그 캐릭터의 값을 지운다 — 누가 들고 있으면 거절. expire(holder) 는 그 holder 가 든 lease 를 전부 비운다(값은 마지막 checkin 의 것). release(character, lease) 는 값을 바꾸지 않고 lease 만 비운다. versions(character) 는 지난 값의 때들. rollback(character, 때) 는 lease 가 비었을 때만 값을 그때의 것으로 바꾼다(지금의 값은 이력에 남는다).
 - 생애: openStorage 와 함께.
 
 ### LeaderLock

@@ -22,8 +22,8 @@ Service.start                                           [앱]
 | 4 | gateway | Service → Gateway | Signer 의 verify 를 값으로 주어 만들고 소켓을 듣는다. Clock 으로 Gateway.heartbeat | 클라이언트 ◇ |
 | 5 | control | Service → Fleet.start | 먼저 Service.elect(흐름 13) — 활성이 아니면 여기서 멈춰 기다린다 ◇. Assignment.all(Database.all)의 줄마다 Instance 를 `stopped` 로. Clock.run | Instance × 줄 |
 | 6 | control | Service → SessionManager · Operator | 설정의 존마다 Zone · Queue. 플릿의 기능 넷과 Signer 의 issue 를 값으로 준다. SessionRpc · NodeRpc · Operator 를 듣는다 | ◇ |
-| 7 | node | Service → NodeAgent.start | Spawner.missing — 엔진 체크아웃이 없으면 시작 거부 ✕. 컨트롤 플레인에 NodeRpc register(이름 · 주소 · slots · 지금 도는 인스턴스들)을 보내고 Clock.run 그 전에 NodeAgent.reap — 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(stdin 을 잃은 호스트는 다룰 수 없다). register 에는 이 노드의 빌드도 싣는다 |  |
-| 8 | control | Fleet.register(node) | Node 를 적는다. 노드가 알린 도는 인스턴스는 `ready` 로 되찾고, 표에 없는 것은 그 노드에 stop 을 시킨다 표에는 이 노드의 것으로 있는데 노드가 알리지 않은 인스턴스는 죽은 것이다 ⇒ 흐름 12 | Node  |
+| 7 | node | Service → NodeAgent.start | Spawner.missing — 엔진 체크아웃이 없으면 시작 거부 ✕. 컨트롤 플레인에 NodeRpc register(이름 · 주소 · slots · 지금 도는 인스턴스들)을 보내고 Clock.run 그 전에 NodeAgent.reap — 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(stdin 을 잃은 호스트는 다룰 수 없다). register 에는 이 노드의 빌드도 싣는다. spool 에 남은 저장하지 못한 캐릭터 파일은 held 로 되찾아 다시 저장한다 |   |
+| 8 | control | Fleet.register(node) | Node 를 적는다. 노드가 알린 도는 인스턴스는 `ready` 로 되찾고, 표에 없는 것은 그 노드에 stop 을 시킨다 표에는 이 노드의 것으로 있는데 노드가 알리지 않은 인스턴스는 죽은 것이다 ⇒ 흐름 12. 표의 줄이 다른 노드를 가리키는 인스턴스를 이 노드가 돌고 있다고 알리면(끊겼다 돌아온 노드 — 그 사이 다른 곳에 다시 떴다) 그 노드에 stop 을 시킨다 | Node   |
 
 ## 멈추는 자리
 

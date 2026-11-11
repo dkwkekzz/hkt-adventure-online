@@ -23,7 +23,7 @@ Fleet.handoff ─► SessionManager.transfer                         [플릿 →
 |---|---|---|---|
 | 1 | Fleet.handoff(instance, character, zone) | 세션 모듈의 transfer 로 넘긴다 | |
 | 2 | SessionManager.transfer(character, zone) | 갈 Instance 를 흐름 3 의 4 · 5 처럼 고른다(없으면 띄운다). Zone.closed 이거나 슬롯을 낼 수 없으면 아무것도 하지 않는다 — 캐릭터는 제자리에 있다 ✕. 같은 빌드의 Instance 만 본다 — 없으면 SessionManager.kick 으로 닫는다(클라이언트는 페이지를 다시 받아 새 빌드로 들어온다) | 갈 Instance  |
-| 3 | Fleet.unload(지금의 instance, character) → NodeAgent.unload | GameServer.unload — 언로드의 Console 글. 엔진이 값을 캐릭터 파일에 쓰고 묶음을 세계에서 지운다. CharacterStore.checkin(release)으로 저장하고 lease 를 푼다 | 값이 스토리지에 |
+| 3 | Fleet.unload(지금의 instance, character) → NodeAgent.unload | GameServer.unload — 언로드의 Console 글. 엔진이 값을 캐릭터 파일에 쓰고 묶음을 세계에서 지운다. CharacterStore.checkin(release)으로 저장하고 lease 를 푼다. 스토리지에 닿지 않아 저장하지 못하면 묶음을 지우지 않고 이동을 그만둔다 — 캐릭터는 제자리에 있다 ✕ | 값이 스토리지에  |
 | 4 | Fleet.load(갈 instance, character) → NodeAgent.load | CharacterStore.checkout → GameServer.load. 흐름 9 의 4 · 5 와 같다. to 에 공간이 있으면 load 에 그 공간을 준다 — 없으면 그 존의 틀의 자리에 선다. 실패하면 지금의 인스턴스에 다시 로드한다. 그것도 실패하면 SessionManager.kick — 세션을 지우고 게이트웨이가 닫는다(1001). 값은 3 에서 스토리지에 저장됐고 lease 는 비었다. 클라이언트는 다시 입장한다 ✕ | 묶음이 갈 인스턴스에  |
 | 5 | SessionManager → Presence.put · Database.put | Session 의 instance 를 바꾸고 마지막 존을 적는다 | |
 | 6 | SessionManager → SessionRpc reroute → Gateway.reroute | 그 캐릭터의 게이트웨이에 새 address 와 새 토큰을 보낸다 | |
@@ -43,6 +43,8 @@ Fleet.handoff ─► SessionManager.transfer                         [플릿 →
 - checkout 이 lease 의 번호를 올리므로, 떠난 인스턴스가 뒤늦게 저장하는 값은 거절된다(흐름 5 의 2).
 - 이동 가운데 클라이언트가 보낸 글은 버린다. 이동 가운데 온 접속 종료 · kick 은 이동이 끝난 뒤에 한다(세션 하나의 일은 한 번에 하나).
 - 같은 존의 다른 인스턴스로 옮기는 것(`drain` · 장애 복구)도 이 흐름이다.
+- 이동 요청을 알린 인스턴스가 그 세션의 인스턴스가 아니면 버린다(이미 옮겨졌다). to 의 존이 설정에 없으면 버리고 기록에 남긴다.
+- `pending` 인 세션은 값이 아직 어디에도 로드되지 않았다 — 옮길 때(drain · 장애 복구) 3 · 4 없이 인스턴스만 바꾼다. `grace` 인 세션은 옮기지 않는다 — drain 이면 언로드하고 지운다.
 
 ## 미정
 

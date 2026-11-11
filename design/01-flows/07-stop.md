@@ -19,7 +19,7 @@ Service.stop                                            [앱]
 |---|---|---|---|---|
 | 1 | node | NodeAgent.stopAll | GameServer 마다 NodeAgent.stop — 든 캐릭터를 전부 GameServer.unload 해 CharacterStore.checkin(release)으로 저장하고, GameServer.stop(호스트가 저장하고 끝난다. 한계 안에 끝나지 않으면 신호로), SnapshotStore.push 로 Store 를 올린다 | 값 · Store 가 스토리지에 |
 | 2 | node | GameServer.exited → NodeRpc exited | 컨트롤 플레인은 그 인스턴스를 `stopped` 로 보고 붙어 있던 사람을 다시 배정한다 | ⇒ 흐름 12 의 3 |
-| 3 | gateway | Gateway.stop | Connection 마다 Connection.close(1001). 컨트롤 플레인에 detach 가 간다 | ⇒ 흐름 11 |
+| 3 | gateway | Gateway.stop | Connection 마다 Connection.close(1001). 컨트롤 플레인에 detach 가 간다. 그 전에 heartbeat 에 `closing` 을 실어 보내 새 Ticket 이 이 게이트웨이를 가리키지 않게 한다. 닫힌 사람은 재접속 유예 안에 다른 게이트웨이로 돌아온다 — 값은 언로드되지 않는다 | ⇒ 흐름 11  |
 | 4 | control | Service | Clock.stop. SessionRpc · NodeRpc · Operator 를 닫는다. 인스턴스는 내리지 않는다 — 표는 스토리지에 있고 다음 시작(흐름 1)이 되찾는다 | |
 | 5 | api | Service | Api 를 닫는다 | |
 
