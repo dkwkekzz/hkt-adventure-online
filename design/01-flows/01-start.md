@@ -8,7 +8,7 @@
 ```text
 Service.start                                           [앱]
   api      openStorage · Directory · Signer · Spawner.bundle · Api 열기       [스토리지 · 계정 · 플릿]
-  gateway  Signer · Gateway — 소켓 듣기                                       [계정 · 게이트웨이]
+  gateway  openStorage(LeaderLock) · Signer · Gateway — 소켓 듣기              [스토리지 · 계정 · 게이트웨이]
   control  openStorage · Signer · Directory · Service.elect                   [스토리지 · 계정]  ⇒ 흐름 13
   node     Spawner.missing · openStorage · Signer · NodeAgent.start           [플릿 · 스토리지 · 계정]
              NodeAgent.reap · NodeAgent.recover ── CharacterStore.checkin     [스토리지]
@@ -17,14 +17,14 @@ Service.start                                           [앱]
 
 | # | 어느 role | 누가 | 무엇을 | 결과 |
 |---|---|---|---|---|
-| 1 | 전부 | Service.start | 서명 키가 없으면 시작 거부 ✕ | |
+| 1 | 전부 | Service.start | 서명 키(`HOST_AUTH_KEY`)가 없으면 시작 거부 ✕. 컨트롤 플레인은 운영자의 키(`OPERATOR_KEY`)도 — 그것은 컨트롤 플레인만 든다 | |
 | 2 | api | Service → Directory · Signer | 스토리지를 열고 Database 를 주어 만든다 | |
 | 3 | api | Service → Spawner.bundle | 뷰어를 한 번 묶는다. 묶지 못하면 시작 거부 ✕. Api(http)를 연다 | 클라이언트 ◇ |
-| 4 | gateway | Service → Gateway | Signer 의 verify 를 값으로 주어 만들고 소켓을 듣는다. Clock 으로 Gateway.heartbeat | 클라이언트 ◇ |
+| 4 | gateway | Service → Gateway | 스토리지를 열어 LeaderLock 만 본다(활성 컨트롤 플레인을 찾는다). Signer 의 verify 를 값으로 주어 만들고 소켓을 듣는다. Clock 으로 Gateway.heartbeat | 클라이언트 ◇ |
 | 5 | control | Service → Service.elect | 스토리지를 열고 LeaderLock 을 잡으러 간다. 잡으면 활성으로 서고(Fleet.start · SessionManager · Operator), 못 잡으면 대기다 | ⇒ 흐름 13 |
 | 6 | node | Service → NodeAgent.start | Spawner.missing — 엔진 체크아웃이 없으면 시작 거부 ✕ | |
 | 7 | node | NodeAgent.reap | 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(spool 의 pid 표). stdin 을 잃은 호스트는 다룰 수 없다 | |
-| 8 | node | NodeAgent.recover → CharacterStore.checkin | spool 에 남은 캐릭터 파일을 그 lease 의 번호로 저장하고 lease 를 푼다(release). 거절되면(그 사이 다른 곳에 배정됐다) 버린다 | 값이 스토리지에 |
+| 8 | node | NodeAgent.recover → CharacterStore.checkin | spool 에 남은 캐릭터 파일을 그 lease 의 번호로 저장하고 lease 를 푼다(release). 거절되면(그 사이 다른 곳에 배정됐다) 버린다. 스토리지에 닿지 않으면 held 에 두고 흐름 5 의 3 이 다시 한다 | 값이 스토리지에  |
 | 9 | node | NodeAgent → NodeRpc register | 컨트롤 플레인에 이름 · 주소 · 빌드 · slots 와 도는 인스턴스들을 알리고 Clock.run. 막 뜬 노드에는 도는 인스턴스가 없다 | |
 | 10 | control | Fleet.register(node, 보고) | Node 를 적고(표 `nodes` 의 cordoned 를 읽는다) 보고를 heartbeat 와 같이 표와 맞춘다 | ⇒ 흐름 5 의 6 ~ 8 |
 

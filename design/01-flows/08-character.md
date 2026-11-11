@@ -26,8 +26,8 @@ Api characters · create · choose · delete                        [앱 — API
 | 5 | `choose` → Directory.owns(account, character) | 그 계정의 것이 아니면 거절 ✕ | |
 | 6 | `choose` → Signer.issue(character) | 캐릭터의 토큰 — 수명은 짧게(`characterTtl`) | Token ◇ |
 
-| 7 | `delete` → Directory.owns · SessionManager.forget(character) | 그 계정의 것이 아니면 거절 ✕. 세션이 있으면(놀고 있거나 재접속 유예) 거절 ✕. CharacterStore.erase 로 값을 지운다 — 어느 인스턴스가 lease 를 들고 있으면 거절 ✕ | |
-| 8 | `delete` → Directory.remove(account, character) | 캐릭터의 줄과 마지막 존을 지운다 | ◇ |
+| 7 | `delete` → Directory.owns · SessionManager.forget(character) | 그 계정의 것이 아니면 거절 ✕. 세션이 있으면(놀고 있거나 재접속 유예) 거절 ✕. 대기열에 있으면 뺀다. CharacterStore.erase 로 값을 지운다 — 어느 인스턴스가 lease 를 들고 있으면 거절 ✕ | |
+| 8 | `delete` → Directory.remove(account, character) | 캐릭터의 줄을 지운다(마지막 존은 7 의 forget 이 지웠다). 7 과 8 사이에 온 그 캐릭터의 입장은 8 뒤에 흐름 3 의 2 에서 거절된다 — 그 사이에 잡힌 세션은 SessionManager.kick | ◇ |
 | 9 | `close` → Directory.close(account) | 계정을 닫는다. 캐릭터가 남아 있으면 거절 ✕ — 먼저 지운다. 계정의 줄과 신원의 줄이 지워진다 | ◇ |
 
 ## 멈추는 자리

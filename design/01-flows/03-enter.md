@@ -36,11 +36,11 @@ Api enter                                               [앱 — API 서버]
 | 4 | SessionManager → Database.get | 마지막에 있던 존. 없거나 그 존이 설정에서 사라졌으면 설정의 `entry`. Zone.closed 면 거절 ✕ | Zone |
 | 5 | SessionManager → Fleet.instances(zone) · Presence.count | ready 이고 `draining` 이 아니고 내려가는 노드(Node.closing)의 것이 아니며 빌드가 클라이언트의 것과 같은 Instance 가운데, 잡힌 슬롯이 Zone.capacity 보다 작은 것. 여럿이면 가장 찬 것(사람이 모이게) | Instance 또는 없음 |
 | 6 | SessionManager → Fleet.launch(zone, build) | 없으면 띄운다. 그 빌드를 든 Node 가 하나도 없으면 거절 ✕ — 답에 `reload` 를 실어 클라이언트가 페이지를 다시 받는다. slots 에 예비 용량이 있고 cordoned · closing 이 아닌 Node 를 고른다. 없으면 9 로. 띄우는 가운데의 것이 있으면 그것을 기다린다 | |
-| 7 | Fleet → Assignment.get · Assignment.put | 그 존의 내려가 있는(`stopped`) 인스턴스가 있으면 그 이름을 다시 쓰고(그 Store 에서 이어간다) 없으면 빈 번호의 이름을 짓는다. 줄 `{zone, dataset, node, port, epoch, build, key, state: running}` 을 적는다 — 세대(epoch)는 하나 올린다. 띄우기 전에 적는다 | Instance `starting` |
-| 8 | NodeAgent.launch(spec) → SnapshotStore.epochOf · SnapshotStore.pull · Ports.take · GameServer.start | Store 자리를 마련한다 — 이 서버에 그 인스턴스의 자리가 있고 올라가 있는 것보다 낡지 않았으면 그대로 쓰고(호스트의 마지막 저장), 아니면 내려 받는다(마지막 백업. 없으면 빈 디렉터리). 포트를 받아 Spawner.host → 머리글의 마지막 줄(Probe.read 의 ready) → NPC 묶음마다 GameServer.command 의 `grant`(stdin 은 Process.write) → Spawner.agent. 한계 안에 서지 않으면 `failed` ✕ — Fleet 이 다른 Node 에 세대를 올려 한 번 더 띄우고, 그래도 안 되면 9 로 | Instance `ready` |
-| 9 | SessionManager → Queue.push(character) | 빈 슬롯도 띄울 노드도 없으면 대기열에 세우고 순번을 답한다. 클라이언트는 다시 묻는다 — 슬롯이 나면(흐름 5) 3 에서 세션이 잡혀 있다 | 순번 ◇ |
-| 10 | SessionManager → Presence.put | Session 을 `pending` 으로 잡는다(만료 `pendingMs`). 게이트웨이 하나를 고른다 — heartbeat 가 살아 있고 closing 이 아닌 것 가운데 | Session |
-| 11 | Api | Ticket `{page, gate}` 를 답한다. page 는 API 서버의 Static 이 주는 뷰어 페이지이고 `?ws=` 가 게이트웨이의 주소, `?exit=` 가 들어가는 페이지의 주소다 | 클라이언트 ◇ |
+| 7 | Fleet → Assignment.get · SnapshotStore.epochOf · SnapshotStore.claim · Assignment.put | 그 존의 내려가 있는(`stopped`) 인스턴스가 있으면 그 이름을 다시 쓰고(그 Store 에서 이어간다 — draining 은 내리고 restarts 는 둔다) 없으면 빈 번호의 이름을 짓는다. 세대는 표의 것과 Store 자리의 주인의 세대 가운데 큰 것에 하나를 더한다(지웠다 다시 쓰는 이름도 앞의 것보다 크다). SnapshotStore.claim 으로 그 세대를 Store 자리의 주인으로 먼저 적는다 — 그때부터 그 자리에 올릴 수 있는 것은 이 세대뿐이다. 줄 `{zone, dataset, node, epoch, build, key, state: running}` 을 적는다. key 는 그 노드가 든 서명 키 가운데 컨트롤 플레인의 첫 키와 같은 것의 자리다. 띄우기 전에 적는다 | Instance `starting` |
+| 8 | NodeAgent.launch(spec) → SnapshotStore.epochOf · SnapshotStore.pull · Ports.take · GameServer.start | Store 자리를 마련한다 — 이 서버에 그 인스턴스의 자리가 있고 그 세대의 표지가 올라가 있는 내용의 세대보다 낡지 않았으면 그대로 쓰고(호스트의 마지막 저장), 아니면 내려 받는다(마지막 백업. 없으면 빈 디렉터리). 포트를 받아 Spawner.host → 머리글의 마지막 줄(Probe.read 의 ready) → NPC 묶음마다 GameServer.command 의 `grant`(stdin 은 Process.write) → Spawner.agent. 답으로 포트와 노드의 순번을 주고, Fleet 이 포트를 줄에 적는다. 한계 안에 서지 않으면 `failed` ✕ — Fleet 이 다른 Node 에 세대를 올려 한 번 더 띄우고, 그래도 안 되면 9 로 | Instance `ready` |
+| 9 | SessionManager → Queue.push(character) | 빈 슬롯도 띄울 노드도 없으면 대기열에 세우고 순번을 답한다. 클라이언트는 다시 묻는다 — 슬롯이 나면(흐름 5 의 13) 3 에서 세션이 잡혀 있다 | 순번 ◇ |
+| 10 | SessionManager → Presence.put | 새 세션이면 `pending` 으로 잡는다(만료 `pendingMs`). 있던 세션이면 state 와 만료는 그대로다. 게이트웨이 하나를 고른다 — heartbeat 가 살아 있고 closing 이 아닌 것 가운데 | Session |
+| 11 | Api | Ticket `{page, gate}` 를 답한다. page 는 이 API 서버의 빌드의 뷰어 페이지 주소(설정의 `pageUrl` — 그 빌드의 API 서버들만 받는 주소)이고 `?ws=` 가 게이트웨이의 주소, `?exit=` 가 들어가는 페이지의 주소다 | 클라이언트 ◇ |
 
 ## 멈추는 자리
 
@@ -57,7 +57,7 @@ Api enter                                               [앱 — API 서버]
 - 표의 줄은 띄우기 전에 적는다. 띄움의 답이 늦어 다른 곳에 다시 띄우면 세대가 올라가고, 뒤늦게 선 앞의 것은 세대가 낮아 heartbeat 의 맞춤이 내린다(흐름 5 의 7).
 - NPC 묶음의 grant 는 인스턴스가 `ready` 가 되기 전이다. 어떤 사람도 그 전에 그 인스턴스에 배정되지 않는다.
 - 클라이언트는 호스트의 주소를 받지 않는다.
-- 빌드는 엔진의 커밋(`engine.lock`)이다. 뷰어 · 호스트는 같은 빌드끼리만 만난다 — 엔진에는 프로토콜 버전이 없다(`ONLINE.md` §1.2). API 서버가 enter 에 제 빌드(그 뷰어를 준 빌드)를 실어 보낸다.
+- 빌드는 엔진의 커밋(`engine.lock`)이다. 뷰어 · 호스트는 같은 빌드끼리만 만난다 — 엔진에는 프로토콜 버전이 없다(`ONLINE.md` §1.2). enter 를 받은 API 서버가 제 빌드를 실어 보내고 제 빌드의 페이지 주소를 Ticket 에 싣는다 — 뷰어의 묶음도 그 주소가 준다. 빌드가 둘인 동안(배포)에도 세션의 빌드와 뷰어의 빌드가 갈리지 않는다.
 - 대기열의 순번은 클라이언트가 다시 물을 때마다 살아 있다. 묻지 않으면 흐름 5 가 지운다.
 
 ## 미정
