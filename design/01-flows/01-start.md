@@ -9,7 +9,7 @@
 Service.start                                           [앱]
   api      openStorage · Directory · Signer · Spawner.bundle · Api 열기     [스토리지 · 계정 · 플릿]
   gateway     Signer · Gateway — 소켓 듣기                                    [계정 · 게이트웨이]
-  control  openStorage · Signer · Fleet.start · SessionManager · Operator        [스토리지 · 계정 · 플릿 · 세션 모듈]
+  control  openStorage · Signer · Fleet.start · SessionManager · Operator        [스토리지 · 계정 · 플릿 · 세션]
   node     Spawner.missing · openStorage · NodeAgent.start ── NodeRpc register       [플릿 · 스토리지]
              Fleet.register                                                     [플릿] ◇
 ```

@@ -20,7 +20,7 @@
          Session 의 만료 — pending 는 비우고 grace 는          ⇒ 흐름 11
          Queue.next × 슬롯이 난 존
          heartbeat 가 끊긴 게이트웨이                                ⇒ 흐름 12
-게이트웨이   Gateway.heartbeat ─► SessionManager.heartbeat                   [게이트웨이 → 세션 모듈]
+게이트웨이   Gateway.heartbeat ─► SessionManager.heartbeat                   [게이트웨이 → 세션]
 ```
 
 | # | 누가 | 무엇을 | 결과 |
