@@ -10,7 +10,7 @@ Process 의 줄                                           [엔진]
   Probe.read                                            [플릿 — 노드]
   GameServer.line ── state · lastStatus · lag · 답을 기다리는 명령
     이동 요청 줄 ─► NodeRpc handoff                       ⇒ 흐름 10
-  Log                                                   ◇
+  기록 — 프로세스의 stdout                                ◇
 Process 의 종료
   GameServer.exited ── Ports.free
     NodeRpc exited                                      ⇒ 흐름 12
@@ -23,7 +23,7 @@ Process 의 종료
 | 3 | GameServer.line → NodeRpc handoff | handoff 면 컨트롤 플레인에 노드 · 인스턴스 · 세대 · 캐릭터 · to 를 알린다 | ⇒ 흐름 10 |
 | 4 | GameServer.exited(which, code) | 호스트가 끝나면 에이전트를 함께 끝내고 Ports.free 로 포트를 돌려준다. 내리는 가운데(`stopping`)였으면 `stopped` — 알리는 것은 NodeAgent.stop 이 Store 를 올린 뒤에 한다(흐름 7 의 3). 아니면 코드가 무엇이든 `failed` 이고 바로 NodeRpc exited(노드 · 인스턴스 · 세대 · 코드, uploaded 아님)를 알린다 | ⇒ 흐름 12 |
 | 5 | GameServer.exited | 에이전트만 끝났고 호스트가 `ready` 면 에이전트를 다시 띄운다. 셈이 한계를 넘으면 호스트를 끝내고 `failed` 로 | ⇒ 4 |
-| 6 | Log | 줄마다 `<인스턴스> <host\|agent> <줄>`. 에이전트의 stdout 은 첫 줄만 | 운영자 ◇ |
+| 6 | NodeAgent | 줄마다 `<인스턴스> <host\|agent> <줄>`. 에이전트의 stdout 은 첫 줄만 | 운영자 ◇ |
 
 ## 멈추는 자리
 

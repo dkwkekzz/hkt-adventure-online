@@ -27,12 +27,12 @@ Service.elect                                           [앱 — 컨트롤 플�
 | 1 | Service.elect → LeaderLock.acquire(name, holder, ttl) | 비었거나 만료됐으면 term 을 하나 올려 잡는다. holder 는 이 프로세스의 내부 주소 | term 또는 null |
 | 2 | (못 잡았다) Service | 대기다. 아무것도 듣지 않고 표도 세우지 않는다. 간격마다 1 로 | 대기 ◇ |
 | 3 | (잡았다) Service → Fleet.start | 활성이 된다. Assignment.all 의 줄마다 Instance 를 세운다 — 표에 `stopped` · `failed` 인 것은 그대로(draining · restarts · 세대도), 도는 것(`running`)은 노드가 알릴 때까지 `unknown` 이다. 표 `nodes` 에서 알던 노드의 이름과 cordoned 를 읽는다. Clock.run. `failed` 인 줄마다 CharacterStore.expire 를 다시 한다 — 앞의 활성이 줄만 적고 죽었을 수 있다 | Instance × 줄  |
-| 4 | Service → SessionManager · Operator | 설정의 존마다 Zone · Queue 를 세우고 표 `zones` 에서 closed 를 읽는다. 플릿의 기능과 계정의 기능 · Signer 의 issue 를 값으로 준다. SessionRpc · NodeRpc · Operator 를 듣고, 보내는 글마다 term 을 싣는다 | settling ◇ |
+| 4 | Service → SessionManager · Operator | 설정의 존마다 Zone · Queue 를 세우고 표 `zones` 에서 closed 를 읽는다. 플릿의 기능과 계정의 기능 · Signer 의 issueWith 를 값으로 준다. SessionRpc · NodeRpc · Operator 를 듣고, 보내는 글마다 term 을 싣는다 | settling ◇ |
 | 5 | 노드 · 게이트웨이 · API 서버 → LeaderLock.holder(name) | 활성에 보낸 글이 닿지 않거나 더 큰 term 의 글을 받으면 지금의 활성을 다시 읽는다. 노드는 NodeRpc register 를, 게이트웨이는 SessionRpc heartbeat 를 새 활성에 보낸다 | 주소 · term |
 | 6 | Fleet.register · Fleet.heartbeat · SessionManager.reconcile (settling) | 노드가 알린 인스턴스는 그 state 가 되고, 로드된 캐릭터마다 세션이 없으면 `grace` 로 되찾는다(Presence.put — 재접속 유예를 새로 건다. build 는 그 Instance 의 것이다). 그 인스턴스의 슬롯이 그만큼 세어진다. 새 활성의 term 이 앞의 것보다 크므로 새 활성이 내는 일의 번호는 노드가 본 어느 것보다 크다. 표와 다른 인스턴스를 내리게 하는 것(흐름 5 의 7 ①)은 settling 에도 한다 | 세션 |
 | 7 | SessionManager.heartbeat (settling) | 게이트웨이가 알린 접속마다 세션이 있으면 `active` 로 하고 그 게이트웨이를 적는다. 세션이 아직 없는 접속은 두고 본다(그 노드가 아직 알리지 않았을 수 있다) | 접속 표 |
 | 8 | Service | 표 `nodes` 의 노드가 전부 알렸거나 한계(`settleMs`)가 지나면 settling 을 끝낸다(없앤 노드는 운영자가 `forget <node>` 로 표에서 지운다). 그때까지 입장 · 접속 · 사람의 존 이동은 「잠시 뒤 다시」(503 · 1013)이고, 띄움 · 내림 · 죽음의 판정 · 세션을 지우는 맞춤 · 운영자의 `restore` · `remove` · `kick` · `ban` · `rollback` · 캐릭터 지움(forget)은 하지 않는다(세션의 표가 아직 서지 않아 「세션이 없다」가 참이 아니다) | 활성 |
-| 9 | Fleet · SessionManager (settling 끝) | 아직 `unknown` 인 인스턴스는 죽은 것이다 ⇒ 흐름 12. 되찾은 세션마다 그 계정이 차단됐는가를 다시 보고(차단됐으면 SessionManager.kick), 그 뒤로 흐름 5 의 맞춤이 전부 돈다 — 세션 없는 접속은 kick, 접속이 이어진 곳과 로드된 곳이 다르면 reroute, 로드되지 않은 세션은 지운다 | |
+| 9 | Fleet · SessionManager (settling 끝) | 아직 `unknown` 인 인스턴스는 그 노드가 죽었을 때만(Fleet.dead — 스토리지의 표지도 낡았다) 죽은 것이다 ⇒ 흐름 12. 표지가 새것이면 `unknown` 인 채 두고(새로 배정하지 않는다) 그 노드가 알리기를 기다린다. 되찾지 못한 세션도 같다 — 게이트웨이의 표지가 새것이면 그 게이트웨이가 알릴 때까지 재접속 유예를 세지 않는다. 되찾은 세션마다 그 계정이 차단됐는가를 다시 보고(차단됐으면 SessionManager.kick), 그 뒤로 흐름 5 의 맞춤이 전부 돈다 — 세션 없는 접속은 kick, 접속이 이어진 곳과 로드된 곳이 다르면 reroute, 로드되지 않은 세션은 지운다 | |
 | 10 | 활성 → LeaderLock.renew(name, holder, term) | 간격마다 만료를 늦춘다. 거절되거나(남이 잡았다) 스토리지에 닿지 않은 채 ttl 이 지나면 듣기를 닫고 표를 버리고 2 로 물러난다. 인스턴스는 내리지 않는다. tick 사이가 크게 벌어졌던 것을 알면(멈췄다 깼다) 늦추기 전에 아무것도 판정하지 않는다(흐름 5 의 9) | 대기 ◇  |
 | 11 | 노드 · 게이트웨이 | 제가 받아들인 term 보다 작은 term 의 글(launch · stop · load · unload · reload · reroute · kick)은 버린다 | |
 
@@ -49,6 +49,7 @@ Service.elect                                           [앱 — 컨트롤 플�
 - 활성이 둘인 때가 없다. 옛 활성이 물러난 줄 모르고 보낸 글은 term 이 작아 버려진다 — 옛 활성의 지시로 인스턴스가 내려가거나 캐릭터가 옮겨지지 않는다. 스토리지에 쓰는 것도 같다 — 표의 줄 · Store 자리의 주인 · lease 를 끊는 것에 term 이 실리고, LeaderLock 의 지금 term 과 다르면 거절된다.
 - 전환을 넘어 남는 것은 스토리지의 것이다 — 인스턴스의 줄(내려가 있는가 · 비우는 가운데인가 · 몇 번 죽었는가 · 세대), 존의 닫힘, 노드의 cordoned. 점검 가운데 전환되어도 닫은 존은 닫혀 있고 비우던 인스턴스는 세션을 받지 않는다.
 - 세션은 스토리지에 없다. 노드가 든 것(로드된 캐릭터)에서 `grace` 로, 게이트웨이가 든 것(접속)에서 `active` 로 다시 선다. `pending` 이던 세션과 대기열은 사라지고, 클라이언트가 다시 물으면 새로 선다.
+- 전환 뒤에도 죽음의 판정은 흐름 5 의 9 와 같은 증거 둘을 본다. 새 활성이 노드에 닿지 못해도 그 노드의 표지가 새것이면 아무것도 끊지 않는다. 고립돼 물러난 프로세스는 얼마 동안(`resignMs`) 다시 잡지 않는다.
 - settling 이 있는 까닭: 표가 다 서기 전에 일하면 꽉 찬 인스턴스가 빈 것으로 세어져 상한을 넘기고, 아직 알리지 않은 노드의 인스턴스를 죽은 것으로 보아 멀쩡한 사람을 옮긴다.
 - 전환 사이(ttl 과 settling)에는 입장 · 존 이동 · 장애 복구가 기다린다. 붙어 있는 사람은 그대로 논다.
 - 이동 가운데 전환되면 그 이동은 이어지지 않는다. 값이 로드된 곳이 그 캐릭터의 자리가 되고(9), 어디에도 로드되지 않았으면(언로드와 로드 사이) 접속을 닫는다 — 값은 스토리지에 있고 클라이언트는 다시 입장한다.

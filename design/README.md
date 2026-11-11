@@ -17,9 +17,10 @@
 2. 클라이언트가 아는 주소는 둘이다 — API 서버(http)과 게이트웨이(WebSocket). 호스트는 내부망에만 있다.
 3. 사람의 글이 지나는 길(클라이언트 ↔ 게이트웨이 ↔ 호스트)에는 모두가 지나는 프로세스가 없다. 컨트롤 플레인은 들어올 때 · 존을 옮길 때 · 떠날 때만 닿는다. 컨트롤 플레인이 잠시 없어도 붙어 있는 사람은 계속 논다.
 4. 오래 남아야 하는 상태는 스토리지에만 있다. API 서버 · 게이트웨이는 상태가 없어 수를 늘리면 되고, 컨트롤 플레인의 표는 스토리지와 노드 · 게이트웨이의 보고로 다시 선다. 표와 보고가 다르면 보고가 진실이다.
-5. 캐릭터 하나는 한때에 호스트 하나만 든다. 그것을 지키는 것은 스토리지의 lease(Lease) 하나다.
-6. 상태를 바꾸는 것은 흐름의 단계만이다. 모듈은 자기 책임 문서의 개념만 알고, 다른 모듈은 소켓(`src/protocol/`) 하나로 만난다.
-7. 엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리를 채우는 것뿐이다(`ONLINE.md` §3.2).
+5. 죽었다는 판정에는 증거가 둘 있어야 한다 — 바로 오는 보고의 끊김과, 그것이 스스로 스토리지에 남기는 표지의 낡음. 하나만으로는 아무것도 끊지 않는다.
+6. 캐릭터 하나는 한때에 호스트 하나만 든다. 그것을 지키는 것은 스토리지의 lease(Lease) 하나다.
+7. 상태를 바꾸는 것은 흐름의 단계만이다. 모듈은 자기 책임 문서의 개념만 알고, 다른 모듈은 소켓(`src/protocol/`) 하나로 만난다.
+8. 엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리를 채우는 것뿐이다(`ONLINE.md` §3.2).
 
 ## 용어
 
@@ -78,9 +79,9 @@
 | 프로세스 | 든 모듈 | 듣는 것 | 상태 | 늘리는 법 |
 |---|---|---|---|---|
 | API 서버 api | 계정 · 스토리지(Database · LeaderLock 의 holder) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
-| 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) · 스토리지(LeaderLock 의 holder) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
+| 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) · 스토리지(LeaderLock 의 holder · 표 `beacons`) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
 | 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issueWith · verify) · 스토리지(Database · CharacterStore · SnapshotStore 의 주인 · 백업 · LeaderLock) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
-| 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issueWith — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
+| 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issueWith — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder · 표 `beacons`) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
 
 - 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
 - 뷰어의 묶음 · 실물은 API 서버의 Static 이 준다. 앞에 캐시(CDN)를 두어도 모양은 같다.
