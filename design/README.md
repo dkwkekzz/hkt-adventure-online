@@ -156,7 +156,7 @@
 |---|---|---|---|
 | Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | `protocol/api.ts` |
 | Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다. 나머지는 그대로 | 엔진의 것 — `protocol/engine.ts` |
-| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter. 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
+| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
 | NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload. 노드의 report · handoff · exited | `protocol/node.ts` |
 | Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 이동 요청 줄, 캐릭터 파일 | `protocol/engine.ts` |
 | SnapshotStore · Database · CharacterStore | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease | `protocol/storage.ts` |
@@ -177,7 +177,7 @@
 | 사람의 묶음이 접속한 동안만 세계에 서고 끊으면 무대 밖에 둔다 | 흐름 9 · 11 | §1.3 |
 | 로드 — `--handoff <dir>` 를 든 호스트에 Console `load <account> [공간]`. `<dir>/<account>.json` 의 값으로 그 계정의 묶음을 세운다(파일이 없으면 틀에서 낳는다). 맡은 묶음이 없는 계정의 접속은 거절(4002) | 흐름 3 · 9 · 10 | 엔진의 설계(`host.md` Host.load) — 엔진 plan 268 |
 | 언로드 · 스냅샷 — Console `unload <account>`(값을 파일에 쓰고 세계에서 지운다) · `keep <account>`(값만 쓴다) | 흐름 5 · 10 · 11 | 엔진의 설계(`host.md` Host.unload · keep) — 엔진 plan 268 |
-| 이동 요청 줄 — 묶음이 다른 존으로 가는 자리에 닿으면 stdout 에 `떠남 — <account> → <to>`. to 가 존의 이름이다 | 흐름 4 · 10 | 엔진의 설계(`world.md` RuleKind depart) — 엔진 plan 269. 어느 자리가 어느 존으로 가는가는 엔진의 피드백 192 |
+| 이동 요청 줄 — 묶음이 다른 존으로 가는 자리에 닿으면 stdout 에 `떠남 — <account> → <to>`. to 는 컨텐츠의 글이고 서비스는 `<존>` 또는 `<존>@<공간>` 으로 읽는다 | 흐름 4 · 10 | 엔진의 설계(`world.md` RuleKind depart) — 엔진 plan 269. 어느 자리가 어느 존으로 가는가는 엔진의 피드백 192 |
 | status 글의 꼬리 ` · 지연 N`(지난 창이 박자를 넘긴 ms) | 흐름 5 | 엔진의 설계(`host.md` Driver.lag) — 엔진 plan 269 |
 | 뷰어가 같은 선에 다시 온 `Link 1` 의 열림을 새 열림으로 받는다 | 흐름 10 | 엔진의 설계(`viewer.md` Client.reopen) — 엔진 plan 270 |
 | 통째 저장과 백업 — 한 번의 저장이 통째로 되거나 안 된다. Console `backup <dir>` 이 다음 창 끝의 저장을 dir 에 베끼고 stdout 에 `backup 끝 — <dir> · now N` | 흐름 5 | 엔진의 설계(`host.md` Store.commit · backup) — 엔진 plan 267 |
@@ -193,7 +193,7 @@
 
 ### Api
 - 데이터: server(http) · port(불변) · files(Static).
-- 기능: login 은 흐름 2. characters · create · choose 는 흐름 8. enter 는 흐름 3 의 머리. `GET /` 는 들어가는 페이지 한 장. `GET /health` 는 이 프로세스가 듣는가. 그 밖의 GET 은 Static 에 묻는다.
+- 기능: login 은 흐름 2. characters · create · choose · delete 는 흐름 8. enter 는 흐름 3 의 머리. `GET /` 는 들어가는 페이지 한 장. `GET /health` 는 이 프로세스가 듣는가. 그 밖의 GET 은 Static 에 묻는다.
 - 생애: API 서버의 Service.start 가 연다. Service.stop 이 닫는다.
 
 ### Static
@@ -214,7 +214,7 @@
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Api login | 클라이언트 → API 서버 | `POST /login {provider, subject?}` | `{token, subject}` 또는 `{why}` |
-| Api characters · create · choose | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
+| Api characters · create · choose · delete | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
 | Api enter | 클라이언트 → API 서버 | `POST /enter {token}`(캐릭터의 토큰) | `{page, gate}` · `{wait: 순번}` 또는 `{why}` |
 | Api static | 브라우저 → API 서버 | `GET /play` · `/viewer.js` · `/assets/…` · `/keymap.json` | 파일 |
 

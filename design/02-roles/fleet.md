@@ -51,12 +51,12 @@ NodeAgent ← Service(노드)
 
 ### NodeAgent
 - 데이터: name(불변, 이 노드의 이름) · shards:map<인스턴스 이름, GameServer> · ports · clock · snapshots · characters(참조) · rpc(참조) · issue(NPC 계정 → Token, 앱이 준다) · config:{engineDir, beat, sparse, slots, spool(캐릭터 파일의 자리), checkinEvery, backupEvery, 한계들}.
-- 기능: stats 는 이 서버의 GameServer 마다의 state · 틱 지연(흐름 14). start 는 컨트롤 플레인에 register 를 보내고 Clock.run(흐름 1). launch(spec) 는 SnapshotStore.pull 로 Store 를 받고 Ports.take 뒤 GameServer.start(흐름 3). stop(instance) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop, SnapshotStore.push 로 올린 뒤 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. command(instance, 글). load(instance, character) 는 CharacterStore.checkout 으로 값과 lease 를 받아 GameServer.load(흐름 9 · 10). unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin 으로 저장하고 lease 를 푼다(흐름 10 · 11). tick 은 흐름 5 — status · 스냅샷 저장 · 보고. stopAll 은 흐름 7.
+- 기능: reap 는 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(spool 의 pid 표 — 흐름 1). stats 는 이 서버의 GameServer 마다의 state · 틱 지연(흐름 14). start 는 컨트롤 플레인에 register 를 보내고 Clock.run(흐름 1). launch(spec) 는 SnapshotStore.pull 로 Store 를 받고 Ports.take 뒤 GameServer.start(흐름 3). stop(instance) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop, SnapshotStore.push 로 올린 뒤 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. command(instance, 글). load(instance, character) 는 CharacterStore.checkout 으로 값과 lease 를 받아 GameServer.load(흐름 9 · 10). unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin 으로 저장하고 lease 를 푼다(흐름 10 · 11). tick 은 흐름 5 — status · 스냅샷 저장 · 보고. stopAll 은 흐름 7.
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### GameServer
 - 데이터: name(불변, 인스턴스 이름) · spec:{zone, dataset, storeDir, port, party, npc}(불변) · state:`stopped`|`starting`|`ready`|`stopping`|`failed` · host:Process|null · agent:Process|null · lastStatus:StatusLine|null · linked:list<Character.id> · lent:map<Character.id, Lease> · lag:int · agentRestarts:int · why:string|null · waiting(답을 기다리는 명령 줄).
-- 기능: start 는 흐름 3 의 띄움 — Spawner.host, 머리글, NPC 묶음의 grant, Spawner.agent. stop. command(글) 은 호스트의 stdin 에 글 한 줄을 쓰고 그 답 한 줄을 돌려준다. load(character, file, lease) 는 로드의 Console 글을 쓰고 lent 에 둔다. unload(character, file) 은 언로드의 Console 글을 쓰고 lent 에서 뺀다. snapshot(character, file) 은 스냅샷의 Console 글(`keep`). backup(dir) 은 Console `backup <dir>` 을 쓰고 `backup 끝 — ` 줄이 오면 끝난다(한계 안에 없으면 실패). line(which, 줄) · exited(which, code) 는 흐름 4.
+- 기능: start 는 흐름 3 의 띄움 — Spawner.host, 머리글, NPC 묶음의 grant, Spawner.agent. stop. command(글) 은 호스트의 stdin 에 글 한 줄을 쓰고 그 답 한 줄을 돌려준다. load(character, file, lease, spot) 는 로드의 Console 글을 쓰고 lent 에 둔다. unload(character, file) 은 언로드의 Console 글을 쓰고 lent 에서 뺀다. snapshot(character, file) 은 스냅샷의 Console 글(`keep`). backup(dir) 은 Console `backup <dir>` 을 쓰고 `backup 끝 — ` 줄이 오면 끝난다(한계 안에 없으면 실패). line(which, 줄) · exited(which, code) 는 흐름 4.
 - 생애: NodeAgent.launch 가 만든다. NodeAgent.stop 뒤 사라진다.
 
 ### Ports
@@ -77,7 +77,7 @@ NodeAgent ← Service(노드)
 
 ### Probe
 - 데이터: 없음. 정적.
-- 기능: read(line) → `{kind:'listening'}` | `{kind:'ready'}` | `{kind:'status', status:StatusLine, accounts:list<string>, lag:int}` | `{kind:'handoff', character, zone}`(이동 요청 줄) | `{kind:'backed', dir}`(`backup 끝 — ` 줄) | `{kind:'halt'}` | `{kind:'other'}`. answers(명령, line) 은 그 줄이 그 Console 명령의 답인가.
+- 기능: read(line) → `{kind:'listening'}` | `{kind:'ready'}` | `{kind:'status', status:StatusLine, accounts:list<string>, lag:int}` | `{kind:'handoff', character, zone, spot}`(spot 은 `@` 뒤의 공간 이름 또는 null)(이동 요청 줄) | `{kind:'backed', dir}`(`backup 끝 — ` 줄) | `{kind:'halt'}` | `{kind:'other'}`. answers(명령, line) 은 그 줄이 그 Console 명령의 답인가.
 - 생애: 없음.
 
 ### Clock

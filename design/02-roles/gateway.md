@@ -22,7 +22,7 @@ Gateway ← Service(게이트웨이)
 
 ### Connection
 - 데이터: character:Character.id(불변) · client(클라이언트의 소켓) · upstream(호스트로 가는 소켓 또는 null) · state:`opening`|`open`|`rerouting`|`closed`.
-- 기능: open(address, token) 은 호스트에 소켓을 열고 첫 글 `Host 2` 를 그 토큰으로 보낸다. relay 는 양쪽의 글을 그대로 넘긴다 — 클라이언트의 글은 RateLimiter.check 를 지난 것만. reroute(address, token) 은 옛 upstream 을 닫고 새로 open 한다 — 그 사이 클라이언트의 글은 버린다. close(code, why) 는 양쪽을 닫고 SessionRpc 의 detach 를 보낸다.
+- 기능: open(address, token) 은 호스트에 소켓을 열고 첫 글 `Host 2` 를 그 토큰으로 보낸다. relay 는 양쪽의 글을 그대로 넘긴다 — 클라이언트의 글은 RateLimiter.check 를 지난 것만. upstream 이 닫히면 호스트의 거절(4000 · 4001 · 4002)은 그 코드로 close, 그 밖은 `rerouting` 으로 기다리다 한계(`rerouteMs`)를 넘기면 close(1001). reroute(address, token) 은 옛 upstream 을 닫고 새로 open 한다 — 그 사이 클라이언트의 글은 버린다. close(code, why) 는 양쪽을 닫고 SessionRpc 의 detach 를 보낸다.
 - 생애: Gateway.accept 가 만든다. close 뒤 사라진다.
 
 ### RateLimiter

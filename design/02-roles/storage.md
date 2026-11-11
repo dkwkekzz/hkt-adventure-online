@@ -45,7 +45,7 @@ CharacterStore ← Service(노드 · 컨트롤 플레인)
 
 ### CharacterStore
 - 데이터: 없음. 값은 스토리지에 — 캐릭터마다 값(파일 하나, 불투명)과 Lease.
-- 기능: checkout(character, holder, file) 은 lease 가 비었거나 만료됐으면 번호를 하나 올린 Lease 를 내고 값을 file 에 내려 준다(값이 아직 없으면 file 을 만들지 않는다). 남이 들고 있으면 null. checkin(character, lease, file, release) 는 lease 의 번호가 지금의 것과 같을 때만 file 을 값으로 저장한다 — 다르면 거절(false). release 가 참이면 lease 를 비운다. 저장하면 lease 의 만료를 늦춘다. expire(holder) 는 그 holder 가 든 lease 를 전부 비운다(값은 마지막 checkin 의 것).
+- 기능: checkout(character, holder, file) 은 lease 가 비었거나 만료됐으면 번호를 하나 올린 Lease 를 내고 값을 file 에 내려 준다(값이 아직 없으면 file 을 만들지 않는다). 남이 들고 있으면 null. checkin(character, lease, file, release) 는 lease 의 번호가 지금의 것과 같을 때만 file 을 값으로 저장한다 — 다르면 거절(false). release 가 참이면 lease 를 비운다. 저장하면 lease 의 만료를 늦춘다. erase(character) 는 lease 가 비었을 때만 그 캐릭터의 값을 지운다 — 누가 들고 있으면 거절. expire(holder) 는 그 holder 가 든 lease 를 전부 비운다(값은 마지막 checkin 의 것).
 - 생애: openStorage 와 함께.
 
 ### LeaderLock

@@ -16,7 +16,7 @@ Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인)
 
 ### Directory
 - 데이터: db(참조). 값은 스토리지에 — `accounts`(Identity.key → Account.id) · `characters`(Account.id → list<Character>) · `bans`(Account.id → until).
-- 기능: resolve(identity) 는 있으면 그 Account.id, 없으면 새 id 를 짓고 적는다. list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다(계정마다의 한계 `characterLimit` 를 넘으면 거절). owns(account, character) 는 그 캐릭터가 그 계정의 것인가. ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가.
+- 기능: resolve(identity) 는 있으면 그 Account.id, 없으면 새 id 를 짓고 적는다. list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다(계정마다의 한계 `characterLimit` 를 넘으면 거절). owns(account, character) 는 그 캐릭터가 그 계정의 것인가. remove(account, character) 는 그 캐릭터의 줄을 지운다. ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가.
 - 생애: Service.start 가 Database 를 주어 만든다. 프로세스와 함께 사라진다.
 
 ### Identity

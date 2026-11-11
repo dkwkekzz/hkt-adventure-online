@@ -1,16 +1,18 @@
 # 흐름 8. 캐릭터 — 클라이언트의 계정 토큰
 
-트리거: Api 의 `characters` · `create` · `choose`. 계정의 토큰을 든다.
-한 줄: 그 계정의 캐릭터를 보고, 만들고, 하나를 골라 캐릭터의 토큰을 받는다.
+트리거: Api 의 `characters` · `create` · `choose` · `delete`. 계정의 토큰을 든다.
+한 줄: 그 계정의 캐릭터를 보고, 만들고, 지우고, 하나를 골라 캐릭터의 토큰을 받는다.
 
 ## 순서
 
 ```text
-Api characters · create · choose                        [앱 — API 서버]
+Api characters · create · choose · delete                        [앱 — API 서버]
   Signer.verify                                         [계정]
   Directory.banned
   Directory.list · Directory.create · Directory.owns
     Database.get · Database.put(characters)                 [스토리지]
+  SessionRpc forget ─► SessionManager.forget ── CharacterStore.erase — delete   [세션 · 스토리지]
+  Directory.remove — delete
   Signer.issue — choose                                 [계정]
   답                                                    ◇
 ```
@@ -23,6 +25,9 @@ Api characters · create · choose                        [앱 — API 서버]
 | 4 | `create` → Directory.create(account, name) | 이름의 모양이 틀리거나 한계(`characterLimit`)를 넘으면 거절 ✕. 새 Character.id 를 짓고 적는다 | Character ◇ |
 | 5 | `choose` → Directory.owns(account, character) | 그 계정의 것이 아니면 거절 ✕ | |
 | 6 | `choose` → Signer.issue(character) | 캐릭터의 토큰 — 수명은 짧게(`characterTtl`) | Token ◇ |
+
+| 7 | `delete` → Directory.owns · SessionManager.forget(character) | 그 계정의 것이 아니면 거절 ✕. 세션이 있으면(놀고 있거나 재접속 유예) 거절 ✕. CharacterStore.erase 로 값을 지운다 — 어느 인스턴스가 lease 를 들고 있으면 거절 ✕ | |
+| 8 | `delete` → Directory.remove(account, character) | 캐릭터의 줄과 마지막 존을 지운다 | ◇ |
 
 ## 멈추는 자리
 

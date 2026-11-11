@@ -26,8 +26,8 @@ Operator.command                                        [앱 — 컨트롤 플�
 | 7 | `host <instance> <글>` | Fleet.command 로 그대로. 답 글을 돌려준다. `stop` 과 로드 · 언로드의 글은 넘기지 않는다 | 글 |
 | 8 | `backup` · `restore` | 인스턴스가 `stopped` 또는 `failed` 일 때만. Fleet.backup 은 백업 하나를, Fleet.restore 는 자리를 백업으로 바꾼다(기존은 백업 하나로 남긴다) — SnapshotStore.copy · SnapshotStore.restore. 목록은 SnapshotStore.list | 백업 이름  |
 | 9 | `close` · `open` | SessionManager.close · SessionManager.open — 그 존의 입장(흐름 3 의 3)을 차단하고 푼다. 붙어 있는 사람은 그대로다 | |
-| 10 | `kick <character>` | SessionManager.kick — 게이트웨이가 닫고(SessionRpc kick) 값을 언로드하고 세션을 지운다 게이트웨이에서는 Gateway.kick 이 그 Connection 을 닫는다(detach 를 보내지 않는다) |  |
-| 11 | `ban` · `unban` | Directory.ban · Directory.unban. ban 은 Directory.list 의 캐릭터마다 SessionManager.kick 도 한다 표의 줄은 Database.put · Database.remove |  |
+| 10 | `kick <character>` | SessionManager.kick — 게이트웨이가 닫고(SessionRpc kick) 값을 언로드하고 세션을 지운다. 게이트웨이에서는 Gateway.kick 이 그 Connection 을 닫는다(detach 를 보내지 않는다) |  |
+| 11 | `ban` · `unban` | Directory.ban · Directory.unban. ban 은 Directory.list 의 캐릭터마다 SessionManager.kick 도 한다. 표의 줄은 Database.put · Database.remove |  |
 | 11′ | `remove <instance>` | 인스턴스가 `stopped` 또는 `failed` 일 때만. Fleet.remove 가 Assignment.remove 로 표의 줄을 지운다. 올려 둔 Store 와 백업은 남는다 — 같은 이름으로 다시 띄우면 이어간다 | |
 | 12 | Operator | 답을 글 한 줄로 | 운영자 ◇ |
 

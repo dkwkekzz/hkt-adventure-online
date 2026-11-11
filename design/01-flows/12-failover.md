@@ -22,7 +22,7 @@ SessionManager.tick 이 본 게이트웨이의 끊김                           
 | 1 | Fleet.exited(instance, code) | 내리는 가운데였으면 `stopped`(값은 이미 거뒀다), 아니면 `failed` 와 셈 하나. 코드 2 면(같은 인자로 다시 띄워도 같다) 셈을 한계 위로 | Instance |
 | 1′ | Fleet.tick | 보고가 끊긴 Node 의 Instance 를 전부 `failed` 로 하고 Node 를 지운다 | |
 | 2 | Fleet → CharacterStore.expire(instance) | 그 인스턴스가 든 lease 를 전부 비운다. 값은 마지막으로 저장한 것이다 | |
-| 3 | Fleet → SessionManager.failover(instance) | Presence.of 의 캐릭터마다 같은 존의 다른 인스턴스로 SessionManager.transfer — 언로드(흐름 10 의 3)는 건너뛴다. 배정되면 게이트웨이가 뒤를 바꿔 잇는다 | 사람이 다시 배정된다 |
+| 3 | Fleet → SessionManager.failover(instance) | Presence.of 의 캐릭터마다 같은 존의 다른 인스턴스로 SessionManager.transfer — 언로드(흐름 10 의 3)는 건너뛴다. 배정되면 게이트웨이가 뒤를 바꿔 잇는다 그동안 게이트웨이의 Connection 은 `rerouting` 으로 클라이언트의 소켓을 든 채 기다린다(흐름 9 의 규칙). `grace` 인 Session 은 옮기지 않고 지운다 — 값은 스토리지에 있다 | 사람이 다시 배정된다  |
 | 4 | SessionManager → SessionRpc kick | 배정할 슬롯이 없는 캐릭터는 게이트웨이가 닫고(1001) 세션을 지운다. 클라이언트는 다시 입장한다(흐름 3 — 대기열일 수 있다) ✕ | |
 | 5 | Fleet → Fleet.launch | 셈이 한계(`restartLimit`) 안이면 같은 이름으로 다시 띄운다(같은 Store 자리 — 호스트의 마지막 저장에서 이어간다). 넘으면 `failed` 로 두고 운영자가 본다 | |
 | 6 | SessionManager.tick | heartbeat 가 끊긴 게이트웨이의 캐릭터마다 SessionManager.disconnect — 재접속 유예가 걸린다. 클라이언트는 다른 게이트웨이로 다시 들어온다 | ⇒ 흐름 11 |
