@@ -80,7 +80,7 @@
 | API 서버 api | 계정 · 스토리지(Database · LeaderLock 의 holder) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
 | 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) · 스토리지(LeaderLock 의 holder) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
 | 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issueWith · verify) · 스토리지(Database · CharacterStore · SnapshotStore 의 주인 · 백업 · LeaderLock) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
-| 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issue — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
+| 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issueWith — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
 
 - 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
 - 뷰어의 묶음 · 실물은 API 서버의 Static 이 준다. 앞에 캐시(CDN)를 두어도 모양은 같다.
@@ -164,7 +164,7 @@
 | SnapshotStore · Database · CharacterStore · LeaderLock | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease · 활성 컨트롤 플레인의 잠금 | `protocol/storage.ts` |
 | Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
 
-- 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 다섯(instances · launch · load · unload · reload)을, 플릿은 세션 모듈이 내놓은 기능 여섯(transfer · failover · migrate · reconcile · count · waiting)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
+- 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 여섯(instances · instance · launch · load · unload · reload)을, 플릿은 세션 모듈이 내놓은 기능 여섯(transfer · failover · migrate · reconcile · count · waiting)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
 - SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름과 세대로, load · unload · reload 는 캐릭터와 일의 번호(term 과 그 활성이 올리는 수)로, attach · detach 는 캐릭터와 게이트웨이의 이름으로 알아본다(이미 된 것이면 됨을 답하고, 지난 번호의 것이면 버린다).
 - 컨트롤 플레인이 보내는 글에는 term 이 실린다(흐름 13). 받는 쪽은 더 작은 term 의 글을 버린다.
 - 노드와 게이트웨이는 든 것을 간격마다 전부 알린다(heartbeat). 컨트롤 플레인은 그 보고와 제 표를 맞춘다(흐름 5) — 글 하나가 사라져도 한 주기 뒤에는 맞는다. 인스턴스에 닿는 글에는 세대(epoch)가 실리고, 표와 다른 세대의 것은 버려진다.

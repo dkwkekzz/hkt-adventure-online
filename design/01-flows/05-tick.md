@@ -25,7 +25,7 @@
          Session 의 만료 — pending 은 지우고 grace 는             ⇒ 흐름 11 의 4
          Queue.next × 슬롯이 난 존 · Queue.stale ── Queue.drop
          heartbeat 가 끊긴 게이트웨이                              ⇒ 흐름 12 의 6
-       Service → Directory.sweep — 하루에 한 번                  [앱 → 계정]
+       Service → Directory.sweep · SessionManager.sweep — 하루에 한 번   [앱 → 계정 · 세션]
 게이트웨이
        Gateway.heartbeat ─► SessionManager.heartbeat           [게이트웨이 → 세션]
        Connection.ping × 접속
@@ -48,20 +48,20 @@
 |---|---|---|---|
 | 6 | Fleet.heartbeat(node, 보고) | 모르는 노드의 것이면(끊긴 것으로 보아 지웠다) register 를 다시 하라고 답한다. 같은 boot 의 순번이 앞에 받은 것보다 작으면 버린다. boot 가 바뀌었으면 순번을 새로 세고 그 노드에 걸린 since 를 전부 넘긴 것으로 본다(노드 에이전트가 다시 떴다 — 그 인스턴스들은 보고에 없고 7 ② 가 죽은 것으로 본다). Node 의 seen · closing. 보고된 Instance 의 state · players · lag · 포트(줄에 없으면 Assignment.put). 잡힌 슬롯이 0 이면(sessions 의 count) idle 셈 하나, 있으면 0. `unknown` 이던 것은 보고된 state 가 된다. `ready` 로 `stableMs` 를 버틴 인스턴스의 restarts 는 0 으로 | |
 | 7 | Fleet.heartbeat — 인스턴스를 맞춘다 | ① 보고된 인스턴스가 표에 없거나, 표의 노드 · 세대가 이것과 다르면 그 노드에 NodeRpc stop 을 discard 로 보낸다(다른 곳에 다시 떴거나 지워졌다 — 올리지 않고 내린다). ② 표에 이 노드의 도는 것으로 있는데 보고에 없거나 `failed` 로 보고되면 죽은 것이다 ⇒ 흐름 12. 이 판정은 그 인스턴스가 마지막으로 바뀐 뒤의 순번(Instance.since)을 넘긴 보고로만 한다(`starting` 은 띄움의 답이 준 순번 뒤부터). ③ 내리는 가운데(`stopping`)인데 `ready` 로 보고되면 stop 을 다시 보낸다. `stopping` 이던 것이 보고에서 사라지면 죽은 것이 아니라 내려간 것이다 — 줄을 `stopped` 로 적는다(알림이 사라졌다). ④ 표에 `failed` 인데 같은 노드 · 같은 세대로 `ready` 라고 알리면(보고가 끊겼다 돌아왔고 아직 다시 띄우지 않았다) 줄을 도는 것으로 되돌린다 — 든 캐릭터는 이미 lease 를 잃어 2 가 지운다. 표에 `stopped` 인데 돈다고 알리면 stop 을 다시 보낸다 | |
-| 8 | Fleet → SessionManager.reconcile(instance, loaded) | 로드된 캐릭터들을 세션과 맞춘다. ① 로드돼 있는데 그 인스턴스를 가리키는 세션(instance 또는 to)이 없으면 Fleet.unload — 값을 저장하고 lease 를 푼다(일의 번호는 세션이 없어도 세션 모듈이 낸다). ② `active` · `grace` 인 세션이 그 인스턴스를 가리키는데 로드돼 있지 않으면 세션을 지우고 SessionRpc kick(1001)을 보낸다. busy 인 세션은 건너뛰고, 둘 다 그 세션이 마지막으로 바뀐 뒤의 순번(Session.since 의 node)을 넘긴 보고로만 한다 | 세션 없이 lease 를 쥔 캐릭터가 없다 |
+| 8 | Fleet → SessionManager.reconcile(instance, loaded) | 로드된 캐릭터들을 세션과 맞춘다. ① 로드돼 있는데 그 인스턴스를 가리키는 세션(instance 또는 to)이 없으면 Fleet.unload — 값을 저장하고 lease 를 푼다(일의 번호는 세션이 없어도 세션 모듈이 낸다). ② `active` · `grace` 인 세션이 그 인스턴스를 가리키는데 로드돼 있지 않으면 세션을 지우고 SessionRpc kick(1001)을 보낸다. busy 인 세션은 건너뛰고, ② 는 그 세션이 마지막으로 바뀐 뒤의 순번(Session.since 의 node)을 넘긴 보고로만 한다. ① 은 그 캐릭터의 세션이 이 노드의 인스턴스를 가리킬 때만 since 를 본다 — 다른 노드에 있는 세션이면 이 노드의 것은 묵은 묶음이고 바로 언로드시킨다(노드마다 순번이 따로다) | 세션 없이 lease 를 쥔 캐릭터가 없다 |
 
 ### C 컨트롤 플레인 — 제 박자
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 9 | Fleet.tick | tick 사이가 제 간격보다 크게 벌어졌으면(프로세스가 멈췄다 깼다) 아무것도 판정하지 않고 LeaderLock.renew 부터 한다 — 거절되면 물러나고(흐름 13 의 10), 되면 settling 으로 돌아가 보고를 다시 모은다. 그렇지 않으면 보고가 한계(`reportLimitMs`)를 넘겨 끊긴 Node 는 흐름 12 | |
-| 10 | Fleet.tick → Fleet.launch | 존마다, 빈 슬롯의 합(Zone.capacity × 인스턴스 수 − 잡힌 슬롯 — sessions 의 count)이 Zone.spare 보다 작거나 대기열에 사람이 있으면(sessions 의 waiting) 한계 안의 `failed` 인스턴스가 있으면 먼저 그 이름으로 다시 띄운다(흐름 12 의 5 가 끊겼던 것). 그 밖에는 하나 더 띄운다 — 빌드는 설정의 `build`(새 사람을 받는 빌드), 대기열의 사람의 빌드가 다르면 그것으로도. 지연(lag)이 한계를 넘었거나 `draining` 인 인스턴스는 빈 슬롯이 없는 것으로 센다 | Instance |
+| 9 | Fleet.tick | tick 사이가 제 간격보다 크게 벌어졌으면(프로세스가 멈췄다 깼다) 아무것도 판정하지 않고 LeaderLock.renew 부터 한다 — 거절되면 물러나고(흐름 13 의 10), 되면 settling 으로 돌아가 보고를 다시 모은다. 그렇지 않으면 보고가 한계(`reportLimitMs`)를 넘겨 끊긴 Node 는 흐름 12. 단, 한 tick 에 노드의 큰 몫(`massLoss`)이 한꺼번에 끊겨 보이면 죽음을 판정하지 않는다 — 끊긴 것은 이쪽일 수 있다. settling 으로 돌아가 보고를 다시 모으고, 한계(`settleMs`)가 지나도 돌아오지 않으면 LeaderLock.resign 으로 물러나 대기에게 넘긴다(다시 활성이 된 쪽은 흐름 13 의 9 로 판정한다) | |
+| 10 | Fleet.tick → Fleet.launch | 존마다, 빈 슬롯의 합(Zone.capacity × 인스턴스 수 − 잡힌 슬롯 — sessions 의 count)이 Zone.spare 보다 작거나 대기열에 사람이 있으면(sessions 의 waiting) `failed` 인 줄에 lease 를 끊었다는 표시(expired)가 없으면 CharacterStore.expire 를 다시 한다(흐름 12 의 2 가 실패했던 것). 한계 안의 `failed` 인스턴스가 있으면 먼저 그 이름으로 다시 띄운다(흐름 12 의 5 가 끊겼던 것). 운영자가 붙든 것(held)은 띄우지 않는다. 그 밖에는 하나 더 띄운다 — 빌드는 설정의 `build`(새 사람을 받는 빌드), 대기열의 사람의 빌드가 다르면 그것으로도. 지연(lag)이 한계를 넘었거나 `draining` 인 인스턴스는 빈 슬롯이 없는 것으로 센다 | Instance |
 | 11 | Fleet.tick → Fleet.terminate | idle 이 한계(`idleLimit`)를 넘었고 내려도 그 존의 예비 용량이 남는 인스턴스, 그리고 `draining` 이고 잡힌 슬롯이 0 인 인스턴스를 내린다. `stopping` 으로 하고 NodeRpc stop. 표의 줄을 `stopped` 로 적는 것은 노드가 Store 를 올리고 알린 뒤다(흐름 12 의 1) | ⇒ 흐름 7 의 3 |
 | 11′ | Fleet.tick → SessionManager.migrate | `draining` 인 인스턴스와 내려가는 노드(Node.closing)의 인스턴스마다, 아직 남은 세션을 다시 옮겨 본다(흐름 10 의 2 부터) | |
 | 12 | SessionManager.tick | `pending` 인 채 만료된 Session 은 지운다(그 사이 로드됐다면 8 이 언로드한다). `grace` 가 만료된 Session 은 흐름 11 의 4 로 | |
-| 13 | SessionManager.tick → Queue.next · Queue.stale · Queue.drop | 슬롯이 난 존마다 맨 앞을 꺼내 입장의 검사(흐름 3 의 2 ~ 4 — 지워진 캐릭터 · 차단된 계정 · 닫힌 존 · 그 계정의 다른 세션)를 다시 하고, 지나면 Session 을 `pending` 으로 잡는다. 지나지 못하면 버리고 다음 사람. 물은 지 한계(`queueMs`)를 넘긴 캐릭터는 줄에서 뺀다 — 창을 닫은 사람이 줄에 남지 않는다 | |
-| 14 | SessionManager.tick | heartbeat 가 한계(`gateLimitMs`)를 넘겨 끊긴 게이트웨이는 흐름 12 의 6 | |
-| 15 | Service → Directory.sweep | 하루에 한 번, 캐릭터가 없고 오래(`accountIdleDays`) 오지 않은 계정을 지운다. 줄이 없는 캐릭터의 값이 남아 있으면 그것도 지운다(SessionManager.forget) | |
+| 13 | SessionManager.tick → Queue.next · Queue.stale · Queue.drop | 슬롯이 난 존마다, 슬롯이 난 인스턴스의 빌드의 사람을 앞에서부터 찾아 꺼내(Queue.next) 입장의 검사(흐름 3 의 2 ~ 4 — 지워진 캐릭터 · 차단된 계정 · 닫힌 존 · 그 계정의 다른 세션)를 다시 하고, 지나면 Session 을 `pending` 으로 잡는다. 지나지 못하면 버리고 다음 사람. 물은 지 한계(`queueMs`)를 넘긴 캐릭터는 줄에서 뺀다 — 창을 닫은 사람이 줄에 남지 않는다 | |
+| 14 | SessionManager.tick | heartbeat 가 한계(`gateLimitMs`)를 넘겨 끊긴 게이트웨이는 흐름 12 의 6. 게이트웨이의 큰 몫이 한꺼번에 끊겨 보이면 9 와 같이 판정하지 않는다 | |
+| 15 | Service → Directory.sweep | 하루에 한 번, 캐릭터가 없고 오래(`accountIdleDays`) 오지 않은 계정을 지운다. SessionManager.sweep 은 줄은 지웠으나 값을 지우지 못한 캐릭터(표 `forgotten`)의 값을 다시 지운다 | |
 
 ### D 게이트웨이
 
@@ -85,7 +85,7 @@
 - 도는 인스턴스의 Store 자리를 그대로 올리지 않는다. 올리는 것은 엔진이 창 끝에 `backup` 으로 낸 사본이다 — 언제나 한 저장의 것이다. 사람이 늘 있어 내려가지 않는 인스턴스도 백업이 선다.
 - NPC 에이전트는 늘 붙어 있다. 쉼은 사람의 세션으로만 센다.
 - 예비 용량(Zone.spare)은 입장이 띄움을 기다리지 않게 미리 띄워 두는 것이다. 존의 마지막 인스턴스는 사람이 없어도 예비 용량이 0 이 아니면 남는다.
-- 보고에는 그 프로세스가 뜬 때의 표지(boot)와 순번이 있다. 프로세스가 다시 뜨면 표지가 바뀌고 순번은 새로 센다. 노드 · 게이트웨이가 한 일의 답(띄움 · 로드 · 언로드 · attach)에 그때의 순번이 실려 오고, 컨트롤 플레인은 그것을 그 인스턴스 · 세션의 since 로 적는다. 지우는 맞춤(7 ② · 8 · 16 ② ~ ④)은 since 를 넘긴 보고로만 한다 — 일이 끝나기 전에 지은 보고가 늦게 닿아도 방금 로드한 세션을 지우거나 방금 뜬 인스턴스를 죽은 것으로 보지 않는다.
+- 보고에는 그 프로세스가 뜬 때의 표지(boot)와 순번이 있다. 프로세스가 다시 뜨면 표지가 바뀌고 순번은 새로 센다. 노드 · 게이트웨이가 한 일의 답(띄움 · 로드 · 언로드 · attach)에 그때의 순번이 실려 오고, 컨트롤 플레인은 그것을 그 인스턴스 · 세션의 since 로 적는다. 지우는 맞춤(7 ② · 8 · 16 ② ~ ⑤)은 since 를 넘긴 보고로만 한다 — 일이 끝나기 전에 지은 보고가 늦게 닿아도 방금 로드한 세션을 지우거나 방금 뜬 인스턴스를 죽은 것으로 보지 않는다.
 - 노드의 heartbeat 는 저장과 따로 간다. 스토리지가 느리거나 끊겨도 노드는 살아 있다고 알리고, 컨트롤 플레인은 그 노드를 죽은 것으로 보지 않는다.
 - 컨트롤 플레인이 막 바뀐 동안(settling)에는 9 ~ 11′ 을 하지 않는다(흐름 13).
 

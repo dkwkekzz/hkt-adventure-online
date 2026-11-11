@@ -36,9 +36,9 @@ Gateway ← Service(게이트웨이)
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷 | 그대로 |
-| SessionRpc attach | 게이트웨이 → 컨트롤 플레인 | Character.id · 게이트웨이의 이름 · seq | `{instance, address, token}` 또는 까닭 |
+| SessionRpc attach | 게이트웨이 → 컨트롤 플레인 | Character.id · 게이트웨이의 이름 · boot · seq | `{instance, address, token}` 또는 까닭 |
 | SessionRpc detach | 게이트웨이 → 컨트롤 플레인 | Character.id · 게이트웨이의 이름 | 없음 |
-| SessionRpc heartbeat | 게이트웨이 → 컨트롤 플레인 | 순번(seq) · 게이트웨이의 이름 · 주소 · closing · 접속마다 {Character.id, 이어진 인스턴스} | 없음 |
+| SessionRpc heartbeat | 게이트웨이 → 컨트롤 플레인 | boot · 순번(seq) · 게이트웨이의 이름 · 주소 · closing · 접속마다 {Character.id, 이어진 인스턴스} | 없음 |
 | SessionRpc reroute | 컨트롤 플레인 → 게이트웨이 | Character.id · instance · address · token · term | 없음 |
 | SessionRpc kick | 컨트롤 플레인 → 게이트웨이 | Character.id · 코드 · 까닭 · term | 없음 |
 

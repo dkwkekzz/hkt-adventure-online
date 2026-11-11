@@ -24,7 +24,7 @@ Gateway.accept                                          [게이트웨이]
 | 1 | Gateway.accept(socket) | 한 주소에서 연 접속이 한계를 넘으면 받지 않는다(RateLimiter.admit). 소켓이 열리고 한계(`helloMs`) 안에 첫 글이 없거나, 첫 글이 `Host 2` 가 아니거나, 토큰이 틀리면 닫는다(4001 · 4002) ✕. 같은 캐릭터의 옛 Connection 은 닫는다(4000) | Character.id |
 | 2 | SessionManager.attach(character, gate) | 컨트롤 플레인에 닿지 않거나 표를 세우는 가운데(settling)면 게이트웨이가 1013(잠시 뒤 다시)으로 닫는다 ✕. 이 캐릭터의 Session 이 없으면(입장을 지나지 않았거나 만료) 거절 ✕ — 4002 | Session |
 | 3 | SessionManager → Presence.get | 이 캐릭터가 다른 게이트웨이에 붙어 있으면 그 게이트웨이에 SessionRpc kick(4000)을 보내 옛 접속을 닫는다 — 세션은 그대로 두고 새 접속이 잇는다 | |
-| 4 | SessionManager | Session 의 Instance 가 ready 가 아니면(그 사이 죽었거나 내려갔다) 같은 존에서 다시 고르고(흐름 3 의 5 · 6) 세션을 `pending` 으로 되돌린다 — 값은 새 곳에 없으므로 5 가 로드한다. 고를 인스턴스도 띄울 노드도 없으면 세션을 지우고 1013 ✕ — 돌아온 클라이언트는 대기열에 선다 | |
+| 4 | SessionManager | Session 의 Instance 가 ready 가 아니면(플릿의 instance — 그 사이 죽었거나 내려갔다. `draining` 이어도 ready 면 그대로 잇는다) 같은 존에서 다시 고르고(흐름 3 의 5 · 6) 세션을 `pending` 으로 되돌린다 — 값은 새 곳에 없으므로 5 가 로드한다. 고를 인스턴스도 띄울 노드도 없으면 세션을 지우고 1013 ✕ — 돌아온 클라이언트는 대기열에 선다 | |
 | 5 | Fleet.load(instance, character, spot) → NodeAgent.load | Session 이 `pending` 일 때만. `grace`(재접속 유예 안에 다시 왔다)와 `active`(다른 접속이 잇고 있었다)는 값이 이미 그 인스턴스에 있으므로 건너뛴다. 글에 일의 번호(세션 모듈의 ops 를 하나 올린 것과 term)를 싣는다 |  |
 | 6 | NodeAgent → CharacterStore.checkout(character, holder, file) | lease 를 받고 값을 캐릭터 파일에 내려 받는다. lease 의 번호를 파일 옆에 적는다. 남이 들고 있으면 거절 ✕ — Session 을 지우고 4002. 죽은 인스턴스의 lease 가 아직 비지 않았거나(흐름 12 가 비운다) 떠난 값이 아직 저장되지 않은 때다(흐름 5 의 3) | Lease |
 | 7 | NodeAgent → GameServer.load(character, file, lease, spot) | 로드의 Console 글. 엔진이 파일의 값으로 그 캐릭터의 묶음을 세운다 — 파일이 없으면(처음) 틀에서 낳는다. 엔진이 거절하면(값이 깨졌거나 얼개가 다르다) CharacterStore.release 로 lease 만 풀고 Session 을 지우고 4002 ✕ — 기록에 남기고 운영자가 `rollback` 으로 고친다(흐름 6) | 묶음이 인스턴스에 |

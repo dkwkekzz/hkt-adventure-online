@@ -19,13 +19,13 @@ Api characters · create · choose · delete                        [앱 — API
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
 | 1 | Signer.verify(token) | 서명과 만료. 틀리거나 계정의 토큰이 아니면 거절 ✕ 계정마다의 요청이 한계(`apiRate`)를 넘으면 거절 ✕ | Account.id  |
-| 2 | Directory.banned(account) | 차단됐으면 거절 ✕. 계정의 줄이 없으면(닫혔다) 거절 ✕ |  |
+| 2 | Directory.banned(account) | 차단됐으면 거절 ✕. Directory.exists — 계정의 줄이 없으면(닫혔다) 거절 ✕ |  |
 | 3 | `characters` → Directory.list(account) | 그 계정의 캐릭터들(Character.id · 이름) | 목록 ◇ |
 | 4 | `create` → Directory.create(account, name) | 이름의 모양이 틀리거나 한계(`characterLimit`)를 넘으면 거절 ✕. 새 Character.id 를 짓고 적는다 | Character ◇ |
 | 5 | `choose` → Directory.owns(account, character) | 그 계정의 것이 아니면 거절 ✕ | |
 | 6 | `choose` → Signer.issue(character) | 캐릭터의 토큰 — 수명은 짧게(`characterTtl`) | Token ◇ |
 
-| 7 | `delete` → SessionRpc forget ─ SessionManager.forget(account, character) | 컨트롤 플레인이 한 번에 한다. 그 계정의 것이 아니면 거절 ✕. 세션이 있으면(놀고 있거나 재접속 유예) 거절 ✕. 캐릭터의 줄을 지우고(Directory.remove — 이때부터 그 캐릭터의 입장은 흐름 3 의 2 에서 거절된다) CharacterStore.erase 로 값과 이력을 지우고 마지막 존을 지우고 대기열에서 뺀다. 어느 인스턴스가 lease 를 들고 있어 값을 지우지 못하면(저장하지 못한 값을 노드가 쥐고 있다) 줄은 지워진 채 남고 값은 그 저장이 끝난 뒤 흐름 5 의 15 의 쓸기가 지운다 | ◇ |
+| 7 | `delete` → SessionRpc forget ─ SessionManager.forget(account, character) | 컨트롤 플레인이 한 번에 한다. 그 계정의 것이 아니면 거절 ✕. 세션이 있으면(놀고 있거나 재접속 유예) 거절 ✕. 캐릭터의 줄을 지우고(Directory.remove — 이때부터 그 캐릭터의 입장은 흐름 3 의 2 에서 거절된다) CharacterStore.erase 로 값과 이력을 지우고 마지막 존을 지우고 대기열에서 뺀다. 어느 인스턴스가 lease 를 들고 있어 값을 지우지 못하면(저장하지 못한 값을 노드가 쥐고 있다) 표 `forgotten` 에 적어 두고 흐름 5 의 15 가 다시 지운다. 컨트롤 플레인이 표를 세우는 가운데(settling)면 「잠시 뒤 다시」 | ◇ |
 | 8 | `close` → Directory.close(account) | 계정을 닫는다. 캐릭터가 남아 있으면 거절 ✕ — 먼저 지운다. 계정의 줄과 신원의 줄이 지워진다 | ◇ |
 
 ## 멈추는 자리

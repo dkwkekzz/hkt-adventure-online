@@ -21,16 +21,16 @@ Operator.command                                        [앱 — 컨트롤 플�
 | 1 | Operator.command | `nodes` · `instances [zone]` · `status <instance>` · `start <zone\|instance>` · `drain <instance>` · `undrain <instance>` · `stop <instance>` · `host <instance> <Console 글>` · `remove <instance>` · `purge <instance>` · `backup <instance>` · `restore <instance> <백업>` · `close <zone>` · `open <zone>` · `versions <character>` · `rollback <character> <때>` · `cordon <node>` · `uncordon <node>` · `forget <node>` · `kick <character>` · `ban <account> <until>` · `unban <account>`. 모르는 글이면 쓰는 법. 글의 머리에 운영자의 토큰이 온다 — Signer.verify 로 풀어 운영자의 이름을 얻고(id 가 `o` 로 시작하고 설정의 `operators` 에 있는 이름만), 틀리면 거절 ✕. 명령마다 누가 · 언제 · 무엇을 Database.put(`audit`)으로 적는다 |  |
 | 2 | `nodes` · `instances` | Node 마다 이름 · slots · used · seen. Instance 마다 이름 · state · Node · 사람 수 · lag · why | 글 |
 | 3 | `status <instance>` | 그 Instance 의 전부와 Fleet.copies 의 백업 목록 | 글 |
-| 4 | `start <zone\|instance>` | 존이면 Fleet.launch(zone, 설정의 build). 인스턴스면 그 `failed` · `stopped` 인 것의 셈을 0 으로 하고 그 이름으로 Fleet.launch — 한계를 넘겨 멈춘 인스턴스를 다시 세우는 길이다 | |
+| 4 | `start <zone\|instance>` | 존이면 Fleet.launch(zone, 설정의 build). 인스턴스면 그 `failed` · `stopped` 인 것의 셈을 0 으로 하고 붙듦을 풀고 그 이름으로 Fleet.launch — 한계를 넘겨 멈춘 인스턴스를 다시 세우는 길이다 | |
 | 5 | `drain <instance>` | Fleet.drain 으로 `draining`(새 세션을 받지 않는다). SessionManager.migrate 가 그 인스턴스의 캐릭터를 같은 존의 다른 인스턴스로 옮긴다(흐름 10 의 2 부터). 비면 Fleet.terminate. 비었는가는 흐름 5 의 11 이 본다 — 옮길 슬롯이 없어 남은 사람은 스스로 나가거나 슬롯이 날 때까지 있는다. `undrain` 은 Fleet.undrain 으로 되돌린다. `draining` 은 표의 줄에 적혀 컨트롤 플레인이 바뀌어도 남는다 |  |
-| 6 | `stop <instance>` | Fleet.terminate 바로. 든 값은 언로드해 저장한다. 옮기지 않는다 — 붙어 있던 사람은 닫히고 다시 입장한다(흐름 5 의 8). 끊지 않고 비우려면 `drain` 이다 | |
+| 6 | `stop <instance>` | Fleet.terminate 바로. 든 값은 언로드해 저장한다. 옮기지 않는다 — 붙어 있던 사람은 닫히고 다시 입장한다(흐름 5 의 8). 끊지 않고 비우려면 `drain` 이다. 줄에 붙듦(held)을 적는다 — 붙든 인스턴스는 입장도 예비 용량도 다시 띄우지 않는다. `backup` · `restore` · `remove` 를 할 수 있고, `start <instance>` 가 붙듦을 풀고 띄운다 | |
 | 7 | `host <instance> <글>` | Fleet.command 로 그대로. 답 글을 돌려준다. `stop` 과 로드 · 언로드의 글은 넘기지 않는다 | 글 |
 | 8 | `backup` · `restore` | 인스턴스가 `stopped` 또는 `failed` 일 때만. Fleet.backup 은 백업 하나를, Fleet.restore 는 자리를 백업으로 바꾸고(기존은 백업 하나로 남긴다) 세대를 하나 올려 표와 Store 자리에 적는다 — 어느 서버에 남은 옛 자리보다 새것이 되어, 어디에 다시 뜨든 되돌린 것에서 선다 — SnapshotStore.copy · SnapshotStore.restore. 목록은 SnapshotStore.list. 컨트롤 플레인이 막 바뀌어 표를 세우는 동안(settling)과 `unknown` 인 인스턴스에는 `restore` · `remove` 를 받지 않는다 | 백업 이름   |
 | 9 | `close` · `open` | SessionManager.close · SessionManager.open — 그 존의 입장(흐름 3 의 4)과 사람이 건너오는 이동(흐름 10 의 2)을 차단하고 푼다. 붙어 있는 사람은 그대로다. 표 `zones` 에 적혀 컨트롤 플레인이 바뀌어도 남는다. 닫힌 존에서도 `drain` 은 사람을 옮긴다(흐름 10 의 2) |  |
 | 10 | `kick <character>` | SessionManager.kick — 게이트웨이가 닫고(SessionRpc kick) 값을 언로드하고 세션을 지운다. 게이트웨이에서는 Gateway.kick 이 그 Connection 을 닫는다(detach 를 보내지 않는다) |  |
 | 11 | `ban` · `unban` | Directory.ban · Directory.unban. ban 은 Directory.list 의 캐릭터마다 SessionManager.kick 도 한다. 표의 줄은 Database.put · Database.remove |  |
 | 11′ | `remove <instance>` | 인스턴스가 `stopped` 또는 `failed` 일 때만. Fleet.remove 가 Assignment.remove 로 표의 줄을 지운다. 올려 둔 Store 와 백업은 남는다 — 같은 이름으로 다시 띄우면 이어간다 | |
-| 11⁗ | `purge <instance>` | 줄이 지워진 인스턴스에만. Fleet.purge 가 그 Store 자리와 백업을 전부 지운다 — 뺀 존의 것이 남지 않게 | |
+| 11⁗ | `purge <instance>` | 줄이 지워진 인스턴스에만. Fleet.purge 가 그 Store 의 내용과 백업을 전부 지운다(세대는 남는다 — 그 이름을 다시 써도 앞의 것보다 크고, 어느 서버에 남은 옛 자리도 되살아나지 않는다) — 뺀 존의 것이 남지 않게 | |
 | 11″ | `versions` · `rollback` | SessionManager.versions 는 그 캐릭터의 지난 값의 때들. SessionManager.rollback 은 세션이 없을 때만 값을 그때로 되돌린다 — 깨진 값 · 잘못 사라진 것을 고치는 길이다 | 글 |
 | 11‴ | `cordon` · `uncordon` | Fleet.cordon 은 그 Node 에 새 인스턴스를 띄우지 않게 한다. 그 뒤 인스턴스마다 `drain` 하면 노드가 빈다 — 서버를 고치거나 엔진을 바꿀 때 | |
 | 12 | Operator | 답을 글 한 줄로 | 운영자 ◇ |
