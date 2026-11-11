@@ -30,4 +30,4 @@ stage 1 ~ 12 는 세계 하나 · 프로세스 하나의 서비스를 세웠다.
 | 18 책임 — 플릿 · 노드 | online | Runner · NodeReporter · Nodes · Reconciler 와 NodeRpc. 프로세스 넷으로 갈라 띄운다 | 두 서버의 노드가 한 컨트롤 플레인에 알리고, 한 서버를 끄면 사람이 다른 서버로 옮겨진다 | ☐ |
 | 19 앱 — Operator | online | 흐름 6 의 명령과 운영자의 토큰 · audit | `close` · `drain` 으로 엔진을 바꿔 띄우는 동안 사람이 끊기지 않는다 | ☐ |
 | 20 앱 — Elector | online | LeaderLock 과 term. 흐름 13 | 활성을 죽이면 대기가 잡고, 붙어 있던 사람은 끊기지 않는다 | ☐ |
-| 21 앱 — Monitor | online | `/health` · `/metrics`. 흐름 14 | 프로세스 넷의 `/metrics` 에 세션 수 · 틱 지연이 찍힌다 | ☐ |
+| 21 앱 — Monitor | online | 내부 주소의 `/health` · `/metrics` · `/observe` · `/observe/page`, `protocol/observe.ts` 의 흔적, design/01-flows 에서 뽑는 흐름의 지도, 단계마다의 Monitor.trace. `npm run index` 가 코드의 흔적 `(흐름, #)` 이 흐름에 있는가를 본다. 흐름 14 | 입장 한 번이 관측 페이지의 흐름 3 에 단계를 차례로 칠하고, 단위의 state 가 바뀐다(`npm run shot`). 프로세스 넷의 `/metrics` 에 세션 수 · 틱 지연이 찍힌다 | ☐ |
