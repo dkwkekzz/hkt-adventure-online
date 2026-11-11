@@ -17,7 +17,7 @@ stage 1 ~ 12 는 세계 하나 · 프로세스 하나의 서비스를 세웠다.
 | 5 책임 — 플릿 | online | Fleet · GameServer · Assignment · Ports · Spawner · Process · Probe · Clock · Operator. 흐름 3 · 4 · 5 · 6 이 선다 | 한 계정의 샤드를 띄워 브라우저가 요정 넷을 맡고 NPC 가 움직인다(`npm run shot`). `stop` 뒤 다시 띄우면 `저장된 세계에서 이어간다` | ☑ |
 | 6 앱 — main · Api | online | Service.start · stop, http 의 login · enter · 게스트 페이지, stdin 의 Operator. 흐름 1 · 2 · 7 이 선다 | 두 계정이 각자의 샤드에 붙고 서로 보이지 않는다. 쉬면 내려가고 다시 오면 이어진다 (`engine.spec.ts`) | ☑ |
 | 7 도구 — 경계 검사 | online | `src/tools/boundary` — 규칙 S · A · T · F · P · N · E. `npm run check` 의 앞단 | 규칙을 하나 어긴 import 를 넣으면 1 로 끝난다 (`src/tools/boundary/tests`) | ☑ |
-| 8 책임 — 스토리지 · 밖의 뒤 | online | 표는 DB, 값 · 디렉터리는 객체 저장소. SnapshotStore 의 pull · push · prune, Database 의 줄 하나씩(get · put). 모양은 `protocol/storage.ts` 그대로 | 다른 서버에서 같은 스토리지로 띄우면 이어진다 | ☐ |
+| 8 책임 — 스토리지 · MongoDB | online | Database · CharacterStore · LeaderLock 의 뒤를 MongoDB 로(`MONGODB_URI`), SnapshotStore 의 뒤를 object storage 로. 모양은 `protocol/storage.ts` 그대로. 런타임 의존 `mongodb` 드라이버가 는다 | 서비스를 내렸다 다른 서버에서 같은 MongoDB 로 띄우면 계정 · 캐릭터가 그대로다 | ☐ |
 | 9 책임 — 플릿 · 공용 정적 페이지 | online | 샤드는 엔진의 host(소켓만) + stdin grant, 뷰어는 Fleet.start 가 한 번 묶고 Static 이 `/play` · `/viewer.js` · `/assets` · `/keymap.json` 을 준다. 샤드를 한꺼번에 띄운다 | 서비스의 `/play?ws=` 뷰어가 다른 포트의 샤드에 붙는다(`npm run shot`). 두 샤드가 서로를 기다리지 않고 뜬다(`fleet.spec.ts`) | ☑ |
 | 10 책임 — 게이트웨이 | online | Gateway · Connection · RateLimiter 와 SessionRpc 소켓(attach · detach · reroute · kick). 흐름 9 · 11 이 선다. 호스트는 내부망에만 | 클라이언트가 게이트웨이의 주소 하나로 붙고, 세션 없이 붙으면 4002 | ☐ |
 | 11 책임 — 엔진의 사람의 묶음 | proto | 엔진 plan 260 — `--party` 의 틀에서 계정마다 묶음을 낳고 접속한 동안만 세계에(무대 밖). 엔진 `ONLINE.md` §1.3 · §3.2 ④ | 엔진의 `npm run check` — 숲길에서 계정 넷이 각자의 요정 넷을 받고 서로를 본다(`host/tests/party.spec.ts`) | ☑ |

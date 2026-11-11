@@ -5,7 +5,7 @@
 - 값의 안을 모른다. 표의 줄 · 파일 · 디렉터리를 통째로 다룬다.
 - 누가 어느 자리를 쓰는가를 모른다. 부르는 모듈이 안다.
 - 여러 프로세스 · 여러 서버가 같은 스토리지를 같이 쓴다. 그래서 표는 줄 하나씩, 캐릭터의 값은 lease 의 번호로 지킨다.
-- 뒤는 밖의 제품이다 — 표와 lease 는 DB, 값과 디렉터리는 객체 저장소. 개발의 뒤는 디렉터리 뿌리 하나다. 모양은 같다.
+- 뒤는 MongoDB 와 object storage 다 — 아래 「뒤」 절. 개발의 뒤는 디렉터리 뿌리 하나이고 모양은 같다.
 - 밖에 내보내는 것은 openStorage 하나다. 모양은 `protocol/storage.ts`.
 
 ```text
@@ -14,6 +14,21 @@ Database ← Service(API 서버 · 컨트롤 플레인)
 LeaderLock ← Service(컨트롤 플레인 · 노드 · 게이트웨이 · API 서버)
 CharacterStore ← Service(노드 · 컨트롤 플레인)
 ```
+
+## 뒤
+
+| 개념 | 뒤 | 어디에 |
+|---|---|---|
+| Database | MongoDB | 표 하나 = collection 하나 — `accounts` · `characters` · `bans` · `lastZone` · `instances`. 줄 하나 = document 하나(`_id` 가 key) |
+| CharacterStore | MongoDB | collection `characterValues` — 캐릭터마다 document 하나: 값(binary)과 lease `{holder, n, until}`. 값이 document 의 한계(16MB)를 넘으면 GridFS 에 두고 document 는 그 id 를 든다 |
+| LeaderLock | MongoDB | collection `locks` — 이름마다 document 하나 `{holder, term, until}` |
+| SnapshotStore | object storage(S3 호환) | 인스턴스의 Store 디렉터리와 그 백업. 파일이 크고 통째로 오르내린다 |
+
+- 접속 문자열은 환경변수 `MONGODB_URI`. 설정 파일에 두지 않는다(비밀이다).
+- 줄 하나의 쓰기는 document 하나의 원자적 갱신(`findOneAndUpdate`)이다. 여러 document 를 묶는 트랜잭션에 기대지 않는다.
+- lease 의 번호 대조(checkin)와 LeaderLock 의 잡기(acquire)는 조건을 건 갱신 하나다 — 조건이 맞는 document 가 없으면 거절이다.
+- 쓰기는 majority 로 확인받는다. MongoDB 는 replica set 으로 뜬다 — 서버 하나가 사라져도 lease 와 캐릭터의 값이 남아야 한다.
+- 게임 상태(세계의 안)는 MongoDB 에 풀어 넣지 않는다. 캐릭터의 값도 Store 도 서비스에게는 불투명한 덩어리다.
 
 ## 개념
 

@@ -60,7 +60,7 @@
        │ Database                │ SnapshotStore
        │ CharacterStore          │ CharacterStore
        ▼                         ▼
-┌ Storage (밖의 제품) — DB(표 · lease) + object storage(캐릭터의 값 · Store · 백업) ┐
+┌ Storage — MongoDB(계정 · 캐릭터 · 표 · lease · 캐릭터의 값) + object storage(Store · 백업) ┐
 ```
 
 ### 모듈 다섯
@@ -82,7 +82,7 @@
 | 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issue) · 스토리지(Database · CharacterStore · SnapshotStore 의 백업) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나. 존의 묶음마다 따로 둘 수 있다(세션 모듈의 표는 존마다 갈린다) |
 | 노드 에이전트 node | 플릿(NodeAgent) · 스토리지(SnapshotStore · CharacterStore) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
 
-- 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지는 밖의 제품이고 스토리지 모듈이 그 손이다.
+- 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
 - 뷰어의 묶음 · 실물은 API 서버의 Static 이 준다. 앞에 캐시(CDN)를 두어도 모양은 같다.
 - 넷을 한 프로세스에 조립한 것이 개발의 `main` 이다 — 소켓이 함수 부름이 될 뿐 흐름은 같다.
 
@@ -134,7 +134,7 @@
 │  인스턴스 × 코어 — 호스트 + NPC 에이전트           │
 └───────┬─────────────────────────────────────────┘
         ▼
-┌ Storage — DB(표 · lease) + object storage(캐릭터의 값 · Store · 백업) ┐
+┌ Storage — MongoDB replica set(계정 · 캐릭터 · 표 · lease · 캐릭터의 값) + object storage(Store · 백업) ┐
 ```
 
 | 규모 | 올리는 법 |
