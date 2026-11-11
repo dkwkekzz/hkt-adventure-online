@@ -5,17 +5,18 @@
 
 ```text
 design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연결 여덟) · 앱(README.md), 쓰는 방식(method.md), 흐름 열넷(01-flows/), 책임 다섯(02-roles/), 피드백(00-feedback/). src 가 아직 따라오지 않은 것은 plan 의 ☐
-plan/         design 을 src 에 세우는 순서와 상태. 다음 단계는 진행표의 첫 ☐ · ◐
+plan/         design 을 src 에 세우는 순서와 상태. plan 하나 = 파일 하나(README.md 가 진행표). 다음은 진행표의 첫 ☐ · ◐
 notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
-  protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · vault(Vault · Ledger) · operator. 타입 · 데이터뿐, 아무것도 import 하지 않는다
+  protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · vault(Vault · Ledger) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, 아무것도 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Signer · Identity · Account · Token
   storage/    저장장치 (design/02-roles/storage.md) — Vault · Ledger. 밖에 내보내는 것은 openVault 하나
   fleet/      함대 (design/02-roles/fleet.md) — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator
-  apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · /health · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
-  tools/      boundary(경계 검사) · index(설계 색인) · shot(화면 확인, 검사 밖)
+  apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
+              Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design/01-flows 에서 뽑는 흐름의 지도) · monitor-page(관측 페이지)
+  tools/      boundary(경계 검사) · index(설계 색인 · 코드의 흔적이 흐름에 있는가) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
-service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데이터셋 · 사람의 묶음의 틀(party) · 동시 접속 상한(capacity) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 한계 · 주기. 게임 명사는 여기에만
+service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데이터셋 · 사람의 묶음의 틀(party) · 동시 접속 상한(capacity) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · Monitor 의 포트 · 흔적의 상한 · 한계 · 주기. 게임 명사는 여기에만
 ```
 
 ## 지키는 것
@@ -27,7 +28,8 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
 - **엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리뿐이다**(`ONLINE.md` §3.2). 엔진 저장소에 PR 로 들고, 들어간 커밋을 `engine.lock` 에 핀한다.
 - **확인한 것만 실행 근거로 쓴다.** 실행한 검증과 예상만 한 것을 구분해 보고한다. 화면이 직관 확인이면 그 세션에서 `npm run shot` 으로 찍어 보인다.
 - 문서와 코드 주석은 한국어, 파일 이름은 영어. Human 에게 하는 답변도 한국어.
-- 살아 있는 문서(CLAUDE.md · README · design)에는 현재 상태만 적는다. 경위는 git 이 든다.
+- **흐름의 단계는 흔적을 남긴다.** 단계를 부른 자리가 `trace({ flow, step, … })` 또는 `mark(flow, step, …)` 로 — `(흐름, #)` 은 흐름 표의 #. `npm run index` 가 흐름에 없는 흔적을 잡는다. 흔적에 계정 · 캐릭터의 이름과 토큰을 싣지 않는다.
+- 살아 있는 문서(CLAUDE.md · README · design · plan)에는 현재 상태만 적는다. 경위는 git 이 든다.
 
 ## 경계
 
@@ -53,10 +55,11 @@ npm install            의존(tsx · typescript · vitest). 런타임 의존은 
 npm run engine         engine.lock 의 커밋을 engine/ 에 세운다(git fetch --depth 1 + npm ci). ENGINE_REPO=로컬 클론 이면 거기서
 npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   ← 코드 손대면 이것
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
-npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍는다
+npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다
 HOST_AUTH_KEY=… npm start [-- config.json]
                        서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<세계>. 사람은 모두 같은 세계(설정의 world)에 붙고 계정마다 자기 묶음을 맡는다. 입장의 한계는 capacity 뿐. stdin 은 Operator(help).
-                       env: PORT(Api 포트) · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
-npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다)]
-                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를 찍는다(playwright 가 깔린 자리에서)
+                       관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 흐름 열넷의 지도 위에 단계의 흔적과 단위의 state 가 지금 칠해진다. /health · /metrics 도 거기.
+                       env: PORT(Api 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
+npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --viewer off]
+                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(playwright 가 깔린 자리에서)
 ```

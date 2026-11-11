@@ -1,9 +1,11 @@
-// 설계 색인 — npm run index [-- --quiet]. 흐름(design/01-flows)의 단계 `개념.기능` 이 전부 책임(design/02-roles · README 의 앱)에 있는가 (plan stage 2).
+// 설계 색인 — npm run index [-- --quiet]. 흐름(design/01-flows)의 단계 `개념.기능` 이 전부 책임(design/02-roles · README 의 앱)에 있는가 (plan 01).
 // 개념은 책임 파일의 `### <이름>` 머리, 기능은 그 개념의 `- 기능:` · `- 데이터:` 줄에 그 낱말이 있는가. 없으면 ✗ 를 찍고 1 로 끝난다.
+// 흔적(흐름 14) — src 의 코드(tests 밖)가 남기는 흔적 `(흐름, #)` 이 흐름의 표에 있는가도 본다(plan 02). 흔적은 `flow: N, step: M` 또는 `mark(N, M` 으로 쓴다.
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readMap } from '../../apps/main/map';
 
 export interface Concept {
   readonly name: string;
@@ -63,6 +65,41 @@ export function steps(design: string): Step[] {
   return out;
 }
 
+export interface TraceSite {
+  readonly file: string;
+  readonly flow: number;
+  readonly step: number;
+  readonly ok: boolean;
+}
+
+const TRACE = /\b(?:flow:\s*(\d+),\s*step:\s*(\d+)|mark\((\d+),\s*(\d+))/g;
+
+/** src(tests 밖)의 흔적 자리마다 — 그 (흐름, #) 이 design 의 흐름 표에 있는가. */
+export function traceSites(design: string, src: string): TraceSite[] {
+  const known = new Set<string>();
+  for (const f of readMap(design, src).flows) for (const s of f.steps) known.add(`${f.flow}.${s.step}`);
+  const out: TraceSite[] = [];
+  const walk = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir).sort()) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) {
+        if (name !== 'tests' && name !== 'node_modules' && name !== 'tools') walk(p);
+        continue;
+      }
+      if (!name.endsWith('.ts')) continue;
+      const code = readFileSync(p, 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const m of code.matchAll(TRACE)) {
+        const flow = Number(m[1] ?? m[3]);
+        const step = Number(m[2] ?? m[4]);
+        out.push({ file: relative(src, p).split('\\').join('/'), flow, step, ok: known.has(`${flow}.${step}`) });
+      }
+    }
+  };
+  walk(src);
+  return out;
+}
+
 const direct = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (direct) {
   const design = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'design');
@@ -78,5 +115,14 @@ if (direct) {
     console.log('');
   } else for (const s of bad) console.log(`✗ ${s.flow} ${s.concept}.${s.fn} — ${s.why}`);
   console.log(`색인 — 흐름 ${new Set(all.map((s) => s.flow)).size} · 단계 ${all.length} · 책임에 없는 것 ${bad.length}`);
-  if (bad.length > 0) process.exit(1);
+  const sites = traceSites(design, join(design, '..', 'src'));
+  const stray = sites.filter((t) => !t.ok);
+  for (const t of stray) console.log(`✗ ${t.file} 흔적 (${t.flow}, ${t.step}) — 흐름 ${t.flow} 의 표에 # ${t.step} 가 없다`);
+  if (!quiet) {
+    const by = new Map<number, Set<number>>();
+    for (const t of sites) by.set(t.flow, (by.get(t.flow) ?? new Set()).add(t.step));
+    for (const [flow, ss] of [...by].sort((a, b) => a[0] - b[0])) console.log(`  흔적 흐름 ${flow} — # ${[...ss].sort((a, b) => a - b).join(' · ')}`);
+  }
+  console.log(`흔적 — 자리 ${sites.length} · 흐름 ${new Set(sites.map((t) => t.flow)).size} · 흐름에 없는 것 ${stray.length}`);
+  if (bad.length > 0 || stray.length > 0) process.exit(1);
 }

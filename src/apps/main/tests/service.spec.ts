@@ -1,4 +1,4 @@
-// Service.start · Api login · enter · Service.stop (흐름 1 · 2 · 3 · 7) — 가짜 엔진 위에서, http 로.
+// Service.start · Api login · enter · Service.stop (흐름 1 · 2 · 3 · 7)과 그 흔적(흐름 14) — 가짜 엔진 위에서, http 로.
 
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +19,9 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), ports = portR
   return {
     storageRoot,
     apiPort: 0,
+    monitorPort: 0,
+    traceKeep: 200,
+    build: 'test',
     tokenTtl: 3600,
     agentTtl: 60,
     keymap: 'dataset/keymap.json',
@@ -63,10 +66,11 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     await expect(Service.start(config(), '')).rejects.toThrow(/HOST_AUTH_KEY/);
   });
 
-  it('GET / 는 게스트 페이지, /health 는 ok', async () => {
-    const { base } = await up();
+  it('GET / 는 게스트 페이지. /health 는 Api 에 없고 Monitor 의 내부 주소에', async () => {
+    const { s, base } = await up();
     expect(await (await fetch(base + '/')).text()).toContain('/login');
-    expect(await (await fetch(base + '/health')).text()).toBe('ok');
+    expect((await fetch(base + '/health')).status).toBe(404);
+    expect(await (await fetch(`http://localhost:${s.monitor.port}/health`)).text()).toBe('ok');
     expect((await fetch(base + '/nope')).status).toBe(404);
   });
 
@@ -129,17 +133,39 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(second.s.fleet.shardOf('main')?.resumed).toBe(true);
   });
 
+  it('Monitor.trace — 흐름 1 · 2 · 3 · 7 의 단계가 차례로 흔적을 남긴다. 한 입장은 run 하나로 Api · 함대를 잇는다', async () => {
+    const { s, post } = await up();
+    const steps = (flow: number, run?: string) => s.monitor.recent.filter((t) => t.flow === flow && (run === undefined || t.run === run)).map((t) => `${t.step}.${t.end}`);
+    expect(steps(1)).toEqual(['7.ok', '1.ok', '2.ok', '3.wait']);
+    const a = await post('/login', { provider: 'guest' });
+    expect(steps(2)).toEqual(['1.ok', '2.ok', '4.ok', '5.wait']);
+    await post('/enter', { token: a.body['token'] });
+    const run = s.monitor.recent.find((t) => t.flow === 3)!.run;
+    expect(steps(3, run)).toEqual(['1.ok', '2.ok', '14.ok', '11.ok', '15.ok', '16.ok', '17.ok', '18.ok', '19.ok', '9.wait']);
+    expect(s.monitor.units.get('main')).toMatchObject({ state: 'ready' });
+    await post('/enter', { token: 'nope' });
+    expect(s.monitor.tally.get('3.2.refused')).toBe(1);
+    expect(s.monitor.recent.every((t) => !JSON.stringify(t).includes(a.body['token']!) && !JSON.stringify(t).includes(a.body['subject']!))).toBe(true);
+    const monitor = s.monitor;
+    await s.stop();
+    const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);
+    expect(stop).toEqual(['4.stopping', '10.']);
+    expect(monitor.units.get('main')?.state).toBe('stopped'); // 흐름 4 의 5 — 호스트가 끝났다
+  });
+
   it('loadConfig — 상대 경로는 파일의 자리에서, env 가 몇 칸을 덮는다', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cfg-'));
     const file = join(dir, 'service.config.json');
     const c = config();
     const { pageUrl: _, ...fleet } = c.fleet;
     writeFileSync(file, JSON.stringify({ ...c, storageRoot: 'out/storage', fleet: { ...fleet, engineDir: 'engine', viewerOut: 'out/viewer/viewer.js' } }));
-    const read = loadConfig(file, { PORT: '9001', SERVICE_PUBLIC_HOST: 'play.test', SERVICE_SECURE: '1' });
+    const read = loadConfig(file, { PORT: '9001', MONITOR_PORT: '9002', SERVICE_PUBLIC_HOST: 'play.test', SERVICE_SECURE: '1' });
     expect(read.storageRoot).toBe(join(dir, 'out/storage'));
     expect(read.fleet.engineDir).toBe(join(dir, 'engine'));
     expect(read.fleet.viewerOut).toBe(join(dir, 'out/viewer/viewer.js'));
     expect(read.apiPort).toBe(9001);
+    expect(read.monitorPort).toBe(9002);
+    expect(read.build).toBe('-'); // 곁에 engine.lock 이 없다
     expect(read.fleet.publicHost).toBe('play.test');
     expect(read.fleet.secure).toBe(true);
     expect(read.fleet.pageUrl).toBe('https://play.test:9001/play');
