@@ -13,14 +13,13 @@
 
 ## 원칙
 
-1. 엔진과의 결합은 프로세스 경계다. CLI 인자 · stdin/stdout 글 · WebSocket JSON · Store 디렉터리 · 캐릭터 파일. 엔진 코드를 import 하지 않는다.
-2. 클라이언트가 아는 주소는 둘이다 — API 서버(http)과 게이트웨이(WebSocket). 호스트는 내부망에만 있다.
-3. 사람의 글이 지나는 길(클라이언트 ↔ 게이트웨이 ↔ 호스트)에는 모두가 지나는 프로세스가 없다. 컨트롤 플레인은 들어올 때 · 존을 옮길 때 · 떠날 때만 닿는다. 컨트롤 플레인이 잠시 없어도 붙어 있는 사람은 계속 논다.
-4. 오래 남아야 하는 상태는 스토리지에만 있다. API 서버 · 게이트웨이는 상태가 없어 수를 늘리면 되고, 컨트롤 플레인의 표는 스토리지와 노드 · 게이트웨이의 보고로 다시 선다. 표와 보고가 다르면 보고가 진실이다.
-5. 죽었다는 판정에는 증거가 둘 있어야 한다 — 바로 오는 보고의 끊김과, 그것이 스스로 스토리지에 남기는 표지의 낡음. 하나만으로는 아무것도 끊지 않는다.
-6. 캐릭터 하나는 한때에 호스트 하나만 든다. 그것을 지키는 것은 스토리지의 lease(Lease) 하나다.
-7. 상태를 바꾸는 것은 흐름의 단계만이다. 모듈은 자기 책임 문서의 개념만 알고, 다른 모듈은 소켓(`src/protocol/`) 하나로 만난다.
-8. 엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리를 채우는 것뿐이다(`ONLINE.md` §3.2).
+1. 개념 하나는 책임 하나다. 흐름 하나는 그런 개념들의 단계 n 개로 이루어진다 — 단계 하나 = 개념 하나의 기능 하나.
+2. 엔진과의 결합은 프로세스 경계다. CLI 인자 · stdin/stdout 글 · WebSocket JSON · Store 디렉터리 · 캐릭터 파일. 엔진 코드를 import 하지 않는다.
+3. 클라이언트가 아는 주소는 둘이다 — API 서버(http)와 게이트웨이(WebSocket). 호스트는 내부망에만 있다.
+4. 사람의 글이 지나는 길(클라이언트 ↔ 게이트웨이 ↔ 호스트)에는 모두가 지나는 프로세스가 없다. 컨트롤 플레인은 들어올 때 · 존을 옮길 때 · 떠날 때만 닿는다. 컨트롤 플레인이 잠시 없어도 붙어 있는 사람은 계속 논다.
+5. 오래 남아야 하는 상태는 스토리지에만 있다. API 서버 · 게이트웨이는 상태가 없어 수를 늘리면 되고, 컨트롤 플레인의 표는 스토리지와 노드 · 게이트웨이의 보고로 다시 선다.
+6. 캐릭터 하나의 값은 한때에 인스턴스 하나만 든다. 그것을 지키는 것은 스토리지의 lease 하나다.
+7. 엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리를 채우는 것뿐이다(`ONLINE.md` §3.2).
 
 ## 용어
 
@@ -29,14 +28,15 @@
 | 존(zone) | 닫힌 공간 하나. 데이터셋 하나와 설정 값(상한 · 예비 용량 · NPC 묶음)이다. 엔진에게는 세계 하나다 |
 | 인스턴스(instance) | 존 하나를 도는 것 하나 — 호스트 프로세스 하나 + NPC 에이전트 프로세스 하나 + Store 자리 하나. 이름은 `<존>-<번호>`. 같은 존의 다른 인스턴스에 있는 사람은 서로 보이지 않는다 |
 | 캐릭터 | 계정이 든 것 하나. 엔진이 명부에 적는 이름(`host.Account.id`)이 Character.id 다. 엔진에게는 사람의 묶음 하나다 |
-| 로드 · 언로드(load · unload) | 캐릭터의 값을 인스턴스에 올리는 것(load)과 인스턴스에서 내려 스토리지에 저장하는 것(unload). 값은 파일 하나(캐릭터 파일)이고 서비스는 안을 보지 않는다. 두 인스턴스 사이로 잇는 것이 핸드오프(handoff)다 |
 | 세션(session) | 캐릭터 하나가 인스턴스 하나에 배정되어 있는 것. 입장이 잡고(`pending`) 게이트웨이가 이으면(`active`) 끊긴 뒤 재접속 유예(`grace`)까지 산다. 인스턴스의 상한은 세션의 수로 센다 |
+| 로드 · 언로드 | 캐릭터의 값을 인스턴스에 올리는 것과, 인스턴스에서 내려 스토리지에 저장하는 것. 값은 파일 하나(캐릭터 파일)이고 서비스는 안을 보지 않는다 |
 | lease | 캐릭터의 값을 지금 누가(어느 인스턴스가) 들고 있는가. 번호가 늘기만 한다 |
 | 노드(node) | 인스턴스를 띄우는 서버 하나 |
+| 빌드 | 엔진의 커밋(`engine.lock`). 뷰어와 호스트는 같은 빌드끼리만 만난다 |
 
 ## 구조
 
-모듈(책임)과 프로세스(띄우는 단위)는 다르다. 모듈은 `src/<모듈>/` 의 코드이고, 프로세스는 `src/apps/` 가 모듈을 조립한 것이다. 모듈 하나가 여러 프로세스에 들고, 프로세스 하나가 여러 모듈을 든다.
+모듈은 책임의 묶음이고(`src/<모듈>/`), 개념은 책임 하나다(`src/<모듈>/<개념>.ts`). 프로세스는 `src/apps/` 가 개념을 조립해 띄우는 단위다. 한 모듈의 개념이 여러 프로세스에 갈려 살 수 있다.
 
 ```text
  Client (밖) — 브라우저 · 에이전트 · 다른 클라이언트
@@ -49,70 +49,76 @@
 ═══════╪══════════════════════════════════╪══════════════╪═════════  내부망
        ▼                                  ▼              │
 ┌ Control plane (control) × 1 (+ standby 1) ────┐        │
-│ session · fleet(Fleet) · Operator             │        │
+│ session · fleet(표 · 고르기) · Operator         │        │
 └──────┬─────────────────────────┬──────────────┘        │
        │                         │ NodeRpc               ▼
        │                 ┌ Node agent (node) × 서버 ────────────────┐
-       │                 │ fleet(NodeAgent)                         │
+       │                 │ fleet(프로세스 · 올리고 내리기)             │
        │                 │   인스턴스 × n                            │
        │                 │     호스트(엔진, 밖) ◄── Link             │
        │                 │     NPC 에이전트(엔진, 밖)                │
        │                 └──────┬───────────────────────────────────┘
-       │ Database                │ SnapshotStore
-       │ CharacterStore          │ CharacterStore
        ▼                         ▼
 ┌ Storage — MongoDB(계정 · 캐릭터 · 표 · lease · 캐릭터의 값) + object storage(Store · 백업) ┐
 ```
 
-### 모듈 다섯
+### 모듈 다섯과 그 개념
 
-| 모듈 | 하는 일 | 모르는 것 | 책임 |
+개념마다의 데이터 · 기능은 책임 문서가 든다. 여기는 무엇이 어디에 사는가만.
+
+| 모듈 | 개념 — 책임 하나 | 프로세스 | 책임 문서 |
 |---|---|---|---|
-| 계정 account | 신원을 계정과 캐릭터로 바꾼다. 토큰을 서명하고 푼다. 차단된 계정을 든다 | 존 · 인스턴스 · 프로세스 | [account.md](02-roles/account.md) |
-| 게이트웨이 gateway | 클라이언트의 소켓을 들고, 그 캐릭터가 배정된 호스트와 글을 그대로 넘긴다. 크기 · 빈도를 지킨다 | 글의 안. 어느 호스트로 갈지 정하는 법 | [gateway.md](02-roles/gateway.md) |
-| 세션 session | 캐릭터를 어느 존의 어느 인스턴스에 배정할지 정하고 기억한다. 세션 · 접속 표 · 대기열 | 프로세스를 띄우는 법. 캐릭터의 값 | [session.md](02-roles/session.md) |
-| 플릿 fleet | 인스턴스를 노드에 띄우고 지키고 내린다. 캐릭터의 값을 인스턴스에 로드 · 언로드한다 | 누가 누구인가. 세계 안 | [fleet.md](02-roles/fleet.md) |
-| 스토리지 storage | 서비스의 표 · 캐릭터의 값과 lease · 인스턴스의 Store 를 프로세스보다 오래 사는 자리에 둔다 | 값의 안. 누가 어느 자리를 쓰는가 | [storage.md](02-roles/storage.md) |
+| 계정 account | Directory — 신원을 계정으로 바꾼다 | api · control | [account.md](02-roles/account.md) |
+| | Characters — 계정의 캐릭터를 든다 | api · control | |
+| | Banlist — 차단된 계정을 든다 | api · control | |
+| | Signer — 토큰을 내고 푼다 | api · gateway · control · node | |
+| 게이트웨이 gateway | Acceptor — 새 소켓이 누구의 것인지 확인한다 | gateway | [gateway.md](02-roles/gateway.md) |
+| | Connection — 클라이언트의 소켓과 호스트의 소켓을 잇는다 | gateway | |
+| | RateLimiter — 글의 크기 · 빈도 · 접속 수를 지킨다 | gateway | |
+| | Keepalive — 죽은 선을 찾는다 | gateway | |
+| | GateReporter — 든 접속을 알린다 | gateway | |
+| 세션 session | Admission — 지금 들어와도 되는가를 본다 | control | [session.md](02-roles/session.md) |
+| | ZoneMap — 캐릭터가 설 존을 든다 | control | |
+| | Placer — 슬롯이 빈 인스턴스를 고른다 | control | |
+| | Sessions — 세션을 들고 슬롯을 센다 | control | |
+| | Queue — 슬롯을 기다리는 줄을 든다 | control | |
+| | Gates — 살아 있는 게이트웨이를 든다 | control | |
+| | Mover — 캐릭터를 인스턴스 사이로 옮긴다 | control | |
+| | Router — 게이트웨이에 뒤를 바꾸거나 닫으라고 알린다 | control | |
+| | Reconciler — 보고와 세션을 맞춘다 | control | |
+| 플릿 fleet | Registry — 인스턴스의 표를 든다 | control | [fleet.md](02-roles/fleet.md) |
+| | Nodes — 노드의 표와 살아 있음을 든다 | control | |
+| | Scheduler — 띄울 노드를 고른다 | control | |
+| | Scaler — 예비 용량을 맞춘다 | control | |
+| | Recoverer — 죽은 인스턴스의 뒤를 수습한다 | control | |
+| | Runner — 인스턴스의 프로세스를 띄우고 내린다 | node | |
+| | Spawner — 엔진 프로세스를 띄운다 | node · api(뷰어 묶기) | |
+| | Ports — 포트를 낸다 | node | |
+| | Probe — 호스트의 글 한 줄을 읽는다 | node | |
+| | Console — 호스트에 글을 쓰고 답을 받는다 | node | |
+| | Loader — 캐릭터의 값을 올리고 내린다 | node | |
+| | Backuper — Store 를 백업해 올린다 | node | |
+| | NodeReporter — 노드가 든 것을 알린다 | node | |
+| | Clock — 간격마다 부른다 | gateway · control · node | |
+| 스토리지 storage | Database — 표의 줄을 읽고 쓴다 | api · control | [storage.md](02-roles/storage.md) |
+| | CharacterStore — 캐릭터의 값을 둔다 | node · control | |
+| | Leases — 값을 지금 누가 들고 있는가를 든다 | node · control | |
+| | SnapshotStore — 인스턴스의 Store 와 백업을 둔다 | node · control | |
+| | LeaderLock — 활성 컨트롤 플레인이 하나임을 지킨다 | control(잡는다) · 나머지(찾는다) | |
+| 앱 | Service · Api · Static · Elector · Operator · Monitor | 아래 「앱」 | |
 
 ### 프로세스 넷
 
-| 프로세스 | 든 모듈 | 듣는 것 | 상태 | 늘리는 법 |
-|---|---|---|---|---|
-| API 서버 api | 계정 · 스토리지(Database · LeaderLock 의 holder) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
-| 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) · 스토리지(LeaderLock 의 holder · 표 `beacons`) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
-| 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issueWith · verify) · 스토리지(Database · CharacterStore · SnapshotStore 의 주인 · 백업 · LeaderLock) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
-| 노드 에이전트 node | 플릿(NodeAgent) · 계정(Signer 의 issueWith — NPC) · 스토리지(SnapshotStore · CharacterStore · LeaderLock 의 holder · 표 `beacons`) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
+| 프로세스 | 듣는 것 | 상태 | 늘리는 법 |
+|---|---|---|---|
+| API 서버 api | 밖의 http | 없음 | 수를 늘린다 |
+| 게이트웨이 gateway | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
+| 컨트롤 플레인 control | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 |
+| 노드 에이전트 node | 내부의 NodeRpc | 이 서버의 인스턴스 | 서버를 늘린다 |
 
-- 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
-- 뷰어의 묶음 · 실물은 API 서버의 Static 이 준다. 앞에 캐시(CDN)를 두어도 모양은 같다.
+- 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖).
 - 넷을 한 프로세스에 조립한 것이 개발의 `main` 이다 — 소켓이 함수 부름이 될 뿐 흐름은 같다.
-
-### 모듈이 프로세스에 드는 법
-
-모듈의 개념마다 어느 프로세스에 사는가. 한 모듈의 개념이 여러 프로세스에 갈려 살 수 있다.
-
-| 모듈 | 개념 | API 서버 | 게이트웨이 | 컨트롤 플레인 | 노드 |
-|---|---|---|---|---|---|
-| 계정 | Directory | ● | | ●(owner · banned · owns · remove · ban · unban · list · sweep) | |
-| 계정 | Signer | ●(issue · verify) | ●(verify) | ●(issueWith · verify — 운영자의 키로) | ●(issueWith — NPC) |
-| 게이트웨이 | Gateway · Connection · RateLimiter | | ● | | |
-| 세션 모듈 | SessionManager · Zone · Session · Presence · Queue | | | ● | |
-| 플릿 | Fleet · Node · Instance · Assignment | | | ● | |
-| 플릿 | NodeAgent · GameServer · Ports · Process · Probe | | | | ● |
-| 플릿 | Spawner | ●(bundle) | | | ●(host · agent) |
-| 플릿 | Clock | | ● | ● | ● |
-| 스토리지 | Database | ● | | ● | |
-| 스토리지 | LeaderLock | ●(holder) | ●(holder) | ●(acquire · renew · resign) | ●(holder) |
-| 앱 | Monitor | ● | ● | ● | ● |
-| 스토리지 | CharacterStore | | | ●(expire · erase · versions · rollback) | ●(checkout · checkin · release) |
-| 스토리지 | SnapshotStore | | | ●(claim · epochOf · copy · restore · list · purge) | ●(pull · push · epochOf · copy · prune) |
-| 앱 | Api · Static | ● | | | |
-| 앱 | Operator | | | ● | |
-
-- 같은 프로세스 안의 모듈은 앱이 넘긴 값(함수)으로 만난다 — 컨트롤 플레인 안의 세션 모듈 ↔ 플릿, API 서버 안의 Api → 계정.
-- 다른 프로세스의 모듈은 내부망의 소켓으로 만난다 — SessionRpc(API 서버 · 게이트웨이 ↔ 컨트롤 플레인) · NodeRpc(컨트롤 플레인 ↔ 노드). 선언은 같고 나르는 길만 다르다.
-- Clock 은 플릿의 개념이지만 간격마다 부르는 것뿐이다. 앱이 하나씩 만들어 그 프로세스의 tick · heartbeat · elect 에 건다 — 게이트웨이 모듈은 플릿을 import 하지 않는다.
-- 스토리지는 모든 프로세스가 같은 것을 본다. 프로세스끼리 값을 직접 주고받지 않고 스토리지를 사이에 두는 자리는 캐릭터의 값(CharacterStore)과 인스턴스의 Store(SnapshotStore)다.
+- 같은 프로세스 안의 개념은 앱이 넘긴 값(함수)으로 만나고, 다른 프로세스의 개념은 내부망의 소켓으로 만난다.
 
 ### 서버의 구성
 
@@ -158,18 +164,16 @@
 | 연결 | 방향 | 싣는 것 | 선언 |
 |---|---|---|---|
 | Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | `protocol/api.ts` |
-| Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다. 나머지는 그대로 | 엔진의 것 — `protocol/engine.ts` |
-| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget(캐릭터를 지운다). 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
-| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload · reload. 노드의 register · heartbeat · handoff · exited | `protocol/node.ts` |
-| Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 이동 요청 줄, 캐릭터 파일 | `protocol/engine.ts` |
-| SnapshotStore · Database · CharacterStore · LeaderLock | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease · 활성 컨트롤 플레인의 잠금 | `protocol/storage.ts` |
+| Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다 | 엔진의 것 — `protocol/engine.ts` |
+| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · report. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
+| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload. 노드의 register · report · handoff · exited | `protocol/node.ts` |
+| Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 떠남 줄, 캐릭터 파일 | `protocol/engine.ts` |
+| Storage | 개념 → 스토리지 | 표의 줄 · 캐릭터의 값 · lease · Store 와 백업 · 활성의 잠금 | `protocol/storage.ts` |
 | Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
 
-- 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 여섯(instances · instance · launch · load · unload · reload)을, 플릿은 세션 모듈이 내놓은 기능 여섯(transfer · failover · migrate · reconcile · count · waiting)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
-- SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름과 세대로, load · unload · reload 는 캐릭터와 일의 번호(term 과 그 활성이 올리는 수)로, attach · detach 는 캐릭터와 게이트웨이의 이름으로 알아본다(이미 된 것이면 됨을 답하고, 지난 번호의 것이면 버린다).
-- 컨트롤 플레인이 보내는 글에는 term 이 실린다(흐름 13). 받는 쪽은 더 작은 term 의 글을 버린다.
-- 노드와 게이트웨이는 든 것을 간격마다 전부 알린다(heartbeat). 컨트롤 플레인은 그 보고와 제 표를 맞춘다(흐름 5) — 글 하나가 사라져도 한 주기 뒤에는 맞는다. 인스턴스에 닿는 글에는 세대(epoch)가 실리고, 표와 다른 세대의 것은 버려진다.
-- 서명 키(`HOST_AUTH_KEY`)는 API 서버(계정 · 캐릭터의 토큰을 낸다) · 게이트웨이(푼다) · 컨트롤 플레인(호스트에 줄 토큰을 낸다) · 노드(호스트를 띄우고 NPC 의 토큰을 낸다)가 든다. 운영자의 토큰은 다른 키(`OPERATOR_KEY`)이고 컨트롤 플레인만 든다.
+- SessionRpc · NodeRpc 의 글마다 한계가 있다. 답이 없으면 실패로 치고 그 흐름의 「실패하면」으로 간다. 같은 글을 다시 보내도 결과가 같다.
+- 컨트롤 플레인이 보내는 글과 스토리지에 쓰는 것에는 term 이 실린다(흐름 13). 더 작은 term 의 것은 버려진다.
+- 서명 키(`HOST_AUTH_KEY`)는 API 서버 · 게이트웨이 · 컨트롤 플레인 · 노드가 든다. 운영자의 토큰은 다른 키(`OPERATOR_KEY`)이고 컨트롤 플레인만 든다.
 
 ### 엔진의 면
 
@@ -191,37 +195,42 @@
 
 ## 앱
 
-앱은 모듈이 아니라 프로세스(밖)의 조립이다. 흐름에서 트리거가 (밖)인 단계만 모듈에 닿는다(경계 규칙 P).
+앱은 모듈이 아니라 프로세스(밖)의 조립이다. 흐름의 머리(밖에서 온 것을 받는 단계)가 여기 있다.
 
 ### Service
-- 데이터: role:`api`|`gateway`|`control`|`node`|`main`(불변) · config(불변) · 그 role 이 든 모듈의 객체 · 듣는 서버.
-- 기능: start 는 흐름 1. stop 은 흐름 7. 두 번 불려도 한 번. elect 는 흐름 13 — 컨트롤 플레인만.
-- 생애: 프로세스가 만든다. 프로세스와 함께 사라진다.
+- 데이터: role:`api`|`gateway`|`control`|`node`|`main`(불변) · config(불변) · 그 role 의 개념들.
+- 기능: start 는 흐름 1. stop 은 흐름 7. 두 번 불려도 한 번.
+- 생애: 프로세스가 만든다.
 
 ### Api
-- 데이터: server(http) · port(불변) · files(Static) · build(불변, 이 서버의 빌드) · pageUrl(불변, 이 빌드의 뷰어 페이지 주소 — 그 빌드의 API 서버들만 받는다).
-- 기능: login 은 흐름 2. characters · create · choose · delete · close 는 흐름 8. enter 는 흐름 3 의 머리. `GET /` 는 들어가는 페이지 한 장. `GET /health` 는 이 프로세스가 듣는가. 그 밖의 GET 은 Static 에 묻는다.
-- 생애: API 서버의 Service.start 가 연다. Service.stop 이 닫는다.
-
-### Static
-- 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(묶은 viewer.js) · keymap(없으면 null). 전부 불변.
-- 기능: serve(path) 는 뷰어의 페이지 · 묶음 · 실물 · Keymap 을 준다. 뿌리 밖은 없다. 파일의 안은 보지 않는다.
+- 데이터: server(http) · build(불변, 이 서버의 빌드) · pageUrl(불변, 이 빌드의 뷰어 페이지 주소).
+- 기능: listen 은 http 를 연다. close 는 닫는다. login 은 흐름 2. characters · create · choose · delete 는 흐름 8. enter 는 흐름 3. `GET /` 는 들어가는 페이지 한 장.
 - 생애: API 서버의 Service.start 가 만든다.
 
-### Monitor
-- 데이터: role(불변) · build(불변) · 그 role 의 모듈의 stats(참조).
-- 기능: health 는 이 프로세스가 지금 제 일을 할 수 있는가(흐름 14). metrics 는 수치의 글.
-- 생애: Service.start 가 만든다. 프로세스마다 하나.
+### Static
+- 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(묶은 viewer.js) · keymap. 불변.
+- 기능: serve(path) 는 뷰어의 페이지 · 묶음 · 실물 · Keymap 을 준다. 파일의 안은 보지 않는다.
+- 생애: API 서버의 Service.start 가 만든다.
+
+### Elector
+- 데이터: lock(참조 — LeaderLock) · role:`standby`|`settling`|`active`.
+- 기능: elect 는 흐름 13 — 자리를 잡으면 활성으로, 못 잡으면 대기로.
+- 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 ### Operator
-- 데이터: fleet · sessions · directory(참조). signer(참조) · db(참조 — 표 `audit`) · operators:set<이름>(불변, 설정).
+- 데이터: verify(운영자의 토큰 → 이름) · operators:set<이름>(설정) · db(참조 — 표 `audit`).
 - 기능: command(글 한 줄) → 답 글 한 줄. 흐름 6.
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
+
+### Monitor
+- 데이터: role(불변) · build(불변).
+- 기능: health 는 이 프로세스가 듣고 있는가. metrics 는 그 role 의 수치(흐름 14).
+- 생애: Service.start 가 만든다. 프로세스마다 하나.
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Api login | 클라이언트 → API 서버 | `POST /login {provider, subject?}` | `{token, subject}` 또는 `{why}` |
-| Api characters · create · choose · delete · close | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
+| Api characters · create · choose · delete | 클라이언트 → API 서버 | `{token}` · `{token, name}` · `{token, character}` | 캐릭터들 · 캐릭터 · `{token}`(캐릭터의 토큰) 또는 `{why}` |
 | Api enter | 클라이언트 → API 서버 | `POST /enter {token}`(캐릭터의 토큰) | `{page, gate}` · `{wait: 순번}` 또는 `{why}` |
 | Api static | 브라우저 → API 서버 | `GET /play` · `/viewer.js` · `/assets/…` · `/keymap.json` | 파일 |
 
@@ -229,25 +238,25 @@
 
 | 명세 | 폴더 | 파일 하나 | 답하는 질문 |
 |---|---|---|---|
-| 흐름 | `01-flows/` | 외부 입력 하나 | 외부 입력이 시간 순으로 어느 개념을 어떻게 움직이는가 |
-| 책임 | `02-roles/` | 모듈 하나 | 모듈이 어떤 데이터를 들고 어떤 기능을 제공하는가 |
+| 흐름 | `01-flows/` | 외부 입력 하나 | 그 입력을 어느 개념들이 어떤 차례로 처리하는가 |
+| 책임 | `02-roles/` | 모듈 하나 | 개념마다의 책임 하나와 그 데이터 · 기능 |
 | 피드백 | `00-feedback/` | 파일 하나 | 아직 설계가 되지 않은 열린 것 |
 
 | 흐름 | 트리거 | 어느 프로세스 | 한 줄 |
 |---|---|---|---|
-| [1 시작](01-flows/01-start.md) | 프로세스가 뜬다 | 넷 다 | 제 role 의 모듈을 세우고 듣는다. 노드는 컨트롤 플레인에 자기를 알린다 |
-| [2 로그인](01-flows/02-login.md) | 클라이언트의 신원 | API 서버 | 신원을 계정으로, 계정을 토큰으로. 차단된 계정은 거절 |
-| [3 입장](01-flows/03-enter.md) | 클라이언트의 캐릭터 토큰 | API 서버 → 컨트롤 플레인 → 노드 | 배정될 인스턴스를 찾거나 띄우고 세션을 잡아 게이트웨이의 주소를 준다. 빈 슬롯이 없으면 대기열 |
-| [4 호스트의 글](01-flows/04-engine-line.md) | 엔진 프로세스의 stdout 한 줄 또는 종료 | 노드 | 머리글이면 ready, status 면 사람 수 · 지연, 이동 요청 줄이면 흐름 10, 종료면 흐름 12 |
-| [5 주기 작업](01-flows/05-tick.md) | Clock 의 간격 | 노드 · 컨트롤 플레인 · 게이트웨이 | 노드는 status 를 묻고 캐릭터의 값을 스냅샷으로 저장하고 보고한다. 컨트롤 플레인은 예비 용량을 맞추고 쉬는 것을 내리고 대기열을 민다 |
-| [6 운영자 명령](01-flows/06-operator.md) | 운영자의 글 한 줄 | 컨트롤 플레인 | 인스턴스를 보고 내리고 되돌리고, 존을 닫고 열고, 사람을 내보내고 막는다 |
-| [7 종료](01-flows/07-stop.md) | 프로세스의 종료 신호 | 넷 다 | 노드는 캐릭터의 값을 언로드하고 인스턴스를 내린다. 나머지는 듣기를 닫는다 |
-| [8 캐릭터](01-flows/08-character.md) | 클라이언트의 계정 토큰 | API 서버 | 캐릭터를 보고 만들고 골라 캐릭터의 토큰을 받는다 |
-| [9 접속](01-flows/09-connect.md) | 클라이언트의 소켓 | 게이트웨이 → 컨트롤 플레인 → 노드 | 토큰과 세션을 확인하고 캐릭터의 값을 인스턴스에 로드한 뒤 호스트와 잇는다 |
-| [10 존 이동](01-flows/10-transfer.md) | 호스트의 이동 요청 줄 | 노드 → 컨트롤 플레인 → 노드 → 게이트웨이 | 값을 언로드해 다른 인스턴스에 로드하고 게이트웨이가 뒤를 바꿔 잇는다 |
-| [11 접속 종료](01-flows/11-disconnect.md) | 클라이언트의 소켓이 닫힌다 | 게이트웨이 → 컨트롤 플레인 → 노드 | 재접속 유예가 지나면 값을 언로드하고 세션을 지운다 |
-| [12 장애 복구](01-flows/12-failover.md) | 호스트의 죽음 또는 노드 · 게이트웨이의 보고가 끊김 | 컨트롤 플레인 | lease 를 끊고 그 사람들을 다른 인스턴스에 다시 배정한다 |
-| [13 컨트롤 플레인 전환](01-flows/13-leader.md) | 컨트롤 플레인의 Clock | 컨트롤 플레인 | 활성 하나가 LeaderLock 을 잡고, 놓치면 대기가 잡아 표를 다시 세운다 |
-| [14 관측](01-flows/14-observe.md) | 수집기 · load balancer 의 http 요청 | 넷 다 | 프로세스가 제 일을 할 수 있는가와 수치를 답한다 |
+| [1 시작](01-flows/01-start.md) | 프로세스가 뜬다 | 넷 다 | 제 role 의 개념을 세우고 듣는다 |
+| [2 로그인](01-flows/02-login.md) | 클라이언트의 신원 | api | 신원을 계정으로, 계정을 토큰으로 |
+| [3 입장](01-flows/03-enter.md) | 클라이언트의 캐릭터 토큰 | api → control → node | 인스턴스에 세션을 잡고 게이트웨이의 주소를 준다. 없으면 띄우거나 대기열 |
+| [4 호스트의 글](01-flows/04-engine-line.md) | 엔진 프로세스의 stdout 한 줄 또는 종료 | node | 글을 읽어 인스턴스의 상태를 고친다 |
+| [5 주기 작업](01-flows/05-tick.md) | Clock 의 간격 | node · gateway · control | 저장하고 알리고, 보고와 표를 맞춘다 |
+| [6 운영자 명령](01-flows/06-operator.md) | 운영자의 글 한 줄 | control | 명령 하나를 그 일을 맡은 개념 하나에 넘긴다 |
+| [7 종료](01-flows/07-stop.md) | 프로세스의 종료 신호 | 넷 다 | 사람을 옮기고 저장하고 내린다 |
+| [8 캐릭터](01-flows/08-character.md) | 클라이언트의 계정 토큰 | api | 캐릭터를 보고 만들고 지우고 고른다 |
+| [9 접속](01-flows/09-connect.md) | 클라이언트의 소켓 | gateway → control → node | 값을 인스턴스에 올리고 호스트와 잇는다 |
+| [10 존 이동](01-flows/10-transfer.md) | 호스트의 떠남 줄 | node → control → node → gateway | 값을 내려 다른 인스턴스에 올리고 뒤를 바꿔 잇는다 |
+| [11 접속 종료](01-flows/11-disconnect.md) | 클라이언트의 소켓이 닫힌다 | gateway → control → node | 유예가 지나면 값을 내려 저장한다 |
+| [12 장애 복구](01-flows/12-failover.md) | 인스턴스가 죽었다 | control | lease 를 끊고 사람을 다시 배정하고 다시 띄운다 |
+| [13 컨트롤 플레인 전환](01-flows/13-leader.md) | 컨트롤 플레인의 Clock | control | 활성 하나가 일하고, 바뀌면 표를 다시 세운다 |
+| [14 관측](01-flows/14-observe.md) | 수집기의 http 요청 | 넷 다 | 듣고 있는가와 수치를 답한다 |
 
 쓰는 방식은 [method.md](method.md).
