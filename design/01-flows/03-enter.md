@@ -1,55 +1,71 @@
-# 흐름 3. 입장 — 클라이언트의 토큰
+# 흐름 3. 입장 — 클라이언트의 캐릭터 토큰
 
-트리거: Api 의 `enter`. 토큰 하나.
-한 줄: 토큰을 Account.id 로 풀고, 세계(샤드)를 찾거나 세워 띄우고, 접속 주소를 준다. 사람은 모두 같은 세계에 붙고, 그 계정의 묶음은 엔진이 세운다(`--party`). 클라이언트는 그 주소로 엔진의 흐름 2(접속)를 간다.
+트리거: Api 의 `enter`. 캐릭터의 토큰 하나. 닫힌 뷰어가 돌아와 다시 부르는 것도 같다.
+한 줄: 캐릭터가 설 존의 인스턴스에 세션을 잡고 게이트웨이의 주소를 준다. 빈 슬롯이 없으면 인스턴스를 띄우고, 띄울 곳도 없으면 대기열에 세운다.
 
 ## 순서
 
 ```text
-Api enter                                               [앱]
-  Signer.verify                                         [계정]
-  Fleet.enter                                           [함대]
-    Assignment.get(세계) — 없으면
-      Vault.dirOf                                       [저장장치]
-      Ports.take
-      Assignment.put ── Ledger.save                     [저장장치]
-    Shard.command status — ready 면 사람 수 · 상한
-    Shard.start — stopped 또는 failed 이면
-      Spawner.host                                      [엔진]
-      Probe.read — 머리글                                ⇐ 흐름 4
-      Shard.command grant × NPC 묶음                    [엔진]
-      Spawner.agent                                     [엔진]
-  답 — 주소                                              ◇
-클라이언트 → Static 의 /play → 엔진 Host 2(토큰)        ⇒ 엔진의 흐름 2
+A  Api.enter → Signer.verify → Admission.check → Sessions.get → ZoneMap.zoneOf → Placer.pick
+     → Sessions.hold → Gates.pick → 답
+     Placer.pick 이 없다고 하면 B, B 도 안 되면 Queue.push → 순번
+B  Scheduler.place → Registry.put → Runner.start
+     → SnapshotStore.pull → Ports.take → Spawner.host → Probe.read → Console.command → Spawner.agent
+     → Registry.put
 ```
+
+### A 세션을 잡는다
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | Signer.verify(token) | 서명과 만료. 틀리면 거절 ✕ | Account.id |
-| 2 | Fleet.enter → Assignment.get | 세계(설정의 world)의 줄 `{dataset, storeDir, port}` | 줄 또는 없음 |
-| 3 | Fleet → Vault.dirOf · Ports.take · Assignment.put | 없으면 자리를 내고 포트를 받아 줄을 적고 Ledger.save. 포트가 없으면 거절 ✕ | 줄 |
-| 3b | Fleet → Shard.command(`status`) | 세계가 ready 면 지금의 사람 수(NPC 계정 밖의 접속)를 읽는다. 상한(capacity)에 찼고 이 계정이 이미 붙어 있지 않으면 거절 ✕ — 성능 밖의 입장 제한은 없다 | |
-| 4 | Fleet → Shard.start | `ready` 면 건너뛴다. `starting` 이면 그 시작을 기다린다. `stopped` · `failed` 면 아래. 셈(restarts)이 한계를 넘은 `failed` 는 거절 ✕ — 운영자가 본다 | |
-| 5 | Shard → Spawner.host | 엔진의 `host`(세계만 — 소켓 하나, http 없음)를 데이터셋 · 포트 · Store 자리 · 박자 · sparse · 사람의 묶음의 틀(`--party`)로, 환경 `HOST_AUTH_KEY` 와 함께 | Process · `starting` |
-| 6 | Shard ← Probe.read | stdout 에 `host ` 머리글(소켓이 듣는다) 뒤 머리글의 마지막 줄 `명령: …` 이 오면 준비가 끝났다. 이 줄 앞의 글(머리글의 status)은 명령의 답으로 읽지 않는다. 한계(`startLimitMs`) 안에 오지 않거나 그 전에 끝나면 `failed` ✕ | |
-| 7 | Shard.command | NPC 묶음마다 `grant <npc 계정> <body 이름>` 을 stdin 에. 답이 `grant — ` 로 시작하지 않으면 호스트를 내리고 `failed`(같은 설정으로 다시 띄워도 같다) ✕ | 명부 |
-| 8 | Shard → Spawner.agent | 엔진의 `agent` 를 `--url ws://localhost:<port> --account <npc 계정> --token <그 계정의 토큰> --brain fsm` 으로 | Process · `ready` |
-| 9 | Api | 주소 `{ page: <pageUrl>?token=<토큰>&ws=<ws>, ws: ws(s)://<publicHost>:<port> }`. page 는 서비스의 Static 이 주는 뷰어 페이지 — 뷰어는 `?ws=` 의 세계에 `?token=` 으로 붙고, 엔진의 Roster 가 그 계정의 묶음을 준다(처음이면 틀에서 낳는다) | 클라이언트 ◇ |
+| 1 | Api.enter | 요청을 받는다. 이 API 서버의 빌드를 함께 넘긴다 | |
+| 2 | Signer.verify | 캐릭터의 토큰을 푼다. 틀리면 거절 | Character.id |
+| 3 | Admission.check | 그 캐릭터가 지금 들어와도 되는가(줄이 있는가 · 차단 · 한 계정에 세션 하나). 안 되면 거절 | |
+| 4 | Sessions.get | 이미 세션이 있으면 그대로 8 로. 대기열에 있으면 Queue.position 의 순번을 답한다 | |
+| 5 | ZoneMap.zoneOf | 설 존을 정한다 — 마지막에 있던 존, 없으면 처음 서는 존. 닫혀 있으면 거절 | Zone |
+| 6 | Placer.pick | 그 존에서 같은 빌드이고 슬롯이 빈 인스턴스를 고른다. 없으면 B 로 | Instance |
+| 7 | Sessions.hold | 세션을 `pending` 으로 잡는다 | Session |
+| 8 | Gates.pick | 살아 있는 게이트웨이 하나를 고른다 | |
+| 9 | Api.enter | `{page, gate}` 를 답한다. page 는 이 빌드의 뷰어 페이지, gate 는 게이트웨이의 주소 | 클라이언트 ◇ |
+
+### B 인스턴스를 띄운다
+
+예비 용량(흐름 5)과 장애 복구(흐름 12)도 이 길로 띄운다.
+
+| # | 누가 | 무엇을 | 결과 |
+|---|---|---|---|
+| 10 | Scheduler.place | 그 빌드를 들고 여유가 있는 노드와 인스턴스의 이름을 고른다. 없으면 15 대신 Queue.push | Node · 이름 |
+| 11 | Registry.put | 줄을 적는다(세대를 하나 올려 `starting`). 띄우기 전에 적는다 | Instance |
+| 12 | Runner.start | 그 노드에서 아래 13 ~ 17 을 차례로 한다 | |
+| 13 | SnapshotStore.pull | 그 인스턴스의 Store 를 내려 받는다(없으면 빈 디렉터리) | Store 자리 |
+| 14 | Ports.take | 포트 하나를 받는다 | |
+| 15 | Spawner.host | 엔진의 호스트를 띄운다 | Process |
+| 16 | Probe.read | 머리글의 마지막 줄을 기다린다(흐름 4) | 준비됨 |
+| 17 | Console.command | NPC 묶음마다 `grant` 를 쓴다 | 명부 |
+| 18 | Spawner.agent | NPC 에이전트를 띄운다 | Process |
+| 19 | Registry.put | 줄을 `ready` 로, 포트를 적는다 | A 의 6 으로 |
+
+## 실패하면
+
+- 띄울 노드가 없으면 Queue.push 로 대기열에 세우고 순번을 답한다. 클라이언트는 다시 묻는다.
+- 그 빌드를 띄울 노드가 아예 없으면(물러나는 빌드) 「페이지를 다시 받아라」로 거절한다.
+- 호스트가 한계 안에 서지 않으면 줄을 `failed` 로 하고 다른 노드에 한 번 더 띄운다.
+- 컨트롤 플레인에 닿지 않으면 503 — 클라이언트가 잠시 뒤 다시 묻는다.
 
 ## 멈추는 자리
 
-- 세계가 `ready`. 세계의 자리 표가 저장장치에. 클라이언트가 주소를 든다.
+- 세션이 `pending` 으로 잡혔다. 클라이언트가 게이트웨이의 주소를 든다. 또는 대기열의 순번.
 
 ## 이어지는 흐름
 
-- 엔진의 흐름 2(접속) · 4 호스트의 글 · 5 박자.
+- 9 접속.
 
 ## 규칙
 
-- NPC 묶음의 grant 가 플레이어 접속보다 먼저다(`ONLINE.md` §1.3 의 함정). 주소는 grant 가 다 끝난 뒤에야 답하므로 어떤 사람도 그 전에 세계를 모른다. `--party` 가 있으면 사람은 사람의 묶음만 받으므로 NPC 묶음을 잘못 받을 일도 없다.
-- 입장이 겹치면 세계는 한 번만 띄운다. 세계는 엔진 체크아웃의 파일을 쓰지 않는다(뷰어는 흐름 1 이 서비스의 자리에 한 번 묶었다).
-- 토큰은 엔진의 Gate 가 풀고 서비스는 Account.id 만 본다. 세계 하나에 Store 자리 하나.
-- 상한은 동시에 붙은 사람의 수다. 새로고침처럼 이미 붙은 계정의 다시 입장은 세지 않는다.
+- 인스턴스에 배정하는 수는 세션이 센다. 잡힌 슬롯이 Zone.capacity 를 넘지 않는다. 세션 없이는 게이트웨이를 지날 수 없다(흐름 9).
+- 뷰어와 호스트는 같은 빌드(엔진의 커밋)끼리만 만난다.
+- NPC 묶음의 grant 는 인스턴스가 `ready` 가 되기 전이다.
+- 클라이언트는 호스트의 주소를 받지 않는다.
 
 ## 미정
 
