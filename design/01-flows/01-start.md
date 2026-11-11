@@ -1,33 +1,33 @@
-# 흐름 1. 시작 — 프로세스가 서비스를 띄운다
+# 흐름 1. 시작 — 프로세스가 뜬다
 
-트리거: 프로세스. 설정(`service.config.json` — 엔진 자리 · 데이터셋 · NPC 묶음 · 포트 범위 · 저장장치 뿌리 · 쉼 한계 · 베낌 주기)과 환경변수 `HOST_AUTH_KEY`(서명 키)를 들고 온다.
-한 줄: 저장장치에서 서비스의 표 둘(사용자 표 · 배정 표)을 되찾고, 함대를 세우고 뷰어를 한 번 묶고 시계를 돌리고, Api · Operator 를 연다. 세계는 입장이 올 때 띄운다.
+트리거: 프로세스. role(`front` · `gate` · `control` · `node` · 개발의 `main`)과 설정(`service.config.json`), 환경변수 `HOST_AUTH_KEY`(서명 키)를 들고 온다.
+한 줄: 제 role 의 모듈을 세우고 듣는다. 노드는 제어에 자기를 알린다. 인스턴스는 입장이나 여유가 띄운다.
 
 ## 순서
 
 ```text
 Service.start                                           [앱]
-  openVault · Ledger.load                               [저장장치]
-  Directory 생성 · Signer 생성                           [계정]
-  Fleet 생성 ── Spawner.missing · Assignment · Ports · Clock · Operator   [함대]
-  Fleet.start ── Spawner.bundle · Clock.run              [함대] ⇒ 흐름 5
-  Api 열기 · stdin 을 Operator 에                        ◇
+  front    openStorage · Directory · Signer · Spawner.bundle · Api 열기     [저장 · 계정 · 함대]
+  gate     Signer · Gateway — 소켓 듣기                                    [계정 · 관문]
+  control  openStorage · Signer · Fleet.start · Placement · Operator        [저장 · 계정 · 함대 · 배치]
+  node     Spawner.missing · openStorage · Warden.start ── Berth join       [함대 · 저장]
+             Fleet.join                                                     [함대] ◇
 ```
 
-| # | 누가 | 무엇을 | 결과 |
-|---|---|---|---|
-| 1 | Service.start → openVault | 저장장치의 뿌리를 연다. 없으면 만든다 | Vault · Ledger |
-| 2 | Service → Ledger.load | `directory` · `assignment` 자리의 값. 없으면 빈 것 | 표 둘 |
-| 3 | Service → Directory · Signer | 사용자 표와 서명 키. 키가 없으면 시작 거부 ✕ (토큰 없는 서비스는 외부에 열지 않는다) | |
-| 4 | Service → Fleet | Spawner.missing — 엔진 체크아웃이 없으면 시작 거부 ✕. 배정 표의 줄마다 Shard 를 `stopped` 로 만든다. 프로세스는 띄우지 않는다. NPC 의 토큰은 Signer.issue 를 값(함수)으로 받는다 | Shard × 줄 |
-| 5 | Fleet → Ports.mark | 배정 표가 든 포트를 쓰는 것으로 센다 | |
-| 6 | Service → Fleet.start → Spawner.bundle | 엔진 체크아웃의 esbuild 로 뷰어를 브라우저용 하나로 묶어 서비스의 자리(`viewerOut`)에 둔다. 샤드마다 묶지 않는다. 묶지 못하면 시작 거부 ✕ | viewer.js |
-| 6′ | Fleet → Clock.run | 간격마다 흐름 5 | |
-| 7 | Service | Api(http — 게스트 페이지 · login · enter 와 Static 의 뷰어 페이지 · 묶음 · 실물 · Keymap)를 열고 stdin 을 Operator.command 에 댄다 | 운영자 · 클라이언트 ◇ |
+| # | 어느 role | 누가 | 무엇을 | 결과 |
+|---|---|---|---|---|
+| 1 | 전부 | Service.start | 서명 키가 없으면 시작 거부 ✕ | |
+| 2 | front | Service → Directory · Signer | 저장을 열고 Ledger 를 주어 만든다 | |
+| 3 | front | Service → Spawner.bundle | 뷰어를 한 번 묶는다. 묶지 못하면 시작 거부 ✕. Api(http)를 연다 | 클라이언트 ◇ |
+| 4 | gate | Service → Gateway | Signer 의 verify 를 값으로 주어 만들고 소켓을 듣는다. Clock 으로 Gateway.beat | 클라이언트 ◇ |
+| 5 | control | Service → Fleet.start | Assignment 의 줄마다 Instance 를 `stopped` 로. Clock.run | Instance × 줄 |
+| 6 | control | Service → Placement · Operator | 설정의 존마다 Zone · Queue. 함대의 기능 넷과 Signer 의 issue 를 값으로 준다. Seat · Berth · Operator 를 듣는다 | ◇ |
+| 7 | node | Service → Warden.start | Spawner.missing — 엔진 체크아웃이 없으면 시작 거부 ✕. 제어에 Berth join(이름 · 주소 · slots · 지금 도는 인스턴스들)을 보내고 Clock.run | |
+| 8 | control | Fleet.join(machine) | Machine 을 적는다. 노드가 알린 도는 인스턴스는 `ready` 로 되찾고, 표에 없는 것은 그 노드에 stop 을 시킨다 | Machine |
 
 ## 멈추는 자리
 
-- 샤드 전부 `stopped`. 표 둘이 메모리에. Api 가 듣는다.
+- 프로세스마다 듣는다. 제어의 표: Machine · Instance · 빈 접속 표.
 
 ## 이어지는 흐름
 
@@ -35,8 +35,9 @@ Service.start                                           [앱]
 
 ## 규칙
 
-- 엔진 프로세스는 입장이 세운다. 시작은 아무것도 띄우지 않는다.
-- 배정 표에 있는데 포트가 범위 밖이면 그 줄의 포트를 비운다(다음 입장이 새로 받는다).
+- 시작은 엔진 프로세스를 띄우지 않는다. 띄우는 것은 입장(흐름 3)과 여유(흐름 5)다.
+- 제어가 다시 서면 접속 표는 비어 있다. 관문의 beat(흐름 5)와 노드의 join · report 가 그것을 다시 채운다. 그 사이 붙어 있는 사람은 그대로 논다.
+- 프로세스가 뜨는 순서는 정해지지 않는다. 제어가 아직 없으면 노드 · 관문은 알림을 되풀이한다.
 
 ## 미정
 
