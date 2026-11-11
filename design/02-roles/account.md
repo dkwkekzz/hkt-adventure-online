@@ -9,7 +9,7 @@
 
 ```text
 Directory ← Service(API 서버 · 컨트롤 플레인)
-Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인)
+Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인 · 노드)
 ```
 
 ## 개념
@@ -41,7 +41,7 @@ Signer    ← Service(API 서버 · 게이트웨이 · 컨트롤 플레인)
 
 ### Token
 - 데이터: 글 하나 `hkt1.<id>.<exp>.<sig>`. 불변. sig 는 `hkt1.<id>.<exp>` 의 HMAC-SHA256 을 base64url 로.
-- 기능: 없음. id 가 `a` 로 시작하면 계정의 토큰(Api 에만 쓴다), `p` 로 시작하면 캐릭터의 토큰(입장 · 게이트웨이 · 호스트의 `Host 2`).
+- 기능: 없음. id 가 `a` 로 시작하면 계정의 토큰(Api 에만 쓴다), `p` 로 시작하면 캐릭터의 토큰(입장 · 게이트웨이 · 호스트의 `Host 2`). `o` 로 시작하면 운영자의 토큰(Operator 에만 쓴다 — 서명 키를 든 사람이 도구로 낸다).
 - 생애: issue 마다. 만료로 사라진다.
 
 ## 소켓

@@ -7,6 +7,8 @@
 - 세계 안을 모른다. 호스트의 글은 머리글 · status 의 머리와 접속 · 지연 칸 · 이동 요청 줄만 읽는다. 캐릭터 파일의 안을 보지 않는다.
 - 엔진에 닿는 길은 Spawner 하나다. 들고 가는 것은 `protocol/engine.ts` 의 인자와 Console 글뿐이다.
 - 게임 명사를 모른다. 존의 데이터셋 · NPC 묶음은 설정 값이다.
+- 인스턴스에는 세대(epoch)가 있다. 띄울 때마다 하나 오르고, 표(`instances`)의 세대가 그 이름의 진짜다. 노드가 알리는 글과 Store 를 올리는 것에는 세대가 실리고, 표와 다른 세대의 것은 버려지거나 내려진다 — 끊겼다 돌아온 노드의 낡은 호스트가 새 것을 해치지 못한다.
+- 노드는 든 것(도는 인스턴스 · 로드된 캐릭터)을 간격마다 전부 알린다. 컨트롤 플레인의 표는 그것과 맞춰진다(흐름 5).
 - 스토리지에는 SnapshotStore · Database · CharacterStore 소켓(`protocol/storage.ts`)으로만 닿는다. 토큰은 앱이 준 함수(issue)로만 낸다.
 
 ```text
@@ -29,44 +31,46 @@ NodeAgent ← Service(노드)
 ## 개념
 
 ### Fleet
-- 데이터: nodes:map<이름, Node> · instances:map<이름, Instance> · assignment · clock · rpc(참조, NodeRpc 소켓) · snapshots(참조) · sessions(세션 모듈의 기능 둘 transfer · failover, 앱이 준다) · config:{zones, reportLimitMs, restartLimit, idleLimit, lagLimit}.
-- 기능: start 는 흐름 1. instances(zone) 은 그 존의 ready 인 Instance 들. launch(zone) 은 흐름 3 — 빈 번호의 인스턴스를 예비 용량 있는 Node 에 띄운다(띄우는 가운데의 것이 있으면 그것을 기다린다). remove(instance) 는 내려간 인스턴스의 표의 줄을 지운다. stats 는 노드 · 인스턴스마다의 state · 사람 수 · 틱 지연(흐름 14). drain(instance) 은 `draining` 으로 — 새 세션을 받지 않는다. terminate(instance) 는 내린다. backup(instance) · restore(instance, 백업) · copies(instance) 는 내려간 인스턴스의 Store 를 SnapshotStore 의 copy · restore · list 로 백업하고 복원하고 센다. load(instance, character) · unload(instance, character) 는 그 Node 의 NodeAgent 에 로드 · 언로드를 시킨다. command(instance, 글) 은 Console 글과 그 답. register(node) · heartbeat(node, 보고) 는 노드의 알림을 받는다(흐름 1 · 5). handoff(instance, character, zone) 은 세션 모듈의 transfer 로 넘긴다(흐름 10). exited(instance, code) 와 tick 의 보고 끊김은 흐름 12. tick 은 흐름 5. cordon(node) · uncordon(node) 는 그 Node 에 새 인스턴스를 띄우지 않게 하고 푼다.
+- 데이터: nodes:map<이름, Node> · instances:map<이름, Instance> · assignment · clock · rpc(참조, NodeRpc 소켓) · snapshots(참조) · characters(참조 — CharacterStore 의 expire) · sessions(세션 모듈의 기능 넷 transfer · failover · migrate · reconcile, 앱이 준다) · db(참조 — 표 `nodes`) · settling:bool(막 활성이 됐다 — 흐름 13) · config:{zones, reportLimitMs, restartLimit, idleLimit, lagLimit, settleMs}.
+- 기능: start 는 흐름 1. instances(zone) 은 그 존의 ready 이고 `draining` 이 아닌 Instance 들. launch(zone, build) 은 흐름 3 — 인스턴스를 예비 용량 있는 Node 에 띄운다. 표의 줄의 세대(epoch)를 하나 올린다. 띄우는 가운데의 것이 있으면 그것을 기다린다. settling 이면 하지 않는다. terminate(instance) 는 내린다. drain(instance) · undrain(instance) 은 `draining` 으로 하고 되돌린다. remove(instance) 는 내려간 인스턴스의 표의 줄을 지운다. load(instance, character, spot) · unload(instance, character) · reload(instance, character) 는 그 Node 의 NodeAgent 에 시킨다. command(instance, 글) 은 Console 글과 그 답. register(node, 보고) · heartbeat(node, 보고) 는 노드의 알림을 받아 표와 맞춘다(흐름 1 · 5). handoff(node, instance, epoch, character, to) 는 세션 모듈의 transfer 로 넘긴다(흐름 10). exited(node, instance, epoch, code) 는 흐름 12. 셋 다 알린 노드와 세대가 표의 것과 다르면 버린다. cordon(node) · uncordon(node) 는 그 Node 에 새 인스턴스를 띄우지 않게 하고 푼다. 표 `nodes` 에 적는다. backup(instance) · restore(instance, 백업) · copies(instance) 는 내려간 인스턴스의 Store 를 SnapshotStore 의 copy · restore · list 로 백업하고 복원하고 센다. tick 은 흐름 5. stats 는 노드 · 인스턴스마다의 state · 사람 수 · 틱 지연(흐름 14).
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### Node
-- 데이터: name(불변) · address(NodeRpc 의 주소) · build(그 노드의 엔진 커밋) · term(받아들인 활성의 번호) · slots:int(띄울 수 있는 인스턴스의 수 — 코어) · used:int · host(내부망에서 호스트가 보이는 이름) · seen(마지막 보고 시각). cordoned:bool.
+- 데이터: name(불변) · address(NodeRpc 의 주소) · build(그 노드의 엔진 커밋) · slots:int(띄울 수 있는 인스턴스의 수 — 코어) · used:int · host(내부망에서 호스트가 보이는 이름) · seen(마지막 보고 시각) · cordoned:bool(표 `nodes` 의 값) · closing:bool(노드가 내려가는 가운데라고 알렸다).
 - 기능: 없음.
-- 생애: Fleet.register 이 만든다. 보고가 한계(`reportLimitMs`)를 넘겨 끊기면 사라진다.
+- 생애: Fleet.register 가 만든다. 보고가 한계(`reportLimitMs`)를 넘겨 끊기면 사라진다. 표 `nodes` 의 줄(이름 · cordoned)은 남는다.
 
 ### Instance
-- 데이터: name(불변, `<존>-<번호>`) · zone(불변) · node · port · build(그 노드의 빌드) · state:`starting`|`ready`|`draining`|`stopping`|`stopped`|`failed` · players:int · lag:int(틱 지연) · idle:int · restarts:int · dirty:bool · why:string|null. key(이 호스트가 뜬 서명 키의 자리 — 토큰을 그 키로 낸다).
+- 데이터: name(불변, `<존>-<번호>`) · zone(불변) · node · port · epoch:int(띄울 때마다 하나 오른다) · build · key(이 호스트가 뜬 서명 키의 자리) · state:`unknown`(표에는 도는 것으로 있으나 노드가 아직 알리지 않았다)|`starting`|`ready`|`stopping`|`stopped`|`failed` · draining:bool · players:int · lag:int(틱 지연) · idle:int · restarts:int · why:string|null.
 - 기능: address 는 `ws://<node.host>:<port>`(내부망).
-- 생애: Fleet.launch 가 만들거나 Fleet.start 가 표의 줄마다 `stopped` 로 만든다. 표의 줄이 지워질 때 사라진다.
+- 생애: Fleet.launch 가 만들거나 Fleet.start 가 표의 줄마다 만든다. 표의 줄이 지워질 때 사라진다.
 - 인스턴스 하나 = 호스트 하나 = Store 자리 하나. `draining` 은 새 세션을 받지 않는다.
 
 ### Assignment
-- 데이터: db(참조). 값은 스토리지에 — 표 `instances`(이름 → {zone, dataset, node, port}).
+- 데이터: db(참조). 값은 스토리지에 — 표 `instances`(이름 → {zone, dataset, node, port, epoch, build, key, state(`running`|`stopped`|`failed`), draining, restarts}).
 - 기능: get(instance) · put(instance, row) · remove(instance) · all.
 - 생애: Fleet 과 함께.
+- 컨트롤 플레인이 바뀌어도 남아야 하는 것(내려가 있는가 · 비우는 가운데인가 · 몇 번 죽었는가 · 몇 번째 세대인가)이 여기 있다.
 
 ### NodeAgent
-- 데이터: name(불변, 이 노드의 이름) · shards:map<인스턴스 이름, GameServer> · ports · clock · snapshots · characters(참조) · rpc(참조) · issue(NPC 계정 → Token, 앱이 준다) · config:{engineDir, beat, sparse, slots, spool(캐릭터 파일의 자리), checkinEvery, backupEvery, 한계들}. held:map<Character.id, {file, lease}>(언로드했으나 아직 저장하지 못한 것) · cordoned:bool.
-- 기능: reap 는 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(spool 의 pid 표 — 흐름 1). stats 는 이 서버의 GameServer 마다의 state · 틱 지연(흐름 14). start 는 컨트롤 플레인에 register 를 보내고 Clock.run(흐름 1). launch(spec) 는 SnapshotStore.pull 로 Store 를 받고 Ports.take 뒤 GameServer.start(흐름 3). stop(instance) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop, SnapshotStore.push 로 올린 뒤 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴다. command(instance, 글). load(instance, character) 는 CharacterStore.checkout 으로 값과 lease 를 받아 GameServer.load(흐름 9 · 10). unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin 으로 저장하고 lease 를 푼다(흐름 10 · 11). tick 은 흐름 5 — status · 스냅샷 저장 · 보고. stopAll 은 흐름 7.
+- 데이터: name(불변, 이 노드의 이름) · build(불변) · servers:map<인스턴스 이름, GameServer> · ports · clock · snapshots · characters(참조) · rpc(참조) · issue(NPC 계정 → Token, 앱이 준다) · term(받아들인 활성 컨트롤 플레인의 번호) · held:map<Character.id, {file, lease}>(언로드했으나 아직 저장하지 못한 것) · closing:bool · config:{engineDir, beat, sparse, slots, spool, checkinEvery, backupEvery, statusMiss, closingMs, 한계들}.
+- spool 은 이 서버의 디렉터리다. 인스턴스마다 캐릭터 파일(`<character>.json`)과 그 lease 의 번호(`<character>.lease`), 띄운 프로세스의 pid 표, Store 자리의 세대 표지가 여기 있다 — 노드 에이전트가 죽었다 다시 떠도 남는다.
+- 기능: start 는 흐름 1 — reap, recover, 컨트롤 플레인에 register, Clock.run. reap 는 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(spool 의 pid 표). recover 는 spool 에 남은 캐릭터 파일을 그 lease 의 번호로 CharacterStore.checkin(release) 한다 — 거절되면 버린다. launch(spec) 는 Store 자리를 마련하고(이 서버의 것이 올라가 있는 것보다 낡지 않았으면 그대로, 아니면 SnapshotStore.pull) Ports.take 뒤 GameServer.start(흐름 3). stop(instance, discard) 은 그 GameServer 의 캐릭터를 전부 unload 하고 GameServer.stop 뒤, discard 가 아니면 SnapshotStore.push 로 올리고 SnapshotStore.copy · SnapshotStore.prune 으로 백업 하나를 남긴 다음 exited 를 알린다. discard 면(표가 이 노드의 것이 아니라고 했다) 올리지 않고 캐릭터의 값도 저장하지 않고 내린다. load(instance, character, spot) 는 CharacterStore.checkout 으로 값과 lease 를 받아 spool 에 두고 GameServer.load(흐름 9 · 10). 엔진이 거절하면 CharacterStore.release. unload(instance, character) 는 GameServer.unload 뒤 CharacterStore.checkin(release). 저장하지 못하면(스토리지에 닿지 않는다) held 에 두고 실패를 답한다(흐름 10 · 11). reload(instance, character) 는 held 의 파일로 같은 인스턴스에 GameServer.load 를 다시 하고 held 에서 뺀다(흐름 10 의 물러남). command(instance, 글). tick 은 흐름 5 — status · 스냅샷 저장 · held 다시 저장 · 백업 · 보고. stopAll 은 흐름 7. stats 는 GameServer 마다의 state · 틱 지연(흐름 14).
 - 생애: Service.start 가 만든다. 프로세스와 함께 사라진다.
 
 ### GameServer
-- 데이터: name(불변, 인스턴스 이름) · spec:{zone, dataset, storeDir, port, party, npc}(불변) · state:`stopped`|`starting`|`ready`|`stopping`|`failed` · host:Process|null · agent:Process|null · lastStatus:StatusLine|null · linked:list<Character.id> · lent:map<Character.id, Lease> · lag:int · agentRestarts:int · why:string|null · waiting(답을 기다리는 명령 줄).
-- 기능: start 는 흐름 3 의 띄움 — Spawner.host, 머리글, NPC 묶음의 grant, Spawner.agent. stop. command(글) 은 호스트의 stdin 에 글 한 줄을 쓰고 그 답 한 줄을 돌려준다. load(character, file, lease, spot) 는 로드의 Console 글을 쓰고 lent 에 둔다. unload(character, file) 은 언로드의 Console 글을 쓰고 lent 에서 뺀다. snapshot(character, file) 은 스냅샷의 Console 글(`keep`). backup(dir) 은 Console `backup <dir>` 을 쓰고 `backup 끝 — ` 줄이 오면 끝난다(한계 안에 없으면 실패). line(which, 줄) · exited(which, code) 는 흐름 4. 이미 로드된 캐릭터의 load, 없는 캐릭터의 unload 는 됨을 답한다(다시 보낸 글).
+- 데이터: name(불변, 인스턴스 이름) · epoch(불변) · spec:{zone, dataset, storeDir, port, party, npc}(불변) · state:`stopped`|`starting`|`ready`|`stopping`|`failed` · host:Process|null · agent:Process|null · lastStatus:StatusLine|null · linked:list<Character.id>(접속한 것) · loaded:map<Character.id, Lease>(로드된 것) · lag:int · misses:int(답 없는 status 의 수) · agentRestarts:int · why:string|null · waiting(답을 기다리는 명령 줄).
+- 기능: start 는 흐름 3 의 띄움 — Spawner.host, 머리글, NPC 묶음의 grant, Spawner.agent. stop. command(글) 은 호스트의 stdin 에 글 한 줄을 쓰고 그 답 한 줄을 돌려준다. load(character, file, lease, spot) 는 로드의 Console 글을 쓰고 loaded 에 둔다. unload(character, file) 은 언로드의 Console 글을 쓰고 loaded 에서 뺀다. 이미 로드된 캐릭터의 load, 없는 캐릭터의 unload 는 됨을 답한다(다시 보낸 글). snapshot(dir) 은 스냅샷의 Console 글(`keep` — 계정 없이)로 로드된 캐릭터 전부의 값을 한 번에 쓴다. 같은 창 사이의 값이다. backup(dir) 은 Console `backup <dir>` 을 쓰고 `backup 끝 — ` 줄이 오면 끝난다(한계 안에 없으면 실패). line(which, 줄) · exited(which, code) 는 흐름 4.
 - 생애: NodeAgent.launch 가 만든다. NodeAgent.stop 뒤 사라진다.
 
 ### Ports
 - 데이터: range:[from, to](불변) · used:set<int>.
 - 기능: take() 는 쓰지 않고 지금 열 수 있는 포트 하나 또는 null. free(port).
-- 생애: NodeAgent 과 함께.
+- 생애: NodeAgent 와 함께.
 
 ### Spawner
 - 데이터: engineDir(불변). 정적.
-- 기능: missing(engineDir) 는 엔진 체크아웃이 없으면 그 까닭. bundle(engineDir, outfile) 는 뷰어를 묶는다(API 서버의 시작). host(engineDir, args, key) 는 엔진의 `host` 를 `<dataset> --port <port> --store <storeDir> --beat <beat> --sparse <sparse> --party <party> --handoff <spool>` 과 환경 `HOST_AUTH_KEY` 로 띄운다. agent(shard, npc, token) 은 엔진의 `agent` 를 띄운다. 셋 다 Process.
+- 기능: missing(engineDir) 는 엔진 체크아웃이 없으면 그 까닭. bundle(engineDir, outfile) 는 뷰어를 묶는다(API 서버의 시작). host(engineDir, args, key) 는 엔진의 `host` 를 `<dataset> --port <port> --store <storeDir> --beat <beat> --sparse <sparse> --party <party> --handoff <spool>` 과 환경 `HOST_AUTH_KEY` 로 띄운다. agent(server, npc, token) 은 엔진의 `agent` 를 띄운다. 셋 다 Process.
 - 생애: 없음.
 - 엔진의 인자는 `protocol/engine.ts` 가 든다. 거기 없는 인자를 쓰지 않는다.
 
@@ -77,34 +81,34 @@ NodeAgent ← Service(노드)
 
 ### Probe
 - 데이터: 없음. 정적.
-- 기능: read(line) → `{kind:'listening'}` | `{kind:'ready'}` | `{kind:'status', status:StatusLine, accounts:list<string>, lag:int}` | `{kind:'handoff', character, zone, spot}`(spot 은 `@` 뒤의 공간 이름 또는 null)(이동 요청 줄) | `{kind:'backed', dir}`(`backup 끝 — ` 줄) | `{kind:'halt'}` | `{kind:'other'}`. answers(명령, line) 은 그 줄이 그 Console 명령의 답인가.
+- 기능: read(line) → `{kind:'listening'}` | `{kind:'ready'}` | `{kind:'status', status:StatusLine, accounts:list<string>, lag:int}` | `{kind:'handoff', character, to}`(이동 요청 줄 `떠남 — `) | `{kind:'backed', dir}`(`backup 끝 — ` 줄) | `{kind:'halt'}` | `{kind:'other'}`. answers(명령, line) 은 그 줄이 그 Console 명령의 답인가.
 - 생애: 없음.
 
 ### Clock
 - 데이터: interval:int(불변, ms) · timer.
 - 기능: run(tick) 은 간격마다 tick — 앞의 tick 이 끝나기 전에는 다음을 부르지 않는다. stop.
-- 생애: Fleet · NodeAgent 과 함께.
+- 생애: Fleet · NodeAgent 와 함께.
 
 ## 소켓
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
-| NodeRpc register | 노드 → 컨트롤 플레인 | 노드의 이름 · 주소 · slots · 지금 도는 인스턴스들 | 없음 |
-| NodeRpc heartbeat | 노드 → 컨트롤 플레인 | 인스턴스마다 state · players · lag · 접속한 캐릭터들 | 없음 |
-| NodeRpc handoff | 노드 → 컨트롤 플레인 | 인스턴스 · Character.id · 존 이름 | 없음 |
-| NodeRpc exited | 노드 → 컨트롤 플레인 | 인스턴스 · 종료 코드 | 없음 |
-| NodeRpc launch | 컨트롤 플레인 → 노드 | 인스턴스 이름 · spec | port 또는 까닭 |
-| NodeRpc stop | 컨트롤 플레인 → 노드 | 인스턴스 | 없음 |
-| NodeRpc command | 컨트롤 플레인 → 노드 | 인스턴스 · Console 글 한 줄 | 답 글 한 줄 |
-| NodeRpc load · unload | 컨트롤 플레인 → 노드 | 인스턴스 · Character.id | 됨 또는 까닭 |
+| NodeRpc register | 노드 → 컨트롤 플레인 | 노드의 이름 · 주소 · 빌드 · slots 와 heartbeat 의 것 전부 | 없음 |
+| NodeRpc heartbeat | 노드 → 컨트롤 플레인 | 노드의 closing, 인스턴스마다 이름 · epoch · state · players · lag · 로드된 캐릭터들 · 접속한 캐릭터들 | 없음 |
+| NodeRpc handoff | 노드 → 컨트롤 플레인 | 노드 · 인스턴스 · epoch · Character.id · to | 없음 |
+| NodeRpc exited | 노드 → 컨트롤 플레인 | 노드 · 인스턴스 · epoch · 종료 코드 | 없음 |
+| NodeRpc launch | 컨트롤 플레인 → 노드 | 인스턴스 이름 · epoch · spec · term | port 또는 까닭 |
+| NodeRpc stop | 컨트롤 플레인 → 노드 | 인스턴스 · epoch · discard · term | 없음 |
+| NodeRpc command | 컨트롤 플레인 → 노드 | 인스턴스 · Console 글 한 줄 · term | 답 글 한 줄 |
+| NodeRpc load · unload · reload | 컨트롤 플레인 → 노드 | 인스턴스 · epoch · Character.id(· spot) · term | 됨 또는 까닭 |
 | Engine host · agent · bundle | 노드 · API 서버 → 엔진 | 인자 · 환경 | 머리글 또는 exit |
 | Engine command | 노드 → 엔진 | Console 글 한 줄 | 답 글 한 줄 |
 | Engine line | 엔진 → 노드 | stdout · stderr 한 줄 · exit | 없음 |
-| SnapshotStore pull · push · copy · prune | 노드 → 스토리지 | 인스턴스 이름 · dataset · dir | dir · 백업 이름 |
+| SnapshotStore pull · push · copy · prune | 노드 → 스토리지 | 인스턴스 이름 · epoch · dataset · dir | dir · 백업 이름 · 거절 |
 | SnapshotStore copy · restore · list | 컨트롤 플레인 → 스토리지 | 인스턴스 이름 · 백업 이름 | 백업 이름 · 목록 |
-| CharacterStore checkout · checkin | 노드 → 스토리지 | Character.id · 든 자(인스턴스) · lease · 파일 | 값과 lease · 됨 |
+| CharacterStore checkout · checkin · release | 노드 → 스토리지 | Character.id · 든 자(인스턴스) · lease · 파일 | 값과 lease · 됨 |
 | CharacterStore expire | 컨트롤 플레인 → 스토리지 | 든 자(인스턴스) | 없음 |
-| Database get · put · remove | 플릿 → 스토리지 | 표 `instances` 의 줄 하나 | 값 또는 null |
+| Database get · put · remove · all | 플릿 → 스토리지 | 표 `instances` · `nodes` 의 줄 하나 | 값 또는 null |
 
 ## 미정
 

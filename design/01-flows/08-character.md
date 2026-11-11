@@ -20,7 +20,7 @@ Api characters · create · choose · delete                        [앱 — API
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
 | 1 | Signer.verify(token) | 서명과 만료. 틀리거나 계정의 토큰이 아니면 거절 ✕ 계정마다의 요청이 한계(`apiRate`)를 넘으면 거절 ✕ | Account.id  |
-| 2 | Directory.banned(account) | 차단됐으면 거절 ✕ | |
+| 2 | Directory.banned(account) | 차단됐으면 거절 ✕. 계정의 줄이 없으면(닫혔다) 거절 ✕ |  |
 | 3 | `characters` → Directory.list(account) | 그 계정의 캐릭터들(Character.id · 이름) | 목록 ◇ |
 | 4 | `create` → Directory.create(account, name) | 이름의 모양이 틀리거나 한계(`characterLimit`)를 넘으면 거절 ✕. 새 Character.id 를 짓고 적는다 | Character ◇ |
 | 5 | `choose` → Directory.owns(account, character) | 그 계정의 것이 아니면 거절 ✕ | |

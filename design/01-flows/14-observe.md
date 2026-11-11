@@ -17,9 +17,9 @@ GET /metrics ─► Monitor.metrics                         [앱]
 | # | 어느 role | 누가 | 무엇을 | 결과 |
 |---|---|---|---|---|
 | 1 | api | Monitor.health | 스토리지(Database)에 닿고 활성 컨트롤 플레인을 안다 | 200 또는 503 |
-| 2 | gateway | Monitor.health | 활성 컨트롤 플레인에 heartbeat 가 닿았다(한계 안) | 200 또는 503 |
-| 3 | control | Monitor.health | 활성이면 200 과 term. 대기면 200 과 `standby` — load balancer 는 활성만 고른다 | |
-| 4 | node | Monitor.health | 활성 컨트롤 플레인에 heartbeat 가 닿았고 스토리지에 닿는다 | 200 또는 503 |
+| 2 | gateway | Monitor.health | 소켓을 듣는다. closing 이면 503 — load balancer 가 새 접속을 다른 게이트웨이로 보낸다 | 200 또는 503 |
+| 3 | control | Monitor.health | 활성이면 200 과 term(settling 이면 그것도). 대기면 200 과 `standby` | |
+| 4 | node | Monitor.health | 프로세스가 돈다. 스토리지와 컨트롤 플레인에 닿는가는 metrics 의 수치다(닿지 않아도 든 인스턴스는 돈다) | 200 |
 | 5 | api | Monitor.metrics | 흐름마다의 요청 수 · 거절 수(까닭마다) · 걸린 시간 | 글 |
 | 6 | gateway | Monitor.metrics → Gateway.stats | 열린 접속의 수 · RateLimiter 가 버린 글의 수 · 뒤를 바꿔 이은 수 | 글 |
 | 7 | control | Monitor.metrics → SessionManager.stats · Fleet.stats | 존마다 세션의 수(pending · active · grace) · 대기열의 길이 · 빈 슬롯. 노드마다 slots · used. 인스턴스마다 state · 사람 수 · 틱 지연 · 다시 띄운 수. 존 이동 · 장애 복구의 수 | 글 |
@@ -36,7 +36,7 @@ GET /metrics ─► Monitor.metrics                         [앱]
 ## 규칙
 
 - 답에 계정 · 캐릭터의 이름과 토큰이 없다. 수와 state 뿐이다.
-- load balancer 는 `/health` 가 503 인 API 서버 · 게이트웨이를 뺀다. 빠진 게이트웨이의 사람은 흐름 12 의 6 으로 간다.
+- load balancer 가 `/health` 로 빼는 것은 새 접속을 받을 자리뿐이다. 이미 열린 접속은 건드리지 않는다. 컨트롤 플레인이 없어도 게이트웨이와 노드는 200 이다 — 붙어 있는 사람이 계속 논다. 컨트롤 플레인에 닿는가는 metrics 의 수치다.
 - 수치는 모두 그 프로세스가 이미 든 것이다. 관측을 위해 스토리지나 다른 프로세스에 묻지 않는다(health 의 닿음 확인 밖).
 - 기록(Log)은 프로세스의 stdout 이고 모으는 것은 플랫폼의 일이다. 줄마다 어느 프로세스 · 어느 인스턴스의 것인가가 머리에 온다.
 

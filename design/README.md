@@ -16,7 +16,7 @@
 1. 엔진과의 결합은 프로세스 경계다. CLI 인자 · stdin/stdout 글 · WebSocket JSON · Store 디렉터리 · 캐릭터 파일. 엔진 코드를 import 하지 않는다.
 2. 클라이언트가 아는 주소는 둘이다 — API 서버(http)과 게이트웨이(WebSocket). 호스트는 내부망에만 있다.
 3. 사람의 글이 지나는 길(클라이언트 ↔ 게이트웨이 ↔ 호스트)에는 모두가 지나는 프로세스가 없다. 컨트롤 플레인은 들어올 때 · 존을 옮길 때 · 떠날 때만 닿는다. 컨트롤 플레인이 잠시 없어도 붙어 있는 사람은 계속 논다.
-4. 상태는 스토리지에만 있다. API 서버 · 게이트웨이는 상태가 없어 수를 늘리면 되고, 컨트롤 플레인의 표는 스토리지와 노드 · 게이트웨이의 보고로 다시 선다.
+4. 오래 남아야 하는 상태는 스토리지에만 있다. API 서버 · 게이트웨이는 상태가 없어 수를 늘리면 되고, 컨트롤 플레인의 표는 스토리지와 노드 · 게이트웨이의 보고로 다시 선다. 표와 보고가 다르면 보고가 진실이다.
 5. 캐릭터 하나는 한때에 호스트 하나만 든다. 그것을 지키는 것은 스토리지의 lease(Lease) 하나다.
 6. 상태를 바꾸는 것은 흐름의 단계만이다. 모듈은 자기 책임 문서의 개념만 알고, 다른 모듈은 소켓(`src/protocol/`) 하나로 만난다.
 7. 엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리를 채우는 것뿐이다(`ONLINE.md` §3.2).
@@ -79,7 +79,7 @@
 |---|---|---|---|---|
 | API 서버 api | 계정 · 스토리지(Database) · 플릿(Spawner 의 bundle) + Api · Static | 밖의 http | 없음 | 수를 늘린다 |
 | 게이트웨이 gateway | 게이트웨이 · 계정(Signer 의 verify) | 밖의 WebSocket | 열린 소켓뿐 — 죽으면 그 사람들이 다시 들어온다 | 수를 늘린다 |
-| 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issue) · 스토리지(Database · CharacterStore · SnapshotStore 의 백업) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나. 존의 묶음마다 따로 둘 수 있다(세션 모듈의 표는 존마다 갈린다) |
+| 컨트롤 플레인 control | 세션 모듈 · 플릿(Fleet) · 계정(Directory · Signer 의 issue) · 스토리지(Database · CharacterStore · SnapshotStore 의 백업) + Operator | 내부의 SessionRpc · NodeRpc · Operator | 표 — 스토리지와 보고로 다시 선다 | 하나와 대기 하나(흐름 13). 사람의 수에 따라 늘지 않는다 — 닿는 것이 들어올 때 · 존을 옮길 때 · 떠날 때와 주기의 보고뿐이다 |
 | 노드 에이전트 node | 플릿(NodeAgent) · 스토리지(SnapshotStore · CharacterStore) | 내부의 NodeRpc | 이 서버의 인스턴스 | 기계를 늘린다 |
 
 - 엔진의 호스트 · NPC 에이전트는 노드가 띄우는 자식 프로세스다(밖). 스토리지의 뒤는 MongoDB 와 object storage 이고([storage.md](02-roles/storage.md) 의 「뒤」), 스토리지 모듈이 그 손이다.
@@ -92,7 +92,7 @@
 
 | 모듈 | 개념 | API 서버 | 게이트웨이 | 컨트롤 플레인 | 노드 |
 |---|---|---|---|---|---|
-| 계정 | Directory | ● | | ●(ban · list) | |
+| 계정 | Directory | ● | | ●(owner · banned · ban · unban · list · sweep) | |
 | 계정 | Signer | ●(issue · verify) | ●(verify) | ●(issue) | ●(issue — NPC) |
 | 게이트웨이 | Gateway · Connection · RateLimiter | | ● | | |
 | 세션 모듈 | SessionManager · Zone · Session · Presence · Queue | | | ● | |
@@ -100,10 +100,10 @@
 | 플릿 | NodeAgent · GameServer · Ports · Process · Probe | | | | ● |
 | 플릿 | Spawner | ●(bundle) | | | ●(host · agent) |
 | 스토리지 | Database | ● | | ● | |
-| 스토리지 | LeaderLock | ●(holder) | ●(holder) | ●(acquire · renew) | ●(holder) |
+| 스토리지 | LeaderLock | ●(holder) | ●(holder) | ●(acquire · renew · resign) | ●(holder) |
 | 앱 | Monitor | ● | ● | ● | ● |
-| 스토리지 | CharacterStore | | | ●(expire) | ●(checkout · checkin) |
-| 스토리지 | SnapshotStore | | | ●(copy · restore · list) | ●(pull · push · copy · prune) |
+| 스토리지 | CharacterStore | | | ●(expire · erase · versions · rollback) | ●(checkout · checkin · release) |
+| 스토리지 | SnapshotStore | | | ●(copy · restore · list) | ●(pull · push · epochOf · copy · prune) |
 | 앱 | Api · Static | ● | | | |
 | 앱 | Operator | | | ● | |
 
@@ -157,7 +157,7 @@
 | Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | `protocol/api.ts` |
 | Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다. 나머지는 그대로 | 엔진의 것 — `protocol/engine.ts` |
 | SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · heartbeat. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
-| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload. 노드의 report · handoff · exited | `protocol/node.ts` |
+| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload · reload. 노드의 register · heartbeat · handoff · exited | `protocol/node.ts` |
 | Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 이동 요청 줄, 캐릭터 파일 | `protocol/engine.ts` |
 | SnapshotStore · Database · CharacterStore | 모듈 → 스토리지 | 자리 · 백업 · 표 · 캐릭터의 값과 lease | `protocol/storage.ts` |
 | Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
@@ -165,6 +165,7 @@
 - 세션 모듈과 플릿은 같은 프로세스(컨트롤 플레인)에 있어도 서로를 import 하지 않는다. 세션 모듈은 플릿이 내놓은 기능 넷(instances · launch · load · unload)을, 플릿은 세션 모듈이 내놓은 기능 둘(transfer · failover)을 앱이 값(함수)으로 넘긴 것으로만 부른다.
 - SessionRpc · NodeRpc 의 글마다 한계(`rpcMs`)가 있다. 답이 없으면 실패로 치고 그 흐름의 ✕ 로 간다. 같은 글을 다시 보내도 결과가 같다 — launch 는 이름으로, load · unload 는 캐릭터와 lease 의 번호로, attach · detach 는 캐릭터로 알아본다(이미 된 것이면 됨을 답한다).
 - 컨트롤 플레인이 보내는 글에는 term 이 실린다(흐름 13). 받는 쪽은 더 작은 term 의 글을 버린다.
+- 노드와 게이트웨이는 든 것을 간격마다 전부 알린다(heartbeat). 컨트롤 플레인은 그 보고와 제 표를 맞춘다(흐름 5) — 글 하나가 사라져도 한 주기 뒤에는 맞는다. 인스턴스에 닿는 글에는 세대(epoch)가 실리고, 표와 다른 세대의 것은 버려진다.
 - 호스트의 `HOST_AUTH_KEY` 는 컨트롤 플레인과 노드가 든다. 게이트웨이 · API 서버는 푸는 것(verify)만 한다.
 
 ### 엔진의 면
@@ -178,7 +179,7 @@
 | Console 의 `status` · `grant` · `stop` · `save` | 흐름 3 · 5 · 6 | §1.5 |
 | 사람의 묶음이 접속한 동안만 세계에 서고 끊으면 무대 밖에 둔다 | 흐름 9 · 11 | §1.3 |
 | 로드 — `--handoff <dir>` 를 든 호스트에 Console `load <account> [공간]`. `<dir>/<account>.json` 의 값으로 그 계정의 묶음을 세운다(파일이 없으면 틀에서 낳는다). 맡은 묶음이 없는 계정의 접속은 거절(4002) | 흐름 3 · 9 · 10 | 엔진의 설계(`host.md` Host.load) — 엔진 plan 268 |
-| 언로드 · 스냅샷 — Console `unload <account>`(값을 파일에 쓰고 세계에서 지운다) · `keep <account>`(값만 쓴다) | 흐름 5 · 10 · 11 | 엔진의 설계(`host.md` Host.unload · keep) — 엔진 plan 268 |
+| 언로드 · 스냅샷 — Console `unload <account>`(값을 파일에 쓰고 세계에서 지운다) · `keep [account]`(값만 쓴다 — 계정 없이 부르면 맡은 묶음 전부를 한 번에, 같은 창 사이의 값으로) | 흐름 5 · 10 · 11 | 엔진의 설계(`host.md` Host.unload · keep) — 엔진 plan 268 |
 | 이동 요청 줄 — 묶음이 다른 존으로 가는 자리에 닿으면 stdout 에 `떠남 — <account> → <to>`. to 는 컨텐츠의 글이고 서비스는 `<존>` 또는 `<존>@<공간>` 으로 읽는다 | 흐름 4 · 10 | 엔진의 설계(`world.md` RuleKind depart) — 엔진 plan 269. 어느 자리가 어느 존으로 가는가는 엔진의 피드백 192 |
 | status 글의 꼬리 ` · 지연 N`(지난 창이 박자를 넘긴 ms) | 흐름 5 | 엔진의 설계(`host.md` Driver.lag) — 엔진 plan 269 |
 | 뷰어가 같은 선에 다시 온 `Link 1` 의 열림을 새 열림으로 받는다 | 흐름 10 | 엔진의 설계(`viewer.md` Client.reopen) — 엔진 plan 270 |

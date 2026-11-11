@@ -17,7 +17,7 @@ Api login                                               [앱 — API 서버]
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
 | 1 | Api login | 제공자가 `guest` 가 아니면 거절 ✕. 같은 자리에서 오는 요청이 한계(`loginRate`)를 넘으면 거절 ✕. 주체가 비면 새 주체(무작위 글)를 짓는다 스토리지에 닿지 않으면 503 | Identity  |
-| 2 | Directory.resolve(identity) | Database.get 으로 있으면 그 Account.id, 없으면 새 id 를 짓고 Database.put 계정의 줄에 마지막으로 온 때(seen)를 고친다 | Account.id  |
+| 2 | Directory.resolve(identity) | Database.get 으로 있으면 그 Account.id, 없으면 새 id 를 짓고 Database.put. Directory.touch 로 마지막으로 온 때(seen)를 고친다 | Account.id   |
 | 3 | Directory.banned(account) | 차단됐으면 거절 ✕ | |
 | 4 | Signer.issue(account) | `hkt1.<Account.id>.<만료 epoch 초>.<base64url HMAC-SHA256>` | Token |
 | 5 | Api | `{token, subject}` 를 답한다 | 클라이언트 ◇ |
