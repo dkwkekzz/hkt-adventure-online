@@ -11,7 +11,7 @@
 | ☐ | 세션 — Admission · ZoneMap · Placer · Sessions · Queue · Gates. 흐름 3 의 A |
 | ☐ | 계정 — Characters · Banlist, 계정의 토큰과 캐릭터의 토큰. 흐름 2 의 3 · 흐름 8 |
 | ☐ | Api 의 characters · create · choose · delete, enter 의 `{wait: 순번}` |
-| ☐ | 흐름 3 의 A · 8 의 흔적 — 지금 Fleet 이 남기는 3 의 6 은 Placer.pick 을 부르는 자리로 |
+| ☐ | 흐름 3 의 A · 8 의 흔적 — 지금 Fleet 이 남기는 3 의 6 은 Placer.pick 을 부르는 자리로. 흔적의 session 은 Session.id 로(지금은 입장의 run), name 은 Character.name 으로 |
 
 ## 직관 확인
 
