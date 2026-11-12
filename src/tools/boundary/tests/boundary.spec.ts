@@ -1,4 +1,4 @@
-// 경계 검사 — 이 저장소는 어긋남 0, 규칙을 하나 어긴 나무는 그 규칙의 이름으로 찍히고 check.ts 가 1 로 끝난다 (plan stage 7).
+// 경계 검사 — 이 저장소는 어긋남 0, 규칙을 하나 어긴 나무는 그 규칙의 이름으로 찍히고 check.ts 가 1 로 끝난다 (plan 01).
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';

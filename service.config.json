@@ -1,6 +1,8 @@
 {
   "storageRoot": "out/storage",
   "apiPort": 8000,
+  "monitorPort": 8001,
+  "traceKeep": 500,
   "tokenTtl": 21600,
   "agentTtl": 300,
   "keymap": "dataset/adventure-keymap.json",

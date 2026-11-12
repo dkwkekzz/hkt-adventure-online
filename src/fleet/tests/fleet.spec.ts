@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openVault } from '../../storage';
+import type { TraceInput } from '../../protocol/observe';
 import type { VaultSocket } from '../../protocol/vault';
 import { Fleet } from '..';
 import type { FleetConfig } from '..';
@@ -21,6 +22,7 @@ afterEach(async () => {
 
 function up(over: Partial<FleetConfig> = {}, vault: VaultSocket = openVault(mkdtempSync(join(tmpdir(), 'st-')))) {
   const log: string[] = [];
+  const traces: TraceInput[] = [];
   const config: FleetConfig = {
     engineDir: fakeEngine(),
     world: 'main',
@@ -44,9 +46,9 @@ function up(over: Partial<FleetConfig> = {}, vault: VaultSocket = openVault(mkdt
     backupEvery: 1,
     ...over,
   };
-  const fleet = new Fleet(config, vault, 'the-key', (a) => `tok-${a}`, (l) => log.push(l));
+  const fleet = new Fleet(config, vault, 'the-key', (a) => `tok-${a}`, (l) => log.push(l), (t) => traces.push(t));
   fleets.push(fleet);
-  return { fleet, log, vault, config };
+  return { fleet, log, vault, config, traces };
 }
 const world = (f: Fleet) => f.shardOf('main')!;
 
@@ -253,3 +255,52 @@ describe('Operator.command — 흐름 6', () => {
     expect(world(c.fleet).row.port).toBeNull();
   });
 });
+
+describe('Fleet.trace — 흐름 5 · 6 의 흔적 (흐름 14)', () => {
+  it('박자 하나는 run 하나 — status 마다 5 의 1, 쉬어 내리면 5 의 12 와 같은 run 의 7 의 4. 운영자의 start 는 6 의 1 · 4 · 5 와 같은 run 의 흐름 3 의 B', async () => {
+    const { fleet, traces } = up({ idleLimit: 1, backupEvery: 0 });
+    await fleet.enter('p1', 'tok');
+    traces.length = 0;
+    await fleet.tick();
+    const tick = traces.filter((t) => t.flow === 5 || t.flow === 7);
+    expect(tick.map((t) => `${t.flow}.${t.step}`)).toEqual(['5.1', '5.12', '7.4']);
+    expect(new Set(tick.map((t) => t.run)).size).toBe(1);
+    expect(tick[2]).toMatchObject({ unit: 'main', state: 'stopping' });
+    await until(() => world(fleet).state === 'stopped');
+    expect(traces.find((t) => t.flow === 4 && t.step === 5)).toMatchObject({ end: 'ok', state: 'stopped' });
+
+    traces.length = 0;
+    await fleet.operator.command('start main');
+    const run = traces[0]!.run;
+    expect(traces.filter((t) => t.run === run).map((t) => `${t.flow}.${t.step}`)).toEqual(['6.1', '3.11', '3.15', '3.16', '3.17', '3.17', '3.18', '3.19', '6.4', '6.5']);
+    traces.length = 0;
+    await fleet.operator.command('backup main');
+    expect(traces.map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['6.1.ok', '6.4.refused', '6.5.wait']); // 돌고 있으면 베끼지 않는다
+    traces.length = 0;
+    await fleet.operator.command('nope');
+    expect(traces.map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['6.1.refused', '6.5.wait']);
+  });
+});
+
+describe('Shard.line · exited — 사람의 state (흐름 14 의 person)', () => {
+  it('status 에서 접속한 계정이 늘면 그 사람마다 4 의 3 active, 줄면 grace, 호스트가 끝나면 거기 있던 사람마다 4 의 5 gone. NPC 계정은 사람이 아니다', async () => {
+    const { fleet, traces, config } = up();
+    await fleet.enter('p1', 'tok');
+    const leave = await join_(config.ports[0], 'p1');
+    await join_(config.ports[0], 'p2');
+    const people = () => traces.filter((t) => t.person !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person}`);
+    await world(fleet).command('status');
+    await until(() => people().length >= 2);
+    expect(people()).toEqual(['4.3 p1 active', '4.3 p2 active']);
+    expect(traces.find((t) => t.person === 'active')).toMatchObject({ unit: 'main' });
+    leave();
+    await new Promise((r) => setTimeout(r, 50));
+    await world(fleet).command('status');
+    await until(() => people().length >= 3);
+    expect(people()[2]).toBe('4.3 p1 grace');
+    await world(fleet).stop();
+    expect(people().slice(3)).toEqual(['4.5 p2 gone']);
+    expect(traces.some((t) => t.account === NPC.account)).toBe(false);
+  });
+});
+

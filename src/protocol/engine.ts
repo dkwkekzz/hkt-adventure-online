@@ -9,7 +9,7 @@ export const ENGINE_TSX = 'node_modules/.bin/tsx';
 export const ENGINE_HOST = 'apps/server/main.ts';
 /** `npm run agent` 의 진입점 — 주체 프로세스. */
 export const ENGINE_AGENT = 'apps/agent/main.ts';
-/** 서명 키의 환경변수 — 엔진의 Gate 가 이것으로 토큰을 검증한다(stage 1). 서비스의 Signer 도 같은 키를 든다. */
+/** 서명 키의 환경변수 — 엔진의 Gate 가 이것으로 토큰을 검증한다(plan 01). 서비스의 Signer 도 같은 키를 든다. */
 export const AUTH_ENV = 'HOST_AUTH_KEY';
 
 /** host 의 인자 — 엔진의 parseHostArgs(apps/server/start.ts)가 받는 것 가운데 서비스가 쓰는 것만. */

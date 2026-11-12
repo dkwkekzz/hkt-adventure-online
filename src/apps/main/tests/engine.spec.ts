@@ -1,5 +1,5 @@
 // 진짜 엔진 위의 조립 — engine/(npm run engine) 또는 ENGINE_DIR 이 있을 때만 돈다. 없으면 건너뛴다.
-// plan stage 4 · 5 · 6 · 12 의 직관 확인: 서비스가 낸 토큰으로 Host 2 를 보내면 open(그 계정의 사람의 묶음), 이름 글은 4002.
+// plan 01 의 직관 확인: 서비스가 낸 토큰으로 Host 2 를 보내면 open(그 계정의 사람의 묶음), 이름 글은 4002.
 // 세 계정이 같은 세계에 붙어 각자의 묶음을 받는다(엔진의 --party). 내렸다 다시 띄우면 저장된 세계에서 이어가고 낳은 묶음도 그대로다.
 
 import { existsSync, mkdtempSync } from 'node:fs';

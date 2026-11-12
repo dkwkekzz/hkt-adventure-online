@@ -2,6 +2,7 @@
 //
 //   HOST_AUTH_KEY=… npm start                    service.config.json · 엔진은 engine/(npm run engine 이 세운다)
 //   HOST_AUTH_KEY=… PORT=8000 SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start
+//   MONITOR_PORT=8001 — Monitor 의 내부 주소(흐름 14). /observe/page 가 관측 페이지
 //
 //   stdin: shards · status <account> · start <account> · stop <account> · host <account> <Console 글> · backup <account> · restore <account> <사본> · revoke-port <account> · help
 
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   const config = loadConfig(file);
   const service = await Service.start(config, process.env[AUTH_ENV]);
   console.log(`service · http://localhost:${service.port}/ · 엔진 ${config.fleet.engineDir} · 데이터셋 ${config.fleet.dataset} · 포트 ${config.fleet.ports.join('-')} · 저장장치 ${config.storageRoot}`);
+  console.log(`관측 · http://localhost:${service.monitor.port}/observe/page · /health · /metrics (내부 주소)`);
   console.log(`샤드 ${service.fleet.shards.size} (전부 stopped) · 명령: help`);
 
   const rl = createInterface({ input: process.stdin });
