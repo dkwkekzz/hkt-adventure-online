@@ -153,6 +153,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(who(3, 9)).toBe(who(2, 2));
     expect(s.monitor.recent.find((t) => t.flow === 3 && t.step === 9 && t.run === run)).toMatchObject({ session: run });
     expect(s.monitor.recent.find((t) => t.flow === 3 && t.step === 2 && t.end === 'refused')!.who).toBeUndefined(); // 틀린 토큰은 누군지 모른다
+    // 사람의 state — 로그인의 답은 login, 입장의 답은 pending
+    expect(s.monitor.recent.filter((t) => t.person !== undefined && t.who === who(2, 2)).map((t) => `${t.flow}.${t.step} ${t.person}`)).toEqual(['2.5 login', '3.9 pending']);
     const monitor = s.monitor;
     await s.stop();
     const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);

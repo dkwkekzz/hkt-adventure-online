@@ -58,7 +58,7 @@ npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다
 HOST_AUTH_KEY=… npm start [-- config.json]
                        서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<세계>. 사람은 모두 같은 세계(설정의 world)에 붙고 계정마다 자기 묶음을 맡는다. 입장의 한계는 capacity 뿐. stdin 은 Operator(help).
-                       관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 프로세스 · 밖의 상자와 연결의 그림에 state 와 지나가는 글이 지금 보이고, 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
+                       관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 보기 둘: 「서버」(프로세스 · 인스턴스 · 연결의 state 와 서버의 흐름)와 「사람」(인스턴스마다의 사람 · 그 사람의 state · 길 · 일생, #people). 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
                        env: PORT(Api 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
 npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --viewer off]
                        떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(playwright 가 깔린 자리에서)

@@ -198,6 +198,7 @@ export class Shard {
     }
     const read = Probe.read(text);
     const before = this.players;
+    const was = this.linked;
     if (read.kind === 'status') {
       this.lastStatus = read.status;
       this.linked = read.accounts.filter((a) => a !== this.ctx.npc.account);
@@ -210,6 +211,12 @@ export class Shard {
       this.mark(4, 1, run, 'ok'); // Process.onLine
       this.mark(4, 2, run, 'ok'); // Probe.read
       this.mark(4, 3, run, 'ok', read.kind === 'status' ? { counts: { players: this.players, beats: read.status.beats } } : {}); // Runner.line 의 일
+    }
+    if (read.kind === 'status') {
+      // 접속한 캐릭터가 늘고 줄면 그 사람마다 — 노드가 본 사실(흐름 14 의 person)
+      const run = freshRun();
+      for (const a of this.linked) if (!was.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a, person: 'active' });
+      for (const a of was) if (!this.linked.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a, person: 'grace' });
     }
     if (read.kind === 'ready') {
       this.listening = true;
@@ -251,6 +258,11 @@ export class Shard {
     this.ctx.log(`${this.name} host 끝났다 — exit ${code}`);
     const run = freshRun();
     this.mark(4, 4, run, 'ok', { counts: { exit: code } }); // Process.onExit
+    const left = this.linked; // 거기 있던 사람은 떠났다 — 흐름 4 의 5 가 사람마다
+    this.linked = [];
+    const gone = (): void => {
+      for (const a of left) this.ctx.trace({ flow: 4, step: 5, run, unit: this.name, end: 'ok', account: a, person: 'gone' });
+    };
     if (this.state === 'starting' || this.ready !== null) {
       if (this.ready === null) return; // boot 가 한계로 끝냈다 — 거기서 센다
       this.ready.reject(new Error(`호스트가 머리글 전에 끝났다 — exit ${code}`));
@@ -264,6 +276,7 @@ export class Shard {
       this.restarts = 0;
       this.players = 0;
       this.mark(4, 5, run, 'ok', { state: 'stopped', counts: { players: 0 } }); // Runner.exited 의 일
+      gone();
       return;
     }
     this.state = 'failed';
@@ -272,6 +285,7 @@ export class Shard {
     else this.restarts++;
     this.players = 0;
     this.mark(4, 5, run, 'failed', { state: 'failed', counts: { players: 0, restarts: this.restarts } });
+    gone();
   }
 
   /** command — 호스트의 stdin 에 글 한 줄, 그 답 글 한 줄. 내려가 있거나 한계 안에 답이 없으면 null. `stop` 은 stop() 으로. */

@@ -281,3 +281,26 @@ describe('Fleet.trace — 흐름 5 · 6 의 흔적 (흐름 14)', () => {
     expect(traces.map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['6.1.refused', '6.5.wait']);
   });
 });
+
+describe('Shard.line · exited — 사람의 state (흐름 14 의 person)', () => {
+  it('status 에서 접속한 계정이 늘면 그 사람마다 4 의 3 active, 줄면 grace, 호스트가 끝나면 거기 있던 사람마다 4 의 5 gone. NPC 계정은 사람이 아니다', async () => {
+    const { fleet, traces, config } = up();
+    await fleet.enter('p1', 'tok');
+    const leave = await join_(config.ports[0], 'p1');
+    await join_(config.ports[0], 'p2');
+    const people = () => traces.filter((t) => t.person !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person}`);
+    await world(fleet).command('status');
+    await until(() => people().length >= 2);
+    expect(people()).toEqual(['4.3 p1 active', '4.3 p2 active']);
+    expect(traces.find((t) => t.person === 'active')).toMatchObject({ unit: 'main' });
+    leave();
+    await new Promise((r) => setTimeout(r, 50));
+    await world(fleet).command('status');
+    await until(() => people().length >= 3);
+    expect(people()[2]).toBe('4.3 p1 grace');
+    await world(fleet).stop();
+    expect(people().slice(3)).toEqual(['4.5 p2 gone']);
+    expect(traces.some((t) => t.account === NPC.account)).toBe(false);
+  });
+});
+

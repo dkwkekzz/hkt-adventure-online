@@ -44,7 +44,7 @@ export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusa
   mark(2, 2, 'ok');
   const token = parts.signer.issue(account);
   mark(2, 4, 'ok');
-  mark(2, 5, 'wait');
+  parts.trace({ flow: 2, step: 5, run, unit: '-', end: 'wait', account, person: 'login' });
   return { token, subject };
 }
 
@@ -61,7 +61,7 @@ export async function enter(parts: ApiParts, body: EnterRequest): Promise<Addres
   try {
     const address = await parts.fleet.enter(account, body.token, run);
     who = { account, session: run }; // 세션 모듈(plan 05) 전에는 입장의 run 이 그 사람의 세션이다
-    mark(3, 9, 'wait');
+    parts.trace({ flow: 3, step: 9, run, unit: '-', end: 'wait', ...who, person: 'pending' });
     return address;
   } catch (e) {
     parts.log(`${account} api 입장 실패 — ${(e as Error).message}`);
