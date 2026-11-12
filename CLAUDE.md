@@ -6,11 +6,12 @@
 ```text
 design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연결 여덟) · 앱(README.md), 쓰는 방식(method.md), 흐름 열넷(01-flows/), 책임 다섯(02-roles/), 피드백(00-feedback/). src 가 아직 따라오지 않은 것은 plan 의 ☐
 plan/         design 을 src 에 세우는 순서와 상태. plan 하나 = 파일 하나(README.md 가 진행표). 다음은 진행표의 첫 ☐ · ◐
-notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
+notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입, storage.md — 스토리지의 뒤 · 자리). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
-  protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · vault(Vault · Ledger) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, 아무것도 import 하지 않는다
+  protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, 아무것도 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Signer · Identity · Account · Token
-  storage/    저장장치 (design/02-roles/storage.md) — Vault · Ledger. 밖에 내보내는 것은 openVault 하나
+  storage/    스토리지 (design/02-roles/storage.md) — Database · CharacterStore · Leases · SnapshotStore · LeaderLock. 밖에 내보내는 것은 openStorage 하나
+              뒤는 둘씩 — 문서: MongoDB(mongo) · 디렉터리(docs), 물건: S3 호환(s3) · 디렉터리(bucket). Store 는 tar.gz 하나(pack)
   fleet/      함대 (design/02-roles/fleet.md) — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator
   apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
               Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design 에서 뽑는 관측의 지도 — 프로세스 · 연결 · 개념이 사는 곳 · 흐름) · monitor-page(관측 페이지 — 구조의 그림)
@@ -41,10 +42,10 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
  S. protocol/** 은 아무것도 import 하지 않는다
  A. account/** 은 protocol/ 만 import 한다
  T. storage/** 은 protocol/ 만 import 한다
- F. fleet/**   은 protocol/ 만 import 한다 — 저장장치는 Vault 소켓, 토큰은 앱이 준 issue 함수
+ F. fleet/**   은 protocol/ 만 import 한다 — 스토리지는 Storage 소켓(Database · SnapshotStore), 토큰은 앱이 준 issue 함수
     모듈의 tests/ 는 세움에 다른 모듈의 index.ts 를 쓸 수 있다. 두 모듈을 같이 세우는 조립 테스트는 apps/*/tests/ 에
  P. apps 는 모듈의 index.ts 만 import 하고, 모듈의 객체에 부르는 것은 흐름에서 누가 가 Service · Api 인 단계뿐이다 —
-    directory.resolve · signer.issue · signer.verify · fleet.start · fleet.enter · fleet.stopAll · fleet.clock.stop · fleet.operator.command
+    directory.resolve · signer.issue · signer.verify · fleet.start · fleet.enter · fleet.stopAll · fleet.clock.stop · fleet.operator.command · storage.close
  N. 모듈 · 앱 · protocol 의 코드(테스트 밖)와 design 의 책임 · 흐름 문서에 게임 명사가 없다
  E. node:child_process 와 엔진의 진입점 · 인자 짓기(ENGINE_* · hostArgv · agentArgv · bundleArgv)는 fleet/spawner.ts 에만.
     엔진 체크아웃의 파일 자리(VIEWER_*)는 fleet/spawner.ts 와 apps/main/static.ts(뷰어의 페이지 · 실물을 준다)에만
@@ -53,7 +54,7 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
 ## 명령
 
 ```text
-npm install            의존(tsx · typescript · vitest). 런타임 의존은 없다 — node 22 의 http · crypto · child_process
+npm install            의존(tsx · typescript · vitest). 런타임 의존은 mongodb 드라이버 하나 — MONGODB_URI 가 있을 때만 읽는다. 나머지는 node 22 의 http · crypto · child_process · zlib
 npm run engine         engine.lock 의 커밋을 engine/ 에 세운다(git fetch --depth 1 + npm ci). ENGINE_REPO=로컬 클론 이면 거기서
 npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   ← 코드 손대면 이것
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
@@ -62,6 +63,7 @@ HOST_AUTH_KEY=… npm start [-- config.json]
                        서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<세계>. 사람은 모두 같은 세계(설정의 world)에 붙고 계정마다 자기 묶음을 맡는다. 입장의 한계는 capacity 뿐. stdin 은 Operator(help).
                        관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 보기 둘: 「서버」(프로세스 · 인스턴스 · 연결의 state 와 서버의 흐름)와 「사람」(인스턴스마다의 사람 · 그 사람의 state · 길 · 일생, #people). 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
                        env: PORT(Api 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
+                       스토리지: MONGODB_URI(표 · 캐릭터 · lease · 잠금) · SNAPSHOT_URI=s3://<bucket>/<prefix> + S3_ENDPOINT · AWS_*(Store). 없는 쪽은 SERVICE_STORAGE 의 디렉터리 (notes/storage.md)
 npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --viewer off]
                        떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(playwright 가 깔린 자리에서)
 ```

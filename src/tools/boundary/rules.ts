@@ -49,7 +49,7 @@ export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
   directory: ['resolve'],
   signer: ['issue', 'verify'],
   fleet: ['start', 'enter', 'stopAll', 'clock.stop', 'operator.command'],
-  vault: [],
+  storage: ['close'],
 };
 
 export function judgeAppCall(object: string, chain: string): string | null {

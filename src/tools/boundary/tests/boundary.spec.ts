@@ -19,9 +19,9 @@ function tree(files: Record<string, string>): string {
 }
 
 const base = {
-  'src/protocol/vault.ts': 'export interface V { x: number }\n',
-  'src/storage/index.ts': "import type { V } from '../protocol/vault';\nexport const openVault = (): V => ({ x: 1 });\n",
-  'src/storage/vault.ts': 'export class Vault {}\n',
+  'src/protocol/storage.ts': 'export interface V { x: number }\n',
+  'src/storage/index.ts': "import type { V } from '../protocol/storage';\nexport const openStorage = (): V => ({ x: 1 });\n",
+  'src/storage/database.ts': 'export class Database {}\n',
   'src/fleet/index.ts': 'export class Fleet { enter() {} }\n',
   'src/fleet/shard.ts': 'export class Shard {}\n',
   'src/account/index.ts': 'export class Signer { issue() {} }\n',
@@ -34,12 +34,13 @@ describe('경계 검사', () => {
 
   it('규칙마다 하나씩 어긴 나무', () => {
     const cases: [string, Record<string, string>, RegExp][] = [
-      ['S', { 'src/protocol/x.ts': "import { Vault } from '../storage/vault';\n" }, /규칙 S/],
+      ['S', { 'src/protocol/x.ts': "import { Database } from '../storage/database';\n" }, /규칙 S/],
       ['A', { 'src/account/x.ts': "import { Fleet } from '../fleet';\n" }, /규칙 A/],
       ['T', { 'src/storage/x.ts': "import { Signer } from '../account';\n" }, /규칙 T/],
-      ['F', { 'src/fleet/x.ts': "import { openVault } from '../storage';\n" }, /규칙 F/],
+      ['F', { 'src/fleet/x.ts': "import { openStorage } from '../storage';\n" }, /규칙 F/],
       ['P 안', { 'src/apps/main/x.ts': "import { Shard } from '../../fleet/shard';\n" }, /규칙 P — 앱은 모듈의 index.ts 만/],
       ['P 부름', { 'src/apps/main/x.ts': 'export const f = (fleet: { shards: { clear(): void } }) => fleet.shards.clear();\n' }, /규칙 P — 앱이 fleet\.shards\.clear/],
+      ['P 스토리지', { 'src/apps/main/x.ts': "export const f = (storage: { database: { put(t: string): void } }) => storage.database.put('audit');\n" }, /규칙 P — 앱이 storage\.database\.put/],
       ['N', { 'src/fleet/x.ts': "export const who = 'wolf-pack-1';\n" }, /규칙 N — 게임 명사 wolf/],
       ['N 문서', { 'design/02-roles/x.md': '# 요정이 걷는다\n' }, /규칙 N/],
       ['E', { 'src/fleet/x.ts': "import { spawn } from 'node:child_process';\nexport { spawn };\n" }, /규칙 E — child_process/],
@@ -53,8 +54,8 @@ describe('경계 검사', () => {
     }
     expect(check(tree(base))).toEqual([]);
     // 모듈의 tests/ 는 다른 모듈의 index.ts 로 세운다 — 안은 안 된다
-    expect(check(tree({ ...base, 'src/fleet/tests/a.spec.ts': "import { openVault } from '../../storage';\n" }))).toEqual([]);
-    expect(check(tree({ ...base, 'src/fleet/tests/a.spec.ts': "import { Vault } from '../../storage/vault';\n" }))[0]).toMatch(/규칙 F/);
+    expect(check(tree({ ...base, 'src/fleet/tests/a.spec.ts': "import { openStorage } from '../../storage';\n" }))).toEqual([]);
+    expect(check(tree({ ...base, 'src/fleet/tests/a.spec.ts': "import { Database } from '../../storage/database';\n" }))[0]).toMatch(/규칙 F/);
   });
 
   it('check.ts 는 어긋나면 1 로 끝난다', () => {

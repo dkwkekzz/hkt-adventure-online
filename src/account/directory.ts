@@ -1,48 +1,46 @@
 // Directory — 신원을 Account.id 로 (design/02-roles/account.md 의 Directory, 흐름 2 의 2).
-// 사용자 표는 저장장치의 `directory` 자리에 — Ledger 소켓으로만 닿는다.
+// 표는 메모리에 두지 않는다 — Database 의 줄 하나씩(표 `accounts`: Identity.key → Account.id, 표 `accountInfo`: Account.id → 마지막으로 온 때).
+// API 서버가 여럿이어도 같은 답이다.
 
 import { randomBytes } from 'node:crypto';
-import type { LedgerSocket } from '../protocol/vault';
+import type { DatabaseSocket } from '../protocol/storage';
 import { keyOf } from './identity';
 import type { Identity } from './identity';
 
-/** 저장의 모양 — `directory` 자리의 값. */
-export interface DirectorySnapshot {
-  readonly users: Record<string, string>;
+/** 표 `accountInfo` 의 줄. */
+export interface AccountInfo {
+  readonly seen: number;
 }
 
 export class Directory {
-  // 데이터 — users · ledger(참조)
-  readonly users: Map<string, string>;
-  readonly ledger: LedgerSocket;
+  // 데이터 — db(참조)
+  readonly db: DatabaseSocket;
+  private readonly now: () => number;
 
-  /** Service.start(흐름 1 의 3) — Ledger 의 값으로 만든다. */
-  constructor(ledger: LedgerSocket) {
-    this.ledger = ledger;
-    const saved = ledger.load('directory') as DirectorySnapshot | null;
-    this.users = new Map(Object.entries(saved?.users ?? {}));
+  /** Service.start(흐름 1 의 1) 가 만든다. */
+  constructor(db: DatabaseSocket, now: () => number = Date.now) {
+    this.db = db;
+    this.now = now;
   }
 
-  /** resolve — 있으면 그 id, 없으면 새 id 를 짓고 적고 Ledger.save. */
-  resolve(identity: Identity): string {
+  /** resolve — 있으면 그 id, 없으면 새 id 를 짓고 적는다. 마지막으로 온 때를 고친다. */
+  async resolve(identity: Identity): Promise<string> {
     const key = keyOf(identity);
-    const had = this.users.get(key);
-    if (had !== undefined) return had;
-    const taken = new Set(this.users.values());
-    let id = '';
-    do id = `p${randomBytes(6).toString('hex')}`;
-    while (taken.has(id));
-    this.users.set(key, id);
-    this.ledger.save('directory', this.snapshot());
+    let id = await this.idOf(identity);
+    if (id === null) {
+      do id = `p${randomBytes(6).toString('hex')}`;
+      while ((await this.db.get('accountInfo', id)) !== null);
+      await this.db.put('accountInfo', id, { seen: this.now() } satisfies AccountInfo);
+      await this.db.put('accounts', key, id);
+      return id;
+    }
+    await this.db.put('accountInfo', id, { seen: this.now() } satisfies AccountInfo);
     return id;
   }
 
   /** idOf — 있는 것만. */
-  idOf(identity: Identity): string | null {
-    return this.users.get(keyOf(identity)) ?? null;
-  }
-
-  snapshot(): DirectorySnapshot {
-    return { users: Object.fromEntries(this.users) };
+  async idOf(identity: Identity): Promise<string | null> {
+    const id = await this.db.get('accounts', keyOf(identity));
+    return typeof id === 'string' ? id : null;
   }
 }

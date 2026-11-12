@@ -1,5 +1,7 @@
 {
   "storageRoot": "out/storage",
+  "leaseMs": 30000,
+  "characterHistory": 5,
   "apiPort": 8000,
   "monitorPort": 8001,
   "traceKeep": 500,

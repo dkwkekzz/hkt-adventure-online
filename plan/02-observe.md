@@ -40,7 +40,8 @@
 | 4 의 3 Runner.line · 4 의 5 Runner.exited | `Shard.line` · `Shard.exited` | 07 |
 | 7 의 4 Runner.stop | `Shard.stop` | 07 |
 | 5 의 12 Scaler.balance | `Fleet.tick` | 07 |
-| 5 의 3 Backuper.backup | `Fleet.tick`(Vault 의 베낌) | 03 · 07 |
+| 5 의 3 Backuper.backup | `Fleet.tick`(SnapshotStore.copy — 내려가 올린 세계만) | 07 |
+| 7 의 5 Backuper.upload | `Shard.exited` → `Fleet`(SnapshotStore.push — 백업은 5 의 3 이 다음 주기에) | 07 |
 | 6 의 4 (명령의 개념) | `Operator` | 08 |
 | person 의 active · grace | 4 의 3(노드가 본 status) — 설계는 9 의 8 · 11 의 2 | 04 · 05 |
 | session | 입장의 run — 설계는 Session.id | 05 |

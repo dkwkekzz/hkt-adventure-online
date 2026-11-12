@@ -1,5 +1,5 @@
 // Shard — 세계 하나: 호스트 하나 + 에이전트 하나 + Store 자리 하나 (design/02-roles/fleet.md 의 Shard). 사람은 모두 여기 붙는다 — 계정마다 사람의 묶음 하나(엔진의 --party).
-// start 는 흐름 3 의 5 ~ 7, line · exited 는 흐름 4, stop 은 흐름 5 의 3, command 는 Console 글 한 줄과 그 답.
+// start 는 흐름 3 의 B(11 ~ 19), line · exited 는 흐름 4, stop 은 흐름 7 의 4 · 5, command 는 Console 글 한 줄과 그 답.
 
 import { randomBytes } from 'node:crypto';
 import { EXIT_REFUSED, RESUMED_HEAD } from '../protocol/engine';
@@ -36,6 +36,12 @@ export interface ShardContext {
   readonly log: (line: string) => void;
   /** 흔적을 남긴다 — 앱이 준 Monitor.trace(흐름 14). */
   readonly trace: TraceFn;
+  /** 줄을 적는다 — 표 `instances`(흐름 3 의 11 · Registry.put 의 일). */
+  readonly put: (name: string, row: Row) => Promise<void>;
+  /** 그 세계의 Store 를 이 서버에 — 그 자리(흐름 3 의 13 · SnapshotStore.pull). */
+  readonly pull: (name: string, run: string) => Promise<string>;
+  /** 내려간 Store 자리를 올린다 — 되면 true(흐름 7 의 5). 던지지 않는다. */
+  readonly push: (name: string, dir: string, epoch: number, run: string) => Promise<boolean>;
 }
 
 /** 새 run 의 이름 — 흐름 하나의 실행을 묶는다(흐름 14). */
@@ -59,7 +65,10 @@ export class Shard {
   idle = 0;
   restarts = 0;
   agentRestarts = 0;
+  /** 올린 뒤 아직 백업하지 않았다 — 흐름 5 의 3 이 본다. */
   dirty = false;
+  /** 이 서버의 Store 자리 — 마지막 pull 이 준 것. */
+  store: string | null = null;
   why: string | null = null;
   /** 마지막 시작이 저장된 세계에서 이어갔는가 — 머리글의 둘째 줄. */
   resumed = false;
@@ -67,6 +76,8 @@ export class Shard {
   private readonly ctx: ShardContext;
   private starting: Promise<void> | null = null;
   private stopping: Promise<void> | null = null;
+  private saving: Promise<void> | null = null;
+  private stopRun: string | null = null;
   private ready: { resolve: () => void; reject: (e: Error) => void } | null = null;
   private listening = false; // 머리글의 마지막 줄을 보았다 — 이 뒤의 줄만 명령의 답이다
   private lastErr = '';
@@ -96,16 +107,38 @@ export class Shard {
   private async boot(run: string): Promise<void> {
     const port = this.row.port!;
     this.state = 'starting';
-    this.mark(3, 11, run, 'ok', { state: 'starting', counts: { port, players: 0 } }); // 줄을 starting 으로(Registry.put)
     this.why = null;
-    this.dirty = true;
+    if (this.saving !== null) await this.saving; // 앞의 올림이 끝난 뒤에 내려 받는다
+    const fail = (step: number, why: string): Error => {
+      const asked = (this.state as ShardState) === 'stopping';
+      this.state = asked ? 'stopped' : 'failed'; // 스토리지의 실패는 셈하지 않는다 — 다음 입장이 다시 한다
+      this.why = asked ? null : why;
+      this.mark(3, step, run, 'failed', { state: this.state });
+      return new Error(asked ? '뜨는 가운데 내렸다' : why);
+    };
+    this.row.epoch++; // 세대를 하나 올려 starting 으로 — 띄우기 전에 적는다
+    try {
+      await this.ctx.put(this.name, this.row);
+    } catch (e) {
+      throw fail(11, `줄을 적지 못했다 — ${(e as Error).message}`);
+    }
+    if ((this.state as ShardState) === 'stopping') throw fail(11, '');
+    this.mark(3, 11, run, 'ok', { state: 'starting', counts: { port, players: 0, epoch: this.row.epoch } }); // 줄을 starting 으로(Registry.put)
+    let store: string;
+    try {
+      store = await this.ctx.pull(this.name, run); // 흐름 3 의 13 — 흔적은 Fleet 이
+    } catch (e) {
+      throw fail(13, `Store 를 내려 받지 못했다 — ${(e as Error).message}`);
+    }
+    if ((this.state as ShardState) === 'stopping') throw fail(13, '');
+    this.store = store;
     this.resumed = false;
     this.lastStatus = null;
     this.players = 0;
     this.idle = 0;
     this.agentRestarts = 0;
     this.listening = false;
-    const host = Spawner.host(this.ctx.engineDir, { dataset: this.row.dataset, port, store: this.row.storeDir, beat: this.ctx.beat, sparse: this.ctx.sparse, party: this.ctx.party }, this.ctx.key);
+    const host = Spawner.host(this.ctx.engineDir, { dataset: this.row.dataset, port, store, beat: this.ctx.beat, sparse: this.ctx.sparse, party: this.ctx.party }, this.ctx.key);
     this.host = host;
     host.onLine((stream, line) => this.line('host', stream, line));
     host.onExit((code) => this.exited('host', code));
@@ -277,6 +310,7 @@ export class Shard {
       this.players = 0;
       this.mark(4, 5, run, 'ok', { state: 'stopped', counts: { players: 0 } }); // Runner.exited 의 일
       gone();
+      this.save(this.stopRun ?? run); // 호스트가 저장하고 끝났다 — 그 자리를 올린다(흐름 7 의 5)
       return;
     }
     this.state = 'failed';
@@ -286,6 +320,23 @@ export class Shard {
     this.players = 0;
     this.mark(4, 5, run, 'failed', { state: 'failed', counts: { players: 0, restarts: this.restarts } });
     gone();
+  }
+
+  /** 내려간 Store 자리를 올린다 — stop 이 이것을 기다린다. 되면 dirty(흐름 5 의 3 이 백업한다). */
+  private save(run: string): void {
+    const store = this.store;
+    if (store === null) return;
+    const epoch = this.row.epoch;
+    const before = this.saving ?? Promise.resolve();
+    const saving: Promise<void> = before
+      .then(() => this.ctx.push(this.name, store, epoch, run))
+      .then((done) => {
+        if (done) this.dirty = true;
+      })
+      .finally(() => {
+        if (this.saving === saving) this.saving = null;
+      });
+    this.saving = saving;
   }
 
   /** command — 호스트의 stdin 에 글 한 줄, 그 답 글 한 줄. 내려가 있거나 한계 안에 답이 없으면 null. `stop` 은 stop() 으로. */
@@ -318,9 +369,19 @@ export class Shard {
     const host = this.host;
     if (host === null) {
       this.agent?.kill();
-      return Promise.resolve();
+      const booting = this.starting;
+      if (booting !== null && this.state === 'starting') {
+        this.state = 'stopping'; // 아직 띄우기 전 — boot 가 보고 stopped 로 그만둔다
+        this.mark(7, 4, run, 'ok', { state: 'stopping' });
+        return booting.then(
+          () => {},
+          () => {},
+        );
+      }
+      return this.saving ?? Promise.resolve();
     }
     this.state = 'stopping';
+    this.stopRun = run;
     this.mark(7, 4, run, 'ok', { state: 'stopping' });
     this.stopping = (async () => {
       host.write('stop');
@@ -332,7 +393,11 @@ export class Shard {
       const agent = this.agent;
       agent?.kill();
       if (agent !== null) await agent.exited;
-    })().finally(() => (this.stopping = null));
+      if (this.saving !== null) await this.saving; // 흐름 7 의 5 — 올림이 끝나야 내려간 것이다
+    })().finally(() => {
+      this.stopping = null;
+      this.stopRun = null;
+    });
     return this.stopping;
   }
 

@@ -16,7 +16,7 @@ const walk = (dir: string, ext: string): string[] =>
       });
 
 const IMPORT = /^\s*(?:import|export)\s+(type\s+)?([^'"]*?)\s*from\s*['"]([^'"]+)['"]/gm;
-const CALL = /\b(directory|signer|fleet|vault)\.((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\(/g;
+const CALL = /\b(directory|signer|fleet|storage)\.((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\(/g;
 
 export function check(root: string): string[] {
   const src = join(root, 'src');

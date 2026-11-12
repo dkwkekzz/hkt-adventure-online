@@ -56,7 +56,7 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     const config: ServiceConfig = {
       ...base,
       apiPort: 0,
-      storageRoot: mkdtempSync(join(tmpdir(), 'svc-engine-')),
+      storage: { ...base.storage, root: mkdtempSync(join(tmpdir(), 'svc-engine-')) }, // MONGODB_URI · SNAPSHOT_URI 가 있으면 그 뒤 위에서
       fleet: { ...base.fleet, engineDir: ENGINE, viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'), ports: [3290, 3299], clockMs: 60_000 },
     };
     const logs: string[] = [];

@@ -15,25 +15,27 @@
 | SnapshotStore | 인스턴스의 Store 디렉터리와 그 백업을 둔다 | object storage(S3 호환) |
 | LeaderLock | 활성 컨트롤 플레인이 하나임을 지킨다 | MongoDB — document 하나 |
 
-- 접속 문자열은 환경변수 `MONGODB_URI`. 줄 하나의 쓰기는 document 하나의 원자적 갱신이다 — 트랜잭션에 기대지 않는다.
+- 접속 문자열은 환경변수 `MONGODB_URI`. 줄 하나의 쓰기는 document 하나의 원자적 갱신이다 — 트랜잭션에 기대지 않는다. 두 줄에 걸친 지킴(lease 와 값)은 값에 적힌 lease 번호로 한다.
 - MongoDB 는 replica set 으로 뜬다. 그 자신의 백업은 제품의 일이다.
-- 개발의 뒤는 디렉터리 뿌리 하나다. 모양은 같다.
+- object storage 의 자리는 환경변수 `SNAPSHOT_URI`(`s3://<bucket>/<prefix>`). 끝점은 `S3_ENDPOINT`(없으면 AWS 의 그 region), 자격은 `AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY`(· `AWS_SESSION_TOKEN`) · `AWS_REGION`. 인스턴스의 Store 하나 = 물건 하나(디렉터리를 통째로 묶은 tar.gz)라 올림 하나가 통째로 되거나 안 된다.
+- 개발의 뒤는 디렉터리 뿌리 하나(설정의 `storageRoot`)다. 모양은 같다 — 환경변수가 없는 쪽이 그 뿌리로 간다.
+- 개념은 뒤의 모양 둘만 안다 — 문서(MongoDB 또는 디렉터리: 줄 하나를 읽고 쓰고, 번(v)이 같을 때만 바꾸고, 스토리지의 시각을 준다)와 물건(object storage 또는 디렉터리: 올리고 내리고 베끼고 나열하고 지운다. 올림은 「지금 것이 이것일 때만」을 단다).
 
 ## 개념
 
 ### Database
 - 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `accountInfo` · `characters` · `bans` · `lastZone` · `zones` · `instances` · `nodes` · `audit`.
 - 기능: get(table, key) · put(table, key, value) · remove(table, key) · all(table). 줄 하나의 쓰기는 통째로 되거나 안 된다.
-- 생애: openStorage 와 함께.
+- 생애: openStorage 와 함께. openStorage 는 Service.start 가 부르고(흐름 1 의 1) 그 close 는 Service.stop 이 마지막에 부른다(흐름 7 의 11).
 
 ### CharacterStore
 - 데이터: 없음. 값은 스토리지에 — 캐릭터마다 값(파일 하나, 불투명)과 지난 값 몇 개(이력).
-- 기능: read(character, file) 은 값을 file 에 내려 준다(아직 없으면 만들지 않는다). write(character, lease, file) 은 그 lease 가 지금의 것일 때만 file 을 값으로 저장한다 — 아니면 거절. erase(character) 는 값과 이력을 지운다(누가 lease 를 들고 있으면 거절). versions(character) 는 이력의 때들. rollback(character, 때) 는 값을 그때의 것으로 바꾼다(누가 들고 있으면 거절).
+- 기능: read(character, file) 은 값을 file 에 내려 준다(아직 없으면 만들지 않는다). write(character, lease, file) 은 그 lease 가 지금의 것이고(번호 · holder 가 같고 만료 전) 값을 마지막으로 쓴 lease 보다 번호가 작지 않을 때만 file 을 값으로 저장한다 — 아니면 거절. 앞의 값은 이력으로 간다(설정의 `characterHistory` 개). erase(character) 는 값과 이력을 지운다(누가 lease 를 들고 있으면 거절). versions(character) 는 이력의 때들. rollback(character, 때) 는 값을 그때의 것으로 바꾼다(누가 들고 있으면 거절).
 - 생애: openStorage 와 함께.
 
 ### Leases
 - 데이터: 없음. 값은 스토리지에 — 캐릭터마다 Lease.
-- 기능: acquire(character, holder) 는 비었거나 만료됐으면 번호를 하나 올린 Lease 를 낸다. 누가 들고 있으면 null. renew(lease) 는 만료를 늦춘다. release(lease) 는 비운다. expire(holder) 는 그 holder 가 든 것을 전부 비운다. 비울 때마다 번호가 오른다 — 앞의 lease 로 하는 뒤늦은 저장은 거절된다.
+- 기능: acquire(character, holder) 는 비었거나 만료됐으면 번호를 하나 올린 Lease 를 낸다(만료는 스토리지의 시각 + 설정의 `leaseMs`). 누가 들고 있으면 null. renew(lease) 는 만료를 늦춘다. release(lease) 는 비운다. expire(holder) 는 그 holder 가 든 것을 전부 비운다. 비울 때마다 번호가 오른다 — 앞의 lease 로 하는 뒤늦은 저장은 거절된다.
 - 생애: openStorage 와 함께.
 - 캐릭터 하나의 값은 한때에 인스턴스 하나만 든다. 그것을 지키는 것이 이것 하나다.
 
@@ -42,13 +44,13 @@
 - 기능: 없음.
 
 ### SnapshotStore
-- 데이터: local(이 서버의 뿌리) · remote(object storage 의 자리).
-- 기능: pull(instance) 은 올라가 있는 그 인스턴스의 Store 를 이 서버에 내려 받아 dir 를 준다(없으면 빈 디렉터리). push(dir, instance, epoch) 는 그 자리를 올린다 — 통째로 되거나 안 되고, 올라가 있는 것보다 낡은 세대의 것은 거절한다. copy(instance) 는 올라가 있는 것의 백업 하나를 남긴다. restore(instance, 백업) 은 올라가 있는 것을 백업으로 바꾼다(기존은 백업 하나로 남긴다). list(instance) 는 백업 이름들. prune(instance, keep) 은 새것 keep 개를 남기고 지운다. purge(instance) 는 전부 지운다.
+- 데이터: local(이 서버의 뿌리 — 인스턴스마다 Store 자리와, 그것이 어느 판에서 났는가) · remote(object storage 의 자리 — 인스턴스마다 지금 것 하나(세대 · 판)와 백업들).
+- 기능: pull(instance) 은 올라가 있는 그 인스턴스의 Store 를 이 서버에 내려 받아 dir 를 준다(없으면 빈 디렉터리). 이 서버의 자리가 올라가 있는 판에서 났으면 내려 받지 않고 그 자리를 준다 — 올리지 못한 진행이 남는다. push(dir, instance, epoch) 는 그 자리를 올린다(새 판) — 통째로 되거나 안 되고, 올라가 있는 것보다 낡은 세대의 것은 거절한다. copy(instance) 는 올라가 있는 것의 백업 하나를 남기고 그 이름(UTC 시각 — 이름 순 = 시간 순)을 준다. 올라간 것이 없으면 거절. restore(instance, 백업) 은 올라가 있는 것을 백업으로 바꾼다(기존은 백업 하나로 남긴다). list(instance) 는 백업 이름들. prune(instance, keep) 은 새것 keep 개를 남기고 지운다. purge(instance) 는 전부 지운다.
 - 생애: openStorage 와 함께.
 
 ### LeaderLock
 - 데이터: 없음. 값은 스토리지에 — {holder(주소), term:int(늘기만 한다), until}.
-- 기능: acquire(holder, ttl) 는 비었거나 만료됐으면 term 을 하나 올려 잡는다. 남이 들고 있으면 null. renew(holder, term) 은 제 것이면 만료를 늦춘다. resign(holder, term) 은 제 것이면 비운다. holder() 는 지금 든 자의 주소와 term.
+- 기능: acquire(holder, ttl) 는 비었거나 만료됐으면 term 을 하나 올려 잡는다. 남이 들고 있으면 null. 만료는 스토리지의 시각으로 잰다. renew(holder, term) 은 제 것이면 만료를 늦춘다. resign(holder, term) 은 제 것이면 비운다. holder() 는 지금 든 자의 주소와 term.
 - 생애: openStorage 와 함께.
 
 ## 소켓
