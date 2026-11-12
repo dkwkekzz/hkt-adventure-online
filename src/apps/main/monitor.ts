@@ -2,9 +2,10 @@
 // 개념을 부르지 않는다. 수치는 흔적이 고친 단위의 표(units)와 단계마다의 셈(tally)이다 — 그 프로세스가 이미 든 것.
 // trace 는 기다리지 않고 실패하지 않는다. 느린 읽는 이의 몫은 버리고 버린 수를 다음 글에 싣는다.
 
+import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server, ServerResponse } from 'node:http';
-import type { FlowMap, Metrics, StreamHead, Trace, UnitNow } from '../../protocol/observe';
+import type { FlowMap, Metrics, StreamHead, Trace, TraceInput, UnitNow } from '../../protocol/observe';
 import { monitorPage } from './monitor-page';
 
 /** 읽는 이 하나의 쓰기 버퍼가 이만큼 차면 그 몫을 버린다. */
@@ -23,10 +24,15 @@ export interface MonitorParts {
   readonly traceKeep: number;
   /** 수치를 흘리는 간격(ms) — Clock 의 간격 */
   readonly every: number;
+  /** 서명 키 — 계정을 가명으로. 프로세스마다 같은 키라 가명도 같다 */
+  readonly key: string;
 }
 
+/** 가명 — HMAC(키, "observe:" + 계정) 의 앞 8 자. 키 없이는 계정으로 되돌릴 수 없다. */
+export const aliasOf = (key: string, account: string): string => createHmac('sha256', key).update(`observe:${account}`).digest('hex').slice(0, 8);
+
 export class Monitor {
-  // 데이터 — role · build · map(불변) · server · recent · readers · units · tally · closing
+  // 데이터 — role · build · map · key(불변) · server · recent · readers · units · tally · closing
   readonly role: string;
   readonly build: string;
   readonly map: FlowMap;
@@ -41,6 +47,7 @@ export class Monitor {
   private readonly every: number;
   private timer: NodeJS.Timeout | null = null;
   private readonly html: string;
+  private readonly key: string;
 
   constructor(parts: MonitorParts) {
     this.role = parts.role;
@@ -48,6 +55,7 @@ export class Monitor {
     this.map = parts.map;
     this.keep = parts.traceKeep;
     this.every = parts.every;
+    this.key = parts.key;
     this.html = monitorPage(parts.map);
     this.server = createServer((req, res) => {
       const path = new URL(req.url ?? '/', 'http://x').pathname;
@@ -108,10 +116,11 @@ export class Monitor {
     res.on('close', () => this.readers.delete(reader));
   }
 
-  /** trace — 흔적 하나를 recent · units · tally 와 readers 마다에. 기다리지 않는다. */
-  trace(t: Omit<Trace, 'at'>): void {
+  /** trace — 넘겨받은 계정을 가명으로 바꾸고, 흔적 하나를 recent · units · tally 와 readers 마다에. 기다리지 않는다. */
+  trace(t: TraceInput): void {
     try {
-      const trace: Trace = { at: Date.now(), ...t };
+      const { account, ...rest } = t;
+      const trace: Trace = { at: Date.now(), ...rest, ...(account === undefined ? {} : { who: aliasOf(this.key, account) }) };
       this.recent.push(trace);
       if (this.recent.length > this.keep) this.recent.splice(0, this.recent.length - this.keep);
       const key = `${trace.flow}.${trace.step}.${trace.end}`;

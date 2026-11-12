@@ -132,7 +132,7 @@ export class Fleet {
     const name = this.config.world;
     const take = async (): Promise<number> => {
       const port = await this.ports.take();
-      this.trace({ flow: 3, step: 14, run, unit: name, end: port === null ? 'failed' : 'ok' }); // Ports.take
+      this.trace({ flow: 3, step: 14, run, unit: name, end: port === null ? 'failed' : 'ok', account }); // Ports.take
       if (port === null) throw new Error('빈 포트가 없다');
       return port;
     };
@@ -153,7 +153,7 @@ export class Fleet {
     if (shard.state === 'ready') {
       await shard.command('status'); // 사람 수를 지금 것으로
       const full = shard.players >= this.config.capacity && !shard.linked.includes(account);
-      this.trace({ flow: 3, step: 6, run, unit: name, end: full ? 'refused' : 'ok', counts: { players: shard.players, capacity: this.config.capacity } }); // Placer.pick 의 일 — 슬롯이 비었는가
+      this.trace({ flow: 3, step: 6, run, unit: name, end: full ? 'refused' : 'ok', counts: { players: shard.players, capacity: this.config.capacity }, account }); // Placer.pick 의 일 — 슬롯이 비었는가
       if (full) throw new Error(`세계가 가득 찼다 — 사람 ${shard.players} / ${this.config.capacity}`);
     }
     await shard.start(run);

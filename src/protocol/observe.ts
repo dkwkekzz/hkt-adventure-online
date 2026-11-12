@@ -3,7 +3,7 @@
 //   GET /metrics       Metrics 의 JSON
 //   GET /observe       text/event-stream — event: metrics(첫 글은 recent 를 함께) · event: trace
 //   GET /observe/page  관측 페이지 한 장 — 흐름의 지도(FlowMap)를 품는다
-// 흔적에 계정 · 캐릭터의 이름과 토큰이 없다. 수 · state · 단위의 이름뿐이다.
+// 흔적에 토큰과 계정(Account.id)이 없다. 사람은 가명(who) · 캐릭터 이름(name) · 세션(session)으로만. /health · /metrics 에는 사람이 없다.
 
 /** 흔적의 끝 — ◇ 는 wait, ✕ 는 refused, 「실패하면」은 failed. */
 export const TRACE_ENDS = ['ok', 'wait', 'refused', 'failed'] as const;
@@ -23,10 +23,19 @@ export interface Trace {
   readonly state?: string;
   /** 단계의 결과가 수이면 그 수 — 사람 · 지연 · 종료 코드. */
   readonly counts?: Readonly<Record<string, number>>;
+  /** 단계가 다룬 사람의 가명 — HMAC(서명 키, "observe:" + Account.id) 의 앞 8 자. Monitor 가 짓는다 */
+  readonly who?: string;
+  /** 그 사람의 캐릭터 이름 — 캐릭터를 아는 단계만 */
+  readonly name?: string;
+  /** 그 사람의 세션 — 세션을 잡은 뒤의 단계만 */
+  readonly session?: string;
 }
 
-/** 단계가 흔적을 남기는 함수 — 앱(Monitor.trace)이 개념에 준다. at 은 Monitor 가 찍는다. 기다리지 않고 실패하지 않는다. */
-export type TraceFn = (trace: Omit<Trace, 'at'>) => void;
+/** 단계를 부른 자리가 넘기는 것 — at · who 는 Monitor 가 짓는다. account 는 가명이 되고 남지 않는다. */
+export type TraceInput = Omit<Trace, 'at' | 'who'> & { readonly account?: string };
+
+/** 단계가 흔적을 남기는 함수 — 앱(Monitor.trace)이 개념에 준다. 기다리지 않고 실패하지 않는다. */
+export type TraceFn = (trace: TraceInput) => void;
 
 /** 단위 하나의 지금 — 흔적이 고친다. */
 export interface UnitNow {

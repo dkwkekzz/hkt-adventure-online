@@ -45,7 +45,7 @@
 - 생애: Service.start 가 만든다. 스토리지에 두지 않는다.
 
 ### Session
-- 데이터: character · account · build · instance · to:인스턴스|null · gate · state:`pending`(값이 아직 로드되지 않았다)|`active`|`grace`(끊겼다 — 값은 인스턴스에 있다) · until.
+- 데이터: id(불변, 잡을 때 짓는 이름 — 흔적의 session) · character · account · build · instance · to:인스턴스|null · gate · state:`pending`(값이 아직 로드되지 않았다)|`active`|`grace`(끊겼다 — 값은 인스턴스에 있다) · until.
 - 기능: 없음.
 
 ### Queue

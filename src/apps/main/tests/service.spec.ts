@@ -145,7 +145,14 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(s.monitor.units.get('main')).toMatchObject({ state: 'ready' });
     await post('/enter', { token: 'nope' });
     expect(s.monitor.tally.get('3.2.refused')).toBe(1);
-    expect(s.monitor.recent.every((t) => !JSON.stringify(t).includes(a.body['token']!) && !JSON.stringify(t).includes(a.body['subject']!))).toBe(true);
+    const account = a.body['token']!.split('.')[1]!;
+    expect(s.monitor.recent.every((t) => !JSON.stringify(t).includes(a.body['token']!) && !JSON.stringify(t).includes(a.body['subject']!) && !JSON.stringify(t).includes(account))).toBe(true);
+    // 사람은 가명으로 — 로그인과 입장이 같은 가명, 입장의 답은 세션을 싣는다
+    const who = (flow: number, step: number) => s.monitor.recent.find((t) => t.flow === flow && t.step === step && t.who !== undefined)?.who;
+    expect(who(2, 2)).toMatch(/^[0-9a-f]{8}$/);
+    expect(who(3, 9)).toBe(who(2, 2));
+    expect(s.monitor.recent.find((t) => t.flow === 3 && t.step === 9 && t.run === run)).toMatchObject({ session: run });
+    expect(s.monitor.recent.find((t) => t.flow === 3 && t.step === 2 && t.end === 'refused')!.who).toBeUndefined(); // 틀린 토큰은 누군지 모른다
     const monitor = s.monitor;
     await s.stop();
     const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);

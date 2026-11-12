@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openVault } from '../../storage';
-import type { Trace } from '../../protocol/observe';
+import type { TraceInput } from '../../protocol/observe';
 import type { VaultSocket } from '../../protocol/vault';
 import { Fleet } from '..';
 import type { FleetConfig } from '..';
@@ -22,7 +22,7 @@ afterEach(async () => {
 
 function up(over: Partial<FleetConfig> = {}, vault: VaultSocket = openVault(mkdtempSync(join(tmpdir(), 'st-')))) {
   const log: string[] = [];
-  const traces: Omit<Trace, 'at'>[] = [];
+  const traces: TraceInput[] = [];
   const config: FleetConfig = {
     engineDir: fakeEngine(),
     world: 'main',

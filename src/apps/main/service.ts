@@ -47,7 +47,7 @@ export class Service {
   static async start(config: ServiceConfig, key: string | undefined, log: (line: string) => void = (l) => console.log(l)): Promise<Service> {
     if (key === undefined || key === '') throw new Error('HOST_AUTH_KEY 가 없다 — 토큰 없는 서비스는 열지 않는다');
     const run = freshRun();
-    const monitor = new Monitor({ role: 'main', build: config.build, map: readMap(DESIGN, SRC), traceKeep: config.traceKeep, every: config.fleet.clockMs });
+    const monitor = new Monitor({ role: 'main', build: config.build, map: readMap(DESIGN, SRC), traceKeep: config.traceKeep, every: config.fleet.clockMs, key });
     await monitor.listen(config.monitorPort);
     let service: Service;
     try {

@@ -30,7 +30,8 @@ const SUBJECT = /^[A-Za-z0-9_-]{8,64}$/;
 /** login — 흐름 2. 게스트의 주체가 비면 새로 짓는다. */
 export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusal {
   const run = freshRun();
-  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused'): void => parts.trace({ flow, step, run, unit: '-', end });
+  let account: string | undefined;
+  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused'): void => parts.trace({ flow, step, run, unit: '-', end, ...(account === undefined ? {} : { account }) });
   const refuse = (why: string): Refusal => {
     mark(2, 1, 'refused');
     return { why };
@@ -39,7 +40,7 @@ export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusa
   const subject = body.subject === undefined || body.subject === '' ? randomBytes(12).toString('base64url') : body.subject;
   if (!SUBJECT.test(subject)) return refuse('주체의 모양이 틀렸다');
   mark(2, 1, 'ok');
-  const account = parts.directory.resolve({ provider: body.provider, subject });
+  account = parts.directory.resolve({ provider: body.provider, subject });
   mark(2, 2, 'ok');
   const token = parts.signer.issue(account);
   mark(2, 4, 'ok');
@@ -50,13 +51,16 @@ export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusa
 /** enter — 흐름 3. 토큰을 풀고 그 계정의 샤드를 세워 주소를 준다. */
 export async function enter(parts: ApiParts, body: EnterRequest): Promise<Address | Refusal> {
   const run = freshRun();
-  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused'): void => parts.trace({ flow, step, run, unit: '-', end });
+  let who: { account?: string; session?: string } = {};
+  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused'): void => parts.trace({ flow, step, run, unit: '-', end, ...who });
   mark(3, 1, 'ok');
   const account = parts.signer.verify(body.token);
+  if (account !== null) who = { account };
   mark(3, 2, account === null ? 'refused' : 'ok');
   if (account === null) return { why: '토큰이 틀렸거나 만료되었다 — 다시 로그인' };
   try {
     const address = await parts.fleet.enter(account, body.token, run);
+    who = { account, session: run }; // 세션 모듈(plan 05) 전에는 입장의 run 이 그 사람의 세션이다
     mark(3, 9, 'wait');
     return address;
   } catch (e) {

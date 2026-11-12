@@ -3,6 +3,7 @@
 //   마디  — 프로세스는 지금의 state(듣는 중 · 설계만 · 끊김)와 거기서 지난 단계의 수, 노드 서버 안에는 인스턴스(엔진 프로세스)의 state · 사람 수
 //   연결  — 흔적이 넘은 수와 마지막 끝. 흔적이 지나갈 때 글 하나가 연결을 따라 움직인다
 //   흐름  — 고르면 그 단계들이 구조 위에 놓인다: 마디마다 거기서 일어나는 # , 연결마다 그 사이를 넘는 # . 「재생」은 그 길을 차례로 보낸다
+//   실행  — 트리거의 주인으로 가른다. 사람은 사람마다 한 줄(캐릭터 이름, 없으면 가명 · 세션 · 인스턴스), 운영자는 명령마다, 기계는 흐름마다의 셈(거절 · 실패만 줄로)
 // 단계가 놓이는 곳은 관측의 지도(README 의 표)에서 — 개념이 사는 프로세스, 여럿이면 앞 단계와 같은 곳. 흐름 1 · 7 은 어느 role 칸.
 // ?from=<주소>,<주소> 면 여러 Monitor 의 stream 을 함께 읽는다(비면 이 페이지의 자리).
 
@@ -87,6 +88,21 @@ button:hover { background: var(--soft); }
 .run:hover { background: var(--soft); } .run.sel { background: var(--glow); }
 .run .p { font-family: var(--mono); font-size: 11px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty { color: var(--mute); font-size: 12px; }
+.person { padding: 6px 8px; border-radius: 7px; border: 1px solid transparent; }
+.person:hover { background: var(--soft); } .person.sel { border-color: var(--hl); background: var(--glow); }
+.person .top { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.person .nm { font-weight: 650; } .al { font-family: var(--mono); font-size: 11px; color: var(--mute); }
+.person .ago { margin-left: auto; font-size: 11px; color: var(--mute); }
+.tag { font-family: var(--mono); font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--soft); color: var(--ink); cursor: pointer; }
+.tag.inst { border: 1px solid var(--line); }
+.acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.act { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+.act:hover { background: var(--soft); } .act.sel { border-color: var(--hl); color: var(--hl); }
+.machine { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: 12px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+.machine:hover { background: var(--soft); }
+.filter { display: flex; gap: 6px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+.filter input { font: inherit; font-size: 12px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); min-width: 0; flex: 1; }
+.sec2 { font-size: 12px; color: var(--mute); margin: 10px 0 4px; font-weight: 600; }
 .log { grid-column: 1 / -1; }
 .logwrap { max-height: 260px; overflow: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -112,14 +128,15 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   </section>
   <section class="panel">
     <div class="detail" id="detail"></div>
+    <h2 style="margin-top:14px">실행 — 누가 무엇을 했나</h2>
+    <div class="filter"><input id="q" type="search" placeholder="캐릭터 이름 · 가명 · 세션 · 인스턴스로 찾기" aria-label="찾기"><span id="only"></span></div>
+    <div id="runs" style="max-height: 460px; overflow: auto"></div>
     <h2 style="margin-top:14px">흐름 — 고르면 그 길이 그림 위에 놓인다</h2>
     <div class="flows" id="flows"></div>
-    <h2 style="margin-top:14px">최근의 실행(run) — 실제로 지나간 길</h2>
-    <div class="runs" id="runs"></div>
   </section>
   <section class="panel log">
     <h2>글 — 최근 것이 위</h2>
-    <div class="logwrap"><table><thead><tr><th>때</th><th>흐름 · #</th><th>단계</th><th>어디서 · 어디로</th><th>단위</th><th>끝</th><th>state · 수</th></tr></thead><tbody id="log"></tbody></table></div>
+    <div class="logwrap"><table><thead><tr><th>때</th><th>흐름 · #</th><th>단계</th><th>누구</th><th>어디서 · 어디로</th><th>단위</th><th>끝</th><th>state · 수</th></tr></thead><tbody id="log"></tbody></table></div>
   </section>
 </main>
 <script type="application/json" id="data">${data}</script>
@@ -133,6 +150,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   const NODE = new Map(MAP.nodes.map((n) => [n.id, n]));
   const PROCS = MAP.nodes.filter((n) => !n.external).map((n) => n.id);
   const ENDS = ['ok', 'wait', 'refused', 'failed'];
+  const PERSON = [2, 3, 8, 9, 10, 11], OPERATOR = [6]; // 트리거의 주인 — 그 밖은 기계
+  const ownerOf = (flow) => PERSON.includes(flow) ? 'person' : OPERATOR.includes(flow) ? 'operator' : 'machine';
   const POS = {
     client: { x: 95, y: 330, w: 150, h: 92 }, operator: { x: 600, y: 52, w: 190, h: 56 },
     api: { x: 340, y: 200, w: 200, h: 104 }, gateway: { x: 340, y: 460, w: 200, h: 104 },
@@ -198,6 +217,9 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   const runs = new Map(); const log = []; let total = 0;
   let sel = { kind: null, id: null }; // 고른 마디 · 연결
   let overlay = null; // { kind: 'flow'|'run', flow, layout, label, cur }
+  let only = null; // 인스턴스 하나로 거른다
+  let query = '';
+  const machine = new Map(); // 흐름 → { n, bad, at, last: run id }
   let replay = null;
 
   function count(edge, msg) { edge.n++; edge.last = msg.t.end; edge.at = Date.now(); edge.msgs.unshift(msg); if (edge.msgs.length > 12) edge.msgs.length = 12; }
@@ -206,7 +228,11 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   function ingest(src, t, live) {
     src.lastAt = Math.max(src.lastAt, t.at); total++;
     const id = (src.base || '') + '|' + t.run;
-    let r = runs.get(id); if (!r) { r = { id, run: t.run, flow: t.flow, traces: [], prev: null }; runs.set(id, r); }
+    let r = runs.get(id); if (!r) { r = { id, run: t.run, flow: t.flow, owner: ownerOf(t.flow), traces: [], prev: null, who: null, name: null, session: null, unit: null, bad: false }; runs.set(id, r); }
+    if (t.who) r.who = t.who; if (t.name) r.name = t.name; if (t.session) r.session = t.session; if (t.unit && t.unit !== '-') r.unit = t.unit;
+    if (t.end === 'refused' || t.end === 'failed') r.bad = true;
+    if (r.owner === 'machine' && r.traces.length === 0) { const m = machine.get(r.flow) || { n: 0, bad: 0, at: 0, last: null }; m.n++; m.at = t.at; m.last = id; machine.set(r.flow, m); }
+    if (r.owner === 'machine' && (t.end === 'refused' || t.end === 'failed') && !r.counted) { r.counted = true; machine.get(r.flow).bad++; }
     const st = STEP.get(t.flow + '.' + t.step);
     const proc = place(st, r.prev);
     const path = r.prev && r.prev !== proc ? route(r.prev, proc) : [proc];
@@ -224,13 +250,23 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     }
     log.unshift({ t, where: ext.length ? where + ' ⇄ ' + ext.map((x) => LABEL[x]).join(' · ') : where });
     if (log.length > 300) log.length = 300;
-    if (runs.size > 80) { const old = [...runs.values()].sort((a, b) => a.at - b.at).slice(0, 30); for (const o of old) runs.delete(o.id); }
+    if (runs.size > 600) prune();
     if (live) {
       if (path.length > 1) fly(path, t.end);
       for (const x of ext) { const d = first ? 'in' : t.end === 'wait' ? 'out' : 'both'; if (d === 'in') fly([x, proc], t.end); else if (d === 'out') fly([proc, x], t.end); else { fly([proc, x], t.end); setTimeout(() => fly([x, proc], t.end), 380); } }
       pulse(proc);
     }
     schedule();
+  }
+
+  function prune() { // 기계의 실행은 흐름마다 마지막 것과 거절 · 실패만, 사람 · 운영자의 실행은 최근 400
+    const keep = new Set([...machine.values()].map((m) => m.last));
+    const all = [...runs.values()].sort((a, b) => b.at - a.at);
+    let people = 0, badMachine = 0;
+    for (const r of all) {
+      if (r.owner === 'machine') { if (keep.has(r.id) || (r.bad && badMachine++ < 30)) continue; runs.delete(r.id); }
+      else if (people++ >= 400) runs.delete(r.id);
+    }
   }
 
   function connect(src) {
@@ -340,7 +376,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     const us = allUnits(); const x0 = P.x - P.w / 2 + 12; let y = P.y - P.h / 2 + 38;
     if (!us.length) { txt('인스턴스 없음 — 입장이 띄운다', { x: x0, y: y + 6, class: 'mute', 'font-size': 12 }, g); return; }
     for (const u of us.slice(0, 4)) {
-      el('rect', { x: x0, y: y - 12, width: P.w - 24, height: 26, rx: 6, fill: 'var(--panel)', stroke: 'var(--line)' }, g);
+      const row = el('rect', { x: x0, y: y - 12, width: P.w - 24, height: 26, rx: 6, fill: 'var(--panel)', stroke: only === u.unit ? 'var(--hl)' : 'var(--line)', style: 'cursor:pointer' }, g);
+      const unit = u.unit; row.addEventListener('click', (e) => { e.stopPropagation(); only = only === unit ? null : unit; schedule(); });
       el('circle', { cx: x0 + 12, cy: y + 1, r: 5, class: 'st-' + (u.state || 'stopped') }, g);
       txt(u.unit + '  ' + (u.state || '-'), { x: x0 + 24, y: y + 5, 'font-size': 12, 'font-weight': 600 }, g);
       const c = u.counts || {};
@@ -410,7 +447,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       h += '<p><b>흐름 ' + f.flow + '. ' + esc(f.name) + '</b> <span class="sub">' + md(f.title) + '</span></p>';
       h += '<p class="sub">트리거: ' + md(f.trigger) + '</p>';
       if (overlay.kind === 'flow') h += '<p class="sub">지금 코드가 도는 단계 ' + traced + ' / ' + f.steps.length + ' — 흐린 줄은 아직 없다</p>';
-      else h += '<p class="sub">run ' + esc(overlay.label) + ' · 단계 ' + overlay.layout.length + '</p>';
+      else { const r = runs.get(overlay.id); h += '<p class="sub">' + (r && (r.name || r.who) ? '누구: <b>' + esc(r.name || '가명 ' + r.who) + '</b>' + (r.name && r.who ? ' <span class="al">' + esc(r.who) + '</span>' : '') + ' · ' : '') + (r && r.session ? '세션 ' + esc(r.session) + ' · ' : '') + (r && r.unit ? '인스턴스 ' + esc(r.unit) + ' · ' : '') + 'run ' + esc(overlay.label) + ' · 단계 ' + overlay.layout.length + '</p>'; }
       h += '<div class="btns"><button id="play">재생</button><button id="clear">실시간으로</button></div>';
       h += seqHtml(overlay.layout, overlay.kind);
     } else if (sel.kind === 'node') {
@@ -445,16 +482,49 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       return '<div class="frow' + (overlay && overlay.kind === 'flow' && overlay.flow === f.flow ? ' sel' : '') + '" data-flow="' + f.flow + '"><span class="n">' + f.flow + '</span><span>' + esc(f.name) + '</span><span class="c">' + t + ' / ' + f.steps.length + '</span><span class="bar"><i style="width:' + Math.round((100 * t) / Math.max(1, f.steps.length)) + '%"></i></span></div>';
     }).join('');
   }
+  const ago = (at) => { const d = Math.max(0, Math.round((Date.now() - at) / 1000)); return d < 60 ? d + '초 전' : d < 3600 ? Math.round(d / 60) + '분 전' : Math.round(d / 3600) + '시간 전'; };
+  const personOf = (r) => r.name || (r.who ? '가명 ' + r.who : null);
+  function matches(r) {
+    if (only && r.unit !== only) return false;
+    if (!query) return true;
+    return [r.name, r.who, r.session, r.unit, r.run].some((x) => x && String(x).toLowerCase().includes(query));
+  }
+  function actHtml(r) {
+    const f = FLOW.get(r.flow);
+    return '<span class="act' + (overlay && overlay.kind === 'run' && overlay.id === r.id ? ' sel' : '') + '" data-run="' + esc(r.id) + '" title="run ' + esc(r.run) + (r.session ? ' · 세션 ' + esc(r.session) : '') + '"><span class="dot ' + r.end + '"></span>' + esc(f ? f.name : '흐름 ' + r.flow) + (r.unit ? ' · ' + esc(r.unit) : '') + '</span>';
+  }
   function renderRuns() {
-    const list = [...runs.values()].sort((a, b) => b.at - a.at).slice(0, 30);
-    document.getElementById('runs').innerHTML = list.length === 0 ? '<p class="empty">흔적을 기다린다</p>' : list.map((r) => {
-      const f = FLOW.get(r.flow); const p = r.traces.map((t) => (t.flow !== r.flow ? t.flow + '·' : '') + t.step).join(' → ');
-      return '<div class="run' + (overlay && overlay.kind === 'run' && overlay.id === r.id ? ' sel' : '') + '" data-run="' + esc(r.id) + '"><span><span class="dot ' + r.end + '"></span> ' + r.flow + ' ' + esc(f ? f.name : '') + '</span><span class="p">' + esc(p) + '</span></div>';
-    }).join('');
+    const list = [...runs.values()].filter(matches).sort((a, b) => b.at - a.at);
+    // 사람 — 가명마다 한 줄. 가명이 없는 사람의 실행(틀린 토큰 · 주체)은 「누군지 모름」 한 줄로
+    const people = new Map();
+    for (const r of list.filter((r) => r.owner === 'person')) {
+      const key = r.who || '?';
+      let p = people.get(key); if (!p) { p = { key, who: r.who, name: null, units: new Set(), sessions: new Set(), runs: [], at: 0, end: r.end }; people.set(key, p); }
+      if (!p.name && r.name) p.name = r.name; if (r.unit) p.units.add(r.unit); if (r.session) p.sessions.add(r.session);
+      p.runs.push(r); if (r.at > p.at) { p.at = r.at; p.end = r.end; }
+    }
+    let h = '<div class="sec2">사람 ' + [...people.values()].filter((p) => p.who).length + '</div>';
+    if (people.size === 0) h += '<p class="empty">아직 사람이 없다 — 로그인 · 입장이 오면 선다</p>';
+    for (const p of [...people.values()].sort((a, b) => (a.who ? 0 : 1) - (b.who ? 0 : 1) || b.at - a.at).slice(0, 60)) {
+      const title = p.who ? (p.name ? '<span class="nm">' + esc(p.name) + '</span> <span class="al">' + esc(p.who) + '</span>' : '<span class="nm">가명 ' + esc(p.who) + '</span>') : '<span class="nm">누군지 모름</span> <span class="al">토큰 · 주체가 틀린 요청</span>';
+      const sess = [...p.sessions].slice(-2).map((x) => '<span class="tag" title="세션">세션 ' + esc(x) + '</span>').join(' ');
+      const inst = [...p.units].map((u) => '<span class="tag inst" data-unit="' + esc(u) + '" title="이 인스턴스만 보기">' + esc(u) + '</span>').join(' ');
+      h += '<div class="person"><div class="top"><span class="dot ' + p.end + '"></span>' + title + ' ' + inst + '<span class="ago">' + ago(p.at) + '</span></div>' + (sess ? '<div class="acts">' + sess + '</div>' : '') + '<div class="acts">' + p.runs.slice(0, 8).map(actHtml).join('') + (p.runs.length > 8 ? '<span class="al">+' + (p.runs.length - 8) + '</span>' : '') + '</div></div>';
+    }
+    const ops = list.filter((r) => r.owner === 'operator');
+    h += '<div class="sec2">운영자 ' + ops.length + '</div>';
+    h += ops.length === 0 ? '<p class="empty">명령이 없었다</p>' : '<div class="acts">' + ops.slice(0, 20).map(actHtml).join('') + '</div>';
+    h += '<div class="sec2">기계 — 흐름마다의 셈</div>';
+    const ms = [...machine.entries()].sort((a, b) => a[0] - b[0]);
+    h += ms.length === 0 ? '<p class="empty">아직 없다</p>' : ms.map(([fl, m]) => '<div class="machine" data-run="' + esc(m.last) + '"><span class="n mono">' + fl + '</span><span>' + esc(FLOW.get(fl) ? FLOW.get(fl).name : '') + ' · ' + m.n + '번' + (m.bad ? ' · <span style="color:var(--failed)">거절 · 실패 ' + m.bad + '</span>' : '') + '</span><span class="al">' + ago(m.at) + '</span></div>').join('');
+    const bad = list.filter((r) => r.owner === 'machine' && r.bad).slice(0, 10);
+    if (bad.length) h += '<div class="acts">' + bad.map(actHtml).join('') + '</div>';
+    document.getElementById('runs').innerHTML = h;
+    document.getElementById('only').innerHTML = only ? '<span class="tag inst" data-clear="1">인스턴스 ' + esc(only) + ' 만 · 지우기</span>' : '';
   }
   function renderLog() {
     document.getElementById('log').innerHTML = log.slice(0, 150).map((x) => { const t = x.t;
-      return '<tr><td class="mono">' + time(t.at) + '</td><td class="mono">' + t.flow + ' · ' + t.step + '</td><td>' + md(whoOf(t)) + '</td><td>' + esc(x.where) + '</td><td>' + esc(t.unit) + '</td><td><span class="dot ' + t.end + '"></span> ' + t.end + '</td><td class="mono">' + esc([t.state, kv(t.counts)].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('');
+      return '<tr><td class="mono">' + time(t.at) + '</td><td class="mono">' + t.flow + ' · ' + t.step + '</td><td>' + md(whoOf(t)) + '</td><td>' + esc(t.name || (t.who ? '가명 ' + t.who : '-')) + (t.session ? ' <span class="al">· ' + esc(t.session) + '</span>' : '') + '</td><td>' + esc(x.where) + '</td><td>' + esc(t.unit) + '</td><td><span class="dot ' + t.end + '"></span> ' + t.end + '</td><td class="mono">' + esc([t.state, kv(t.counts)].filter(Boolean).join(' · ')) + '</td></tr>'; }).join('');
   }
   function renderHead() {
     const m = sources.map((s) => s.metrics).filter(Boolean);
@@ -483,7 +553,12 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   function stopReplay() { if (replay) clearInterval(replay); replay = null; if (overlay) overlay.cur = null; }
 
   document.getElementById('flows').addEventListener('click', (e) => { const r = e.target.closest('[data-flow]'); if (r) { const n = Number(r.dataset.flow); if (overlay && overlay.kind === 'flow' && overlay.flow === n) { overlay = null; schedule(); } else showFlow(n); } });
-  document.getElementById('runs').addEventListener('click', (e) => { const r = e.target.closest('[data-run]'); if (r) showRun(r.dataset.run); });
+  document.getElementById('runs').addEventListener('click', (e) => {
+    const u = e.target.closest('[data-unit]'); if (u) { only = only === u.dataset.unit ? null : u.dataset.unit; schedule(); return; }
+    const r = e.target.closest('[data-run]'); if (r) showRun(r.dataset.run);
+  });
+  document.getElementById('only').addEventListener('click', () => { only = null; schedule(); });
+  document.getElementById('q').addEventListener('input', (e) => { query = e.target.value.trim().toLowerCase(); schedule(); });
 
   let queued = false;
   function schedule() { if (!queued) { queued = true; requestAnimationFrame(render); } }

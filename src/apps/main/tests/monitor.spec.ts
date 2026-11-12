@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FlowMap, StreamHead, Trace } from '../../../protocol/observe';
 import { readFlow, readMap } from '../map';
-import { Monitor } from '../monitor';
+import { Monitor, aliasOf } from '../monitor';
 
 const SRC = resolve(import.meta.dirname, '..', '..', '..');
 const DESIGN = resolve(SRC, '..', 'design');
@@ -19,7 +19,7 @@ afterEach(async () => {
 const EMPTY: FlowMap = { nodes: [], links: [], concepts: [], flows: [] };
 
 async function up(map: FlowMap = EMPTY, keep = 3): Promise<Monitor> {
-  const m = new Monitor({ role: 'main', build: 'b1', map, traceKeep: keep, every: 60_000 });
+  const m = new Monitor({ role: 'main', build: 'b1', map, traceKeep: keep, every: 60_000, key: 'k1' });
   await m.listen(0);
   monitors.push(m);
   return m;
@@ -166,7 +166,23 @@ describe('Monitor — 흐름 14', () => {
     expect((JSON.parse(json) as FlowMap).flows[0]!.title).toBe('</script><b>');
   });
 
-  it('Monitor.trace — 흔적이 계정 · 토큰을 싣지 않는다(칸이 없다), 깨진 값에도 던지지 않는다', async () => {
+  it('Monitor.trace — 넘겨받은 계정은 가명(who)이 되고 남지 않는다. 같은 키 · 같은 계정은 같은 가명, 키가 다르면 다르다', async () => {
+    const m = await up();
+    m.trace({ flow: 3, step: 9, run: 'r', unit: '-', end: 'wait', account: 'p0123456789ab', name: '이름', session: 's1' });
+    const t = m.recent.at(-1)!;
+    expect(t).toMatchObject({ who: aliasOf('k1', 'p0123456789ab'), name: '이름', session: 's1' });
+    expect(t.who).toMatch(/^[0-9a-f]{8}$/);
+    expect(JSON.stringify(m.recent)).not.toContain('p0123456789ab');
+    expect(aliasOf('k1', 'p0123456789ab')).toBe(t.who);
+    expect(aliasOf('k2', 'p0123456789ab')).not.toBe(t.who);
+    expect(aliasOf('k1', 'p0123456789ac')).not.toBe(t.who);
+    // /metrics 에는 사람이 없다
+    const metrics = await (await fetch(`http://localhost:${m.port}/metrics`)).text();
+    expect(metrics).not.toContain(t.who!);
+    expect(metrics).not.toContain('이름');
+  });
+
+  it('Monitor.trace — 깨진 값에도 던지지 않는다. 사람을 다루지 않는 흔적에는 사람의 칸이 없다', async () => {
     const m = await up();
     expect(() => m.trace(null as unknown as Trace)).not.toThrow();
     m.trace({ flow: 9, step: 1, run: 'x', unit: '-', end: 'ok' });
