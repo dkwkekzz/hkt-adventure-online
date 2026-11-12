@@ -13,7 +13,7 @@ src/
   storage/    저장장치 (design/02-roles/storage.md) — Vault · Ledger. 밖에 내보내는 것은 openVault 하나
   fleet/      함대 (design/02-roles/fleet.md) — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator
   apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · POST /login · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
-              Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design/01-flows 에서 뽑는 흐름의 지도) · monitor-page(관측 페이지)
+              Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design 에서 뽑는 관측의 지도 — 프로세스 · 연결 · 개념이 사는 곳 · 흐름) · monitor-page(관측 페이지 — 구조의 그림)
   tools/      boundary(경계 검사) · index(설계 색인 · 코드의 흔적이 흐름에 있는가) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
 service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데이터셋 · 사람의 묶음의 틀(party) · 동시 접속 상한(capacity) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · Monitor 의 포트 · 흔적의 상한 · 한계 · 주기. 게임 명사는 여기에만
@@ -58,7 +58,7 @@ npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다
 HOST_AUTH_KEY=… npm start [-- config.json]
                        서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」 → /play?ws=<세계>. 사람은 모두 같은 세계(설정의 world)에 붙고 계정마다 자기 묶음을 맡는다. 입장의 한계는 capacity 뿐. stdin 은 Operator(help).
-                       관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 흐름 열넷의 지도 위에 단계의 흔적과 단위의 state 가 지금 칠해진다. /health · /metrics 도 거기.
+                       관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 프로세스 · 밖의 상자와 연결의 그림에 state 와 지나가는 글이 지금 보이고, 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
                        env: PORT(Api 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL(프록시 뒤의 페이지 주소) · SERVICE_STORAGE · SERVICE_ENGINE
 npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --viewer off]
                        떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(playwright 가 깔린 자리에서)

@@ -2,10 +2,10 @@
 // 개념은 책임 파일의 `### <이름>` 머리, 기능은 그 개념의 `- 기능:` · `- 데이터:` 줄에 그 낱말이 있는가. 없으면 ✗ 를 찍고 1 로 끝난다.
 // 흔적(흐름 14) — src 의 코드(tests 밖)가 남기는 흔적 `(흐름, #)` 이 흐름의 표에 있는가도 본다(plan 02). 흔적은 `flow: N, step: M` 또는 `mark(N, M` 으로 쓴다.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readMap } from '../../apps/main/map';
+import { readMap, traceSites as sitesIn } from '../../apps/main/map';
 
 export interface Concept {
   readonly name: string;
@@ -72,32 +72,11 @@ export interface TraceSite {
   readonly ok: boolean;
 }
 
-const TRACE = /\b(?:flow:\s*(\d+),\s*step:\s*(\d+)|mark\((\d+),\s*(\d+))/g;
-
-/** src(tests 밖)의 흔적 자리마다 — 그 (흐름, #) 이 design 의 흐름 표에 있는가. */
+/** src(tests 밖)의 흔적 자리마다 — 그 (흐름, #) 이 design 의 흐름 표에 있는가. 자리를 찾는 것은 관측의 지도(map.ts)와 같다. */
 export function traceSites(design: string, src: string): TraceSite[] {
   const known = new Set<string>();
   for (const f of readMap(design, src).flows) for (const s of f.steps) known.add(`${f.flow}.${s.step}`);
-  const out: TraceSite[] = [];
-  const walk = (dir: string): void => {
-    if (!existsSync(dir)) return;
-    for (const name of readdirSync(dir).sort()) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) {
-        if (name !== 'tests' && name !== 'node_modules' && name !== 'tools') walk(p);
-        continue;
-      }
-      if (!name.endsWith('.ts')) continue;
-      const code = readFileSync(p, 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      for (const m of code.matchAll(TRACE)) {
-        const flow = Number(m[1] ?? m[3]);
-        const step = Number(m[2] ?? m[4]);
-        out.push({ file: relative(src, p).split('\\').join('/'), flow, step, ok: known.has(`${flow}.${step}`) });
-      }
-    }
-  };
-  walk(src);
-  return out;
+  return sitesIn(src).map((t) => ({ ...t, ok: known.has(`${t.flow}.${t.step}`) }));
 }
 
 const direct = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

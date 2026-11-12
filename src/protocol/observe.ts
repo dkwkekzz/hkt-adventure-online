@@ -54,9 +54,46 @@ export interface StreamHead {
   readonly recent: readonly Trace[];
 }
 
-/** 흐름의 지도 — design/01-flows 에서 뽑는다. 손으로 쓰지 않는다. */
+/**
+ * 관측의 지도 — design 에서 뽑는다. 손으로 쓰지 않는다.
+ * 구조(프로세스 · 연결 · 개념이 사는 곳)는 design/README.md 의 표에서, 흐름 · 단계는 design/01-flows 에서.
+ */
 export interface FlowMap {
+  readonly nodes: readonly MapNode[];
+  readonly links: readonly MapLink[];
+  readonly concepts: readonly MapConcept[];
   readonly flows: readonly MapFlow[];
+}
+
+/** 그림의 마디 — 프로세스 넷(api · gateway · control · node)과 밖(client · engine · storage · operator · observer). */
+export interface MapNode {
+  readonly id: string;
+  readonly name: string;
+  readonly external: boolean;
+  /** 프로세스 표의 듣는 것 · 상태 · 늘리는 법. 밖은 '' */
+  readonly listens: string;
+  readonly holds: string;
+  readonly scale: string;
+}
+
+/** 연결 하나 — README 「연결 여덟」의 줄. pairs 는 방향 글을 마디의 짝으로 푼 것. */
+export interface MapLink {
+  readonly name: string;
+  readonly direction: string;
+  readonly carries: string;
+  /** 닿는 개념 — 이 연결로 밖에 닿는 단계의 개념 */
+  readonly touches: readonly string[];
+  readonly pairs: readonly (readonly [string, string])[];
+}
+
+/** 개념 하나가 사는 곳 — README 「모듈 다섯과 그 개념」 · 「앱」. */
+export interface MapConcept {
+  readonly name: string;
+  readonly module: string;
+  readonly duty: string;
+  readonly processes: readonly string[];
+  /** src 에 그 개념의 파일이 있는가 */
+  readonly built: boolean;
 }
 
 export interface MapFlow {
@@ -80,8 +117,10 @@ export interface MapStep {
   readonly role: string;
   /** 누가 칸 그대로 — 대개 `개념.기능` */
   readonly who: string;
+  /** 누가 칸의 개념. 없으면 null */
+  readonly concept: string | null;
   readonly what: string;
   readonly result: string;
-  /** 누가 칸의 개념이 src 에 파일로 섰는가 */
-  readonly built: boolean;
+  /** 코드가 이 단계의 흔적 `(흐름, #)` 을 남기는가 — 남기면 그 단계는 지금 돈다 */
+  readonly traced: boolean;
 }

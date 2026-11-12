@@ -64,7 +64,7 @@
 
 ### 모듈 다섯과 그 개념
 
-개념마다의 데이터 · 기능은 책임 문서가 든다. 여기는 무엇이 어디에 사는가만.
+개념마다의 데이터 · 기능은 책임 문서가 든다. 여기는 무엇이 어디에 사는가만. 흐름의 단계는 그 개념이 사는 프로세스에서 일어난다 — 프로세스가 여럿이면 흐름의 앞 단계와 같은 곳(관측 페이지가 이 표로 단계를 놓는다, 흐름 14).
 
 | 모듈 | 개념 — 책임 하나 | 프로세스 | 책임 문서 |
 |---|---|---|---|
@@ -93,6 +93,7 @@
 | | Recoverer — 죽은 인스턴스의 뒤를 수습한다 | control | |
 | | Runner — 인스턴스의 프로세스를 띄우고 내린다 | node | |
 | | Spawner — 엔진 프로세스를 띄운다 | node · api(뷰어 묶기) | |
+| | Process — 엔진 프로세스 하나의 줄과 끝을 듣는다 | node · api(뷰어 묶기) | |
 | | Ports — 포트를 낸다 | node | |
 | | Probe — 호스트의 글 한 줄을 읽는다 | node | |
 | | Console — 호스트에 글을 쓰고 답을 받는다 | node | |
@@ -162,16 +163,18 @@
 
 선언은 전부 `src/protocol/` 에 있다. 값만 건넌다.
 
-| 연결 | 방향 | 싣는 것 | 선언 |
-|---|---|---|---|
-| Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | `protocol/api.ts` |
-| Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다 | 엔진의 것 — `protocol/engine.ts` |
-| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · report. 컨트롤 플레인의 reroute · kick | `protocol/session.ts` |
-| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload. 노드의 register · report · handoff · exited | `protocol/node.ts` |
-| Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 떠남 줄, 캐릭터 파일 | `protocol/engine.ts` |
-| Storage | 개념 → 스토리지 | 표의 줄 · 캐릭터의 값 · lease · Store 와 백업 · 활성의 잠금 | `protocol/storage.ts` |
-| Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | `protocol/operator.ts` |
-| Observe | 수집기 · 운영자의 브라우저(밖) → 프로세스마다 | 듣고 있는가 · 수치 · 흐름의 흔적 | `protocol/observe.ts` |
+| 연결 | 방향 | 싣는 것 | 닿는 개념 | 선언 |
+|---|---|---|---|---|
+| Api | 클라이언트 → API 서버 | 로그인 · 캐릭터 · 입장 | Api | `protocol/api.ts` |
+| Link | 클라이언트 ↔ 게이트웨이 ↔ 호스트 | 엔진의 글 넷. 게이트웨이는 첫 글(`Host 2`)의 자격만 읽고 바꾼다 | RateLimiter · Acceptor · Connection · Keepalive | 엔진의 것 — `protocol/engine.ts` |
+| SessionRpc | API 서버 · 게이트웨이 ↔ 컨트롤 플레인 | API 서버의 enter · forget. 게이트웨이의 attach · detach · report. 컨트롤 플레인의 reroute · kick | (단계가 그 사이를 넘을 때) | `protocol/session.ts` |
+| NodeRpc | 컨트롤 플레인 ↔ 노드 | 컨트롤 플레인의 launch · stop · command · load · unload. 노드의 register · report · handoff · exited | (단계가 그 사이를 넘을 때) | `protocol/node.ts` |
+| Engine | 노드 → 엔진(밖) | 프로세스의 인자, stdin 의 Console 글, stdout 의 머리글 · status · 떠남 줄, 캐릭터 파일 | Spawner · Process · Probe · Console | `protocol/engine.ts` |
+| Storage | API 서버 · 게이트웨이 · 컨트롤 플레인 · 노드 → 스토리지 | 표의 줄 · 캐릭터의 값 · lease · Store 와 백업 · 활성의 잠금 | Database · CharacterStore · Leases · SnapshotStore · LeaderLock | `protocol/storage.ts` |
+| Operator | 운영자(밖) → 컨트롤 플레인 | 글 한 줄, 답 글 한 줄 | Operator | `protocol/operator.ts` |
+| Observe | 수집기 · 운영자의 브라우저(밖) → 프로세스마다 | 듣고 있는가 · 수치 · 흐름의 흔적 | Monitor | `protocol/observe.ts` |
+
+- 닿는 개념은 그 연결의 밖(클라이언트 · 엔진 · 스토리지 · 운영자)에 닿는 단계의 개념이다. 프로세스 사이의 연결(SessionRpc · NodeRpc)은 흐름의 앞 단계와 다음 단계가 다른 프로세스에 있을 때 그 사이를 넘는다.
 
 - SessionRpc · NodeRpc 의 글마다 한계가 있다. 답이 없으면 실패로 치고 그 흐름의 「실패하면」으로 간다. 같은 글을 다시 보내도 결과가 같다.
 - 컨트롤 플레인이 보내는 글과 스토리지에 쓰는 것에는 term 이 실린다(흐름 13). 더 작은 term 의 것은 버려진다.
@@ -226,7 +229,7 @@
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 ### Monitor
-- 데이터: role(불변) · build(불변) · server(내부 주소의 http, `monitorPort`) · map(불변, 흐름의 지도 — design/01-flows 에서 뽑은 흐름 · 단계 · 순서와 단계마다 그 개념이 src 에 섰는가) · recent:list<흔적>(상한 `traceKeep`) · units:map<단위, {state, counts}>(흔적이 고친다) · tally:map<(흐름, #, end), 수> · readers:set<열린 stream> · closing:bool.
+- 데이터: role(불변) · build(불변) · server(내부 주소의 http, `monitorPort`) · map(불변, 관측의 지도 — 이 README 에서 뽑은 프로세스 · 연결 · 개념이 사는 곳과, design/01-flows 에서 뽑은 흐름 · 단계 · 순서. 단계마다 코드가 그 흔적을 남기는가) · recent:list<흔적>(상한 `traceKeep`) · units:map<단위, {state, counts}>(흔적이 고친다) · tally:map<(흐름, #, end), 수> · readers:set<열린 stream> · closing:bool.
 - 기능: listen · close 는 http 를 열고 닫는다. health 는 이 프로세스가 듣고 있는가. metrics 는 그 role 의 수치(units · tally). page 는 관측 페이지 한 장. stream 은 수치 하나와 recent 를 보낸 뒤 흔적과 간격마다의 수치를 흘린다. trace(흔적) 는 흔적 하나를 recent · units · tally 와 readers 마다에 넣는다 — 기다리지 않고 실패하지 않는다. 흐름 14.
 - 생애: Service.start 가 가장 먼저 만든다. 프로세스마다 하나. trace 는 Service 가 그 role 의 개념들에 함수로 준다.
 
