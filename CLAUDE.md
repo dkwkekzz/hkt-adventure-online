@@ -29,6 +29,8 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
 - **확인한 것만 실행 근거로 쓴다.** 실행한 검증과 예상만 한 것을 구분해 보고한다. 화면이 직관 확인이면 그 세션에서 `npm run shot` 으로 찍어 보인다.
 - 문서와 코드 주석은 한국어, 파일 이름은 영어. Human 에게 하는 답변도 한국어.
 - **흐름의 단계는 흔적을 남긴다.** 단계를 부른 자리가 `trace({ flow, step, … })` 또는 `mark(flow, step, …)` 로 — `(흐름, #)` 은 흐름 표의 #. `npm run index` 가 흐름에 없는 흔적을 잡는다. 흔적에 토큰과 계정(Account.id)을 싣지 않는다 — 사람은 `account` 로 넘기면 Monitor 가 가명(who)으로 바꾸고, 캐릭터 이름(name) · 세션(session)은 아는 단계가 싣는다.
+- **관측은 plan 마다 따라온다.** plan 하나를 닫을 때 관측 페이지(흐름 14)가 그 plan 이 세운 것을 그대로 보이게 한다 — 그 plan 파일의 「관측에 보일 것」을 하나씩 맞추고, 그 세션에서 `npm run shot -- --viewer off --monitor …` 로 서버 · 사람 보기를 찍어 보인다.
+  새 개념이 서면 지금의 코드가 대신 남기던 흔적을 그 개념을 부르는 자리로 옮기고 plan 02 의 「대신 하는 단계」 목록에서 지운다. 사람을 다루는 단계는 account · session · name · person 을 싣는다. 새 프로세스는 제 Monitor 를 띄운다.
 - 살아 있는 문서(CLAUDE.md · README · design · plan)에는 현재 상태만 적는다. 경위는 git 이 든다.
 
 ## 경계
