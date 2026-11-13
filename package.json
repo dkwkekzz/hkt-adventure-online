@@ -8,16 +8,23 @@
     "check": "tsx src/tools/boundary/check.ts && tsx src/tools/index/main.ts --quiet && tsc --noEmit -p . && vitest run",
     "test": "npm run check",
     "engine": "bash scripts/engine.sh",
+    "mongo:up": "docker compose -f scripts/mongo.compose.yaml up -d --wait",
+    "mongo:down": "docker compose -f scripts/mongo.compose.yaml down",
     "start": "tsx src/apps/main/main.ts",
     "shot": "tsx src/tools/shot/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "mongodb": "^6.22.0",
+    "ws": "^8.23.0"
   }
 }

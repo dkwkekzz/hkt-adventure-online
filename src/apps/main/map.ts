@@ -1,11 +1,14 @@
 // 관측의 지도 — design 에서 뽑는다 (design/README.md 의 Monitor.map, 흐름 14). 손으로 쓰지 않는다.
 //   구조: README 의 「프로세스 넷」(마디) · 「연결 여덟」(연결 · 닿는 개념) · 「모듈 다섯과 그 개념」 · 「앱」(개념이 사는 프로세스)
 //   흐름: design/01-flows 의 머리 · 트리거 · 한 줄 · 순서 블록 · 머리가 `#` 인 표
+//   plan: plan/README.md 의 진행표와 plan 파일마다의 「세울 것」 · 「남은 것」
 // 단계의 traced 는 src 의 코드(tests 밖)가 그 흔적 `(흐름, #)` 을 남기는가 — npm run index 도 traceSites 로 같은 것을 본다.
+// stand 는 섰다(흔적 + 개념의 파일) · 대신(흔적뿐 — 다른 코드가 그 일을 한다) · 없다. 흐름 14 는 흔적을 남기지 않으므로 개념의 파일로만.
+// plan 은 서지 않은 단계의 것 — 그 개념(없으면 모듈, 그것도 없으면 흐름)을 처음 드는 닫히지 않은 plan.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import type { FlowMap, MapConcept, MapFlow, MapLink, MapNode, MapStep } from '../../protocol/observe';
+import type { FlowMap, MapConcept, MapFlow, MapLink, MapNode, MapPlan, MapStep, StepStand } from '../../protocol/observe';
 
 const cells = (line: string): string[] => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
 
@@ -208,27 +211,104 @@ export function readFlow(file: string, text: string, traced: (flow: number, step
       return i < 0 ? '' : (row[i] ?? '');
     };
     const who = col('누가');
-    steps.push({ step: n, section, role: col('어느 role'), who, concept: CONCEPT.exec(who)?.[1] ?? null, what: col('무엇을'), result: col('결과'), traced: traced(flow, n) });
+    const on = traced(flow, n);
+    steps.push({ step: n, section, role: col('어느 role'), who, concept: CONCEPT.exec(who)?.[1] ?? null, what: col('무엇을'), result: col('결과'), traced: on, stand: on ? 'built' : 'none', sites: [], plan: null });
   }
   return { flow, file: basename(file), name: head[2]!.trim(), title: (head[3] ?? '').trim(), trigger: pick('트리거'), line: pick('한 줄'), order, steps };
 }
 
-/** design 전부 → FlowMap. src 는 개념의 파일 · 흔적 자리를 보는 자리. */
-export function readMap(design: string, src: string): FlowMap {
+const STATE: Readonly<Record<string, MapPlan['state']>> = { '☑': 'done', '◐': 'doing', '☐': 'todo' };
+
+/** plan/README.md 의 진행표 → MapPlan. 줄의 첫 칸은 `[01 이름](01-x.md)`. */
+export function readPlans(readme: string): MapPlan[] {
+  const out: MapPlan[] = [];
+  for (const line of readme.split('\n')) {
+    const m = /^\| \[(\d+) ([^\]]+)\]\(([^)]+)\) \|/.exec(line);
+    if (m === null) continue;
+    const row = cells(line);
+    out.push({
+      id: m[1]!,
+      name: m[2]!.trim(),
+      file: m[3]!,
+      where: row[1] ?? '',
+      builds: row[2] ?? '',
+      flows: [...(row[3] ?? '').matchAll(/\d+/g)].map((x) => Number(x[0])),
+      state: STATE[(row[4] ?? '').trim()] ?? 'todo',
+    });
+  }
+  return out;
+}
+
+/** plan 파일의 「세울 것」 · 「남은 것」 절 — 아직 세울 것의 글. */
+export function remainingOf(text: string): string {
+  const out: string[] = [];
+  let on = false;
+  for (const line of text.split('\n')) {
+    if (/^## /.test(line)) on = /^## (세울 것|남은 것)/.test(line);
+    else if (on) out.push(line);
+  }
+  return out.join('\n');
+}
+
+/** 모듈의 한국어 이름 — plan 의 글이 모듈을 부르는 말. */
+const MODULE_WORD: Readonly<Record<string, string>> = { account: '계정', gateway: '게이트웨이', session: '세션', fleet: '플릿', storage: '스토리지' };
+
+/**
+ * 서지 않은 단계가 어느 plan 의 것인가 — 닫히지 않은 plan 가운데 차례대로 처음 맞는 것.
+ *   1. 그 흐름을 들고(흐름 칸) 그 개념을 부르는 plan
+ *   2. 개념이 아직 없으면 그 개념을 부르는 plan, 있으면(흐름에 잇기만 남았다) 그 흐름을 드는 plan — 그 다음이 다른 하나
+ *   3. 그 모듈을 부르는 plan
+ * 개념 · 모듈은 서비스(online)의 plan 의 「세울 것」에서만 찾는다 — 엔진(proto)의 plan 은 엔진의 면을 세운다.
+ */
+export function planOf(plans: readonly (MapPlan & { readonly text: string })[], flow: number, concept: string | null, module: string | null, built: boolean): string | null {
+  const open = plans.filter((p) => p.state !== 'done');
+  const online = open.filter((p) => p.where.includes('online'));
+  const names = (p: { text: string }): boolean => concept !== null && new RegExp(`(^|[^A-Za-z])${concept}([^A-Za-z]|$)`).test(p.text);
+  const byFlow = (): string | undefined => open.find((p) => p.flows.includes(flow))?.id;
+  const byConcept = (): string | undefined => online.find(names)?.id;
+  const byModule = (): string | undefined => {
+    const word = module === null ? undefined : MODULE_WORD[module];
+    return word === undefined ? undefined : online.find((p) => p.text.includes(word) || p.builds.includes(word))?.id;
+  };
+  return online.find((p) => p.flows.includes(flow) && names(p))?.id ?? (built ? (byFlow() ?? byConcept()) : (byConcept() ?? byFlow())) ?? byModule() ?? null;
+}
+
+/** 흐름 14 — 흔적을 남기지 않는 흐름. 단계는 그 개념이 섰는가로만 센다. */
+const UNTRACED_FLOW = 14;
+
+/** 단계 하나의 섰는가 · 흔적의 자리 · plan. */
+export function standOf(flow: number, step: MapStep, built: (concept: string) => boolean, sites: readonly string[]): StepStand {
+  const has = step.concept !== null && built(step.concept);
+  if (flow === UNTRACED_FLOW) return has ? 'built' : 'none';
+  if (sites.length === 0) return 'none';
+  return has ? 'built' : 'stand-in';
+}
+
+/** design 전부 → FlowMap. src 는 개념의 파일 · 흔적 자리를 보는 자리, plan 은 진행표의 자리(없으면 design 곁의 plan/). */
+export function readMap(design: string, src: string, plan: string = join(design, '..', 'plan')): FlowMap {
   const names = builtNames(src);
-  const sites = new Set(traceSites(src).map((t) => `${t.flow}.${t.step}`));
+  const siteList = traceSites(src);
+  const sites = new Set(siteList.map((t) => `${t.flow}.${t.step}`));
+  const filesOf = (flow: number, step: number): string[] => [...new Set(siteList.filter((t) => t.flow === flow && t.step === step).map((t) => t.file))];
+  const planReadme = join(plan, 'README.md');
+  const plans = existsSync(planReadme) ? readPlans(readFileSync(planReadme, 'utf8')) : [];
+  const planTexts = plans.map((p) => ({ ...p, text: existsSync(join(plan, p.file)) ? remainingOf(readFileSync(join(plan, p.file), 'utf8')) : '' }));
   const readme = join(design, 'README.md');
   const structure = readStructure(existsSync(readme) ? readFileSync(readme, 'utf8') : '');
   const dir = join(design, '01-flows');
+  const concepts = structure.concepts.map((c) => ({ ...c, built: names.has(c.name.toLowerCase()) }));
+  const built = (name: string): boolean => names.has(name.toLowerCase());
+  const moduleOf = (name: string | null): string | null => concepts.find((c) => c.name === name)?.module ?? null;
   const flows: MapFlow[] = [];
   for (const f of readdirSync(dir).filter((f) => f.endsWith('.md')).sort()) {
     const flow = readFlow(join(dir, f), readFileSync(join(dir, f), 'utf8'), (fl, st) => sites.has(`${fl}.${st}`));
-    if (flow !== null) flows.push(flow);
+    if (flow === null) continue;
+    const steps = flow.steps.map((st) => {
+      const at = filesOf(flow.flow, st.step);
+      const stand = standOf(flow.flow, st, built, at);
+      return { ...st, stand, sites: at, plan: stand === 'built' ? null : planOf(planTexts, flow.flow, st.concept, moduleOf(st.concept), st.concept !== null && built(st.concept)) };
+    });
+    flows.push({ ...flow, steps });
   }
-  return {
-    nodes: structure.nodes,
-    links: structure.links,
-    concepts: structure.concepts.map((c) => ({ ...c, built: names.has(c.name.toLowerCase()) })),
-    flows,
-  };
+  return { nodes: structure.nodes, links: structure.links, concepts, flows, plans };
 }

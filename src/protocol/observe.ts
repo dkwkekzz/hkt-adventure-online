@@ -78,7 +78,28 @@ export interface FlowMap {
   readonly links: readonly MapLink[];
   readonly concepts: readonly MapConcept[];
   readonly flows: readonly MapFlow[];
+  /** plan/README.md 의 진행표 — 차례대로 */
+  readonly plans: readonly MapPlan[];
 }
+
+/** plan 하나 — 진행표의 줄. */
+export interface MapPlan {
+  /** 번호 글 — `01` */
+  readonly id: string;
+  readonly name: string;
+  /** plan 파일 이름 */
+  readonly file: string;
+  /** 어디 칸 — online · proto */
+  readonly where: string;
+  /** 세우는 것 칸 */
+  readonly builds: string;
+  /** 흐름 칸의 번호들 */
+  readonly flows: readonly number[];
+  readonly state: 'done' | 'doing' | 'todo';
+}
+
+/** 단계가 섰는가 — 섰다(흔적을 남기고 그 개념의 파일이 있다) · 대신(흔적은 남기는데 개념의 파일이 없다) · 없다. */
+export type StepStand = 'built' | 'stand-in' | 'none';
 
 /** 그림의 마디 — 프로세스 넷(api · gateway · control · node)과 밖(client · engine · storage · operator · observer). */
 export interface MapNode {
@@ -138,4 +159,10 @@ export interface MapStep {
   readonly result: string;
   /** 코드가 이 단계의 흔적 `(흐름, #)` 을 남기는가 — 남기면 그 단계는 지금 돈다 */
   readonly traced: boolean;
+  /** 섰다 · 대신 · 없다 */
+  readonly stand: StepStand;
+  /** 그 흔적을 남기는 src 의 파일들(src 상대) */
+  readonly sites: readonly string[];
+  /** 서지 않은 단계(대신 · 없다)가 어느 plan 의 것인가 — MapPlan.id. 섰거나 맞는 plan 이 없으면 null */
+  readonly plan: string | null;
 }

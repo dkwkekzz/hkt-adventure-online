@@ -12,6 +12,7 @@ Service.stop
   gateway  GateReporter.report(closing) → Connection.close × 접속
   control  LeaderLock.resign
   api      Api.close
+  전부     → Service.stop(스토리지를 닫는다)
 ```
 
 | # | 어느 role | 누가 | 무엇을 | 결과 |
@@ -26,6 +27,7 @@ Service.stop
 | 8 | gateway | Connection.close | 접속을 전부 닫는다(1001). 사람은 재접속 유예 안에 다른 게이트웨이로 돌아온다 | ⇒ 흐름 11 |
 | 9 | control | LeaderLock.resign | 활성이면 자리를 놓는다 — 대기가 바로 잡는다 | ⇒ 흐름 13 |
 | 10 | api | Api.close | http 를 닫는다 | |
+| 11 | 전부 | Service.stop | 스토리지를 닫는다 — 다른 개념이 다 내려간 뒤 | |
 
 ## 실패하면
 

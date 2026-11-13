@@ -27,11 +27,14 @@ const freshRun = (): string => randomBytes(4).toString('hex');
 
 const SUBJECT = /^[A-Za-z0-9_-]{8,64}$/;
 
+/** 스토리지에 닿지 않은 거절의 머리 — 503 으로 답한다(흐름 2 의 「실패하면」). */
+const UNREACHED = '스토리지에 닿지 않는다';
+
 /** login — 흐름 2. 게스트의 주체가 비면 새로 짓는다. */
-export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusal {
+export async function login(parts: ApiParts, body: LoginRequest): Promise<LoginAnswer | Refusal> {
   const run = freshRun();
   let account: string | undefined;
-  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused'): void => parts.trace({ flow, step, run, unit: '-', end, ...(account === undefined ? {} : { account }) });
+  const mark = (flow: number, step: number, end: 'ok' | 'wait' | 'refused' | 'failed'): void => parts.trace({ flow, step, run, unit: '-', end, ...(account === undefined ? {} : { account }) });
   const refuse = (why: string): Refusal => {
     mark(2, 1, 'refused');
     return { why };
@@ -40,7 +43,13 @@ export function login(parts: ApiParts, body: LoginRequest): LoginAnswer | Refusa
   const subject = body.subject === undefined || body.subject === '' ? randomBytes(12).toString('base64url') : body.subject;
   if (!SUBJECT.test(subject)) return refuse('주체의 모양이 틀렸다');
   mark(2, 1, 'ok');
-  account = parts.directory.resolve({ provider: body.provider, subject });
+  try {
+    account = await parts.directory.resolve({ provider: body.provider, subject });
+  } catch (e) {
+    parts.log(`api 로그인 실패 — ${(e as Error).message}`);
+    mark(2, 2, 'failed');
+    return { why: `${UNREACHED} — 잠시 뒤 다시` };
+  }
   mark(2, 2, 'ok');
   const token = parts.signer.issue(account);
   mark(2, 4, 'ok');
@@ -121,9 +130,10 @@ export function openApi(parts: ApiParts): Server {
         }
         const answer =
           path === '/login'
-            ? login(parts, { provider: String(body['provider'] ?? ''), subject: typeof body['subject'] === 'string' ? body['subject'] : '' })
+            ? await login(parts, { provider: String(body['provider'] ?? ''), subject: typeof body['subject'] === 'string' ? body['subject'] : '' })
             : await enter(parts, { token: String(body['token'] ?? '') });
-        return send(res, 'why' in answer ? (path === '/enter' && !answer.why.startsWith('토큰') ? 503 : 400) : 200, answer);
+        const busy = 'why' in answer && (answer.why.startsWith(UNREACHED) || (path === '/enter' && !answer.why.startsWith('토큰')));
+        return send(res, 'why' in answer ? (busy ? 503 : 400) : 200, answer);
       }
       send(res, 404, { why: '없다' });
     })().catch((e: unknown) => send(res, 500, { why: (e as Error).message }));

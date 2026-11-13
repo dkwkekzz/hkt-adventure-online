@@ -1,6 +1,6 @@
 # 흐름 1. 시작 — 프로세스가 뜬다
 
-트리거: 프로세스. role(`api` · `gateway` · `control` · `node` · 개발의 `main`)과 설정, 환경변수 `HOST_AUTH_KEY` · `MONGODB_URI` 를 들고 온다.
+트리거: 프로세스. role(`api` · `gateway` · `control` · `node` · 개발의 `main`)과 설정, 환경변수 `HOST_AUTH_KEY` · `MONGODB_URI` · `SNAPSHOT_URI` 를 들고 온다.
 한 줄: 제 role 의 개념을 세우고 듣는다. 엔진 프로세스는 띄우지 않는다.
 
 ## 순서

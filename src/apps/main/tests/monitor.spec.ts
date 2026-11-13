@@ -16,7 +16,7 @@ afterEach(async () => {
   monitors = [];
 });
 
-const EMPTY: FlowMap = { nodes: [], links: [], concepts: [], flows: [] };
+const EMPTY: FlowMap = { nodes: [], links: [], concepts: [], flows: [], plans: [] };
 
 async function up(map: FlowMap = EMPTY, keep = 3): Promise<Monitor> {
   const m = new Monitor({ role: 'main', build: 'b1', map, traceKeep: keep, every: 60_000, key: 'k1' });
@@ -98,6 +98,32 @@ describe('Monitor.map — 관측의 지도', () => {
     expect(map.flows.find((f) => f.flow === 8)!.steps.find((s) => s.who.startsWith('Api.characters'))!.traced).toBe(false);
     expect(map.flows.find((f) => f.flow === 1)!.steps[1]!.role).toBe('api');
     for (const f of map.flows) expect(new Set(f.steps.map((s) => s.step)).size).toBe(f.steps.length); // # 은 흐름 안에서 겹치지 않는다
+  });
+
+  it('readMap 의 섰는가 — 섰다(흔적 + 개념의 파일) · 대신(흔적뿐) · 없다. 흐름 14 는 개념의 파일로만. 대신은 흔적의 자리를 든다', () => {
+    const map = readMap(DESIGN, SRC);
+    const step = (flow: number, n: number) => map.flows.find((f) => f.flow === flow)!.steps.find((s) => s.step === n)!;
+    expect(step(3, 13)).toMatchObject({ who: 'SnapshotStore.pull', stand: 'built', plan: null }); // 부른 자리(Fleet)가 흔적을 남겨도 개념이 섰으면 섰다
+    expect(step(3, 13).sites).toEqual(['fleet/fleet.ts']);
+    expect(step(3, 11)).toMatchObject({ who: 'Registry.put', stand: 'stand-in', sites: ['fleet/shard.ts'], plan: '07' });
+    expect(step(3, 3)).toMatchObject({ who: 'Admission.check', stand: 'none', sites: [], plan: '05' });
+    expect(step(14, 1)).toMatchObject({ who: 'Monitor.health', stand: 'built' });
+    // 대신 하는 단계는 plan 02 의 「대신 하는 단계」 표의 단계와 같다
+    const standIn = map.flows.flatMap((f) => f.steps.filter((s) => s.stand === 'stand-in').map((s) => `${f.flow}.${s.step}→${s.plan}`));
+    expect(standIn).toEqual(['3.6→05', '3.8→05', '3.11→07', '3.17→07', '3.19→07', '4.3→07', '4.5→07', '5.1→07', '5.3→07', '5.12→07', '6.4→08', '7.4→07', '7.5→07', '9.3→05', '9.8→05', '11.2→05']);
+  });
+
+  it('readMap 의 plan — 진행표의 줄, 서지 않은 단계는 닫히지 않은 plan 하나에 붙는다', () => {
+    const map = readMap(DESIGN, SRC);
+    expect(map.plans.map((p) => p.id)).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
+    expect(map.plans[0]).toMatchObject({ name: '세계 하나', file: '01-one-world.md', state: 'done' });
+    expect(map.plans.find((p) => p.id === '06')!.where).toBe('proto');
+    const open = new Set(map.plans.filter((p) => p.state !== 'done').map((p) => p.id));
+    const loose = map.flows.flatMap((f) => f.steps.filter((s) => s.stand !== 'built' && (s.plan === null || !open.has(s.plan))).map((s) => `${f.flow}.${s.step}`));
+    expect(loose).toEqual([]); // 서지 않은 단계마다 갈 곳이 있다
+    const of = (flow: number, n: number) => map.flows.find((f) => f.flow === flow)!.steps.find((s) => s.step === n)!.plan;
+    expect([of(8, 2), of(6, 2), of(13, 2), of(9, 5), of(10, 12), of(11, 4)]).toEqual(['05', '08', '08', '07', '07', '05']); // 계정의 토큰 · 운영자의 토큰 · 전환 · lease · 뒤를 바꿔 잇기 · 세션을 지우기
+    expect(of(9, 1)).toBeNull(); // 섰다 — 게이트웨이(plan 04)
   });
 
   it('readFlow — `| # |` 의 표만 단계다. 다른 표 · 머리가 아닌 파일은 뺀다', () => {

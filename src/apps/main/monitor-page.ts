@@ -5,6 +5,8 @@
 //   사람 — 접속한 사람마다. 옆: 인스턴스마다 묶은 사람들(이름 또는 가명 · person · 세션 · 마지막 흐름). 고르면 그림에는 그 사람의 길과 글만, 아래에는 그 사람의 일생.
 // 흐름을 고르면 그 단계들이 구조 위에 놓인다: 마디마다 거기서 일어나는 # , 연결마다 그 사이를 넘는 # . 「재생」은 그 길을 차례로 보낸다.
 // 단계가 놓이는 곳은 관측의 지도(README 의 표)에서 — 개념이 사는 프로세스, 여럿이면 앞 단계와 같은 곳. 흐름 1 · 7 은 어느 role 칸.
+// 진행도는 실제대로: 단계는 섰다(실선) · 대신(빗금 — 다른 코드가 그 일을 한다) · 없다(흐림), 프로세스는 제 프로세스 · main 에 조립 · 설계만,
+// 상태 점의 색은 그 프로세스에 사는 개념이 선 정도(다 · 일부 · 없음). 서버 보기에 plan 진행표 — 서지 않은 단계가 어느 plan 의 것인가(지도의 plan).
 // ?from=<주소>,<주소> 면 여러 Monitor 의 stream 을 함께 읽는다(비면 이 페이지의 자리). #people 이면 사람 보기로 연다.
 
 import type { FlowMap } from '../../protocol/observe';
@@ -72,7 +74,23 @@ svg .mono { font-family: var(--mono); }
 .frow .n, .mrow .n { font-family: var(--mono); color: var(--mute); font-size: 12px; text-align: right; }
 .frow .c { font-family: var(--mono); color: var(--mute); font-size: 11px; }
 .bar { height: 4px; background: var(--soft); border-radius: 2px; overflow: hidden; grid-column: 2 / 4; }
+.bar { display: flex; }
 .bar i { display: block; height: 100%; background: var(--ok); }
+.bar i.stand { background: repeating-linear-gradient(135deg, var(--refused) 0 3px, transparent 3px 6px); }
+.chip.stand { fill: url(#hatch); stroke: var(--hl); stroke-width: 1; }
+.chiptext.stand { fill: var(--hl) !important; }
+.srow.stand { background: repeating-linear-gradient(135deg, var(--glow) 0 4px, transparent 4px 9px); }
+.tag { font-family: var(--mono); font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--mute); white-space: nowrap; }
+.tag.stand { border-color: var(--refused); color: var(--refused); }
+.swatch { display: inline-block; width: 18px; height: 10px; border-radius: 3px; vertical-align: -1px; }
+.swatch.built { background: var(--hl); } .swatch.stand { background: repeating-linear-gradient(135deg, var(--hl) 0 2px, transparent 2px 4px); border: 1px solid var(--hl); } .swatch.none { background: var(--line); }
+.plan { display: grid; grid-template-columns: 18px 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.plan:hover { background: var(--soft); } .plan.sel { background: var(--glow); outline: 1px solid var(--hl); }
+.plan .g { text-align: center; } .plan .g.done { color: var(--ok); } .plan .g.doing { color: var(--refused); } .plan .g.todo { color: var(--mute); }
+.plan .n { font-family: var(--mono); color: var(--mute); font-size: 12px; }
+.psteps { margin: 2px 0 8px 28px; display: grid; gap: 2px; font-size: 12px; }
+.psteps .r { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 6px; align-items: baseline; cursor: pointer; padding: 1px 4px; border-radius: 4px; }
+.psteps .r:hover { background: var(--soft); }
 .btns { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
 button { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; cursor: pointer; }
 button:hover { background: var(--soft); }
@@ -210,6 +228,11 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   }
   const FLOWLAY = new Map(MAP.flows.map((f) => [f.flow, lay(f.flow, f.steps)]));
   const BUILTPROC = new Set(); for (const [, l] of FLOWLAY) for (const x of l) if (x.st.traced) BUILTPROC.add(x.proc);
+  const PLANS = MAP.plans || [];
+  const PLANSTEPS = new Map(PLANS.map((p) => [p.id, []])); // plan → 서지 않은 단계들(지도의 plan)
+  for (const f of MAP.flows) for (const st of f.steps) if (st.plan && PLANSTEPS.has(st.plan)) PLANSTEPS.get(st.plan).push(Object.assign({ flow: f.flow }, st));
+  const GLYPH = { done: '☑', doing: '◐', todo: '☐' };
+  let selPlan = null;
 
   // ── 받은 것
   const params = new URLSearchParams(location.search);
@@ -321,20 +344,30 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   const txt = (s, attrs, parent) => { const x = el('text', attrs, parent); x.textContent = s; return x; };
   function clip(p, q) { const P = POS[p], Q = POS[q]; const dx = Q.x - P.x, dy = Q.y - P.y; const s = Math.min(P.w / 2 / Math.abs(dx || 1e-9), P.h / 2 / Math.abs(dy || 1e-9)); return { x: P.x + dx * s, y: P.y + dy * s }; }
   function seg(a, b) { return [clip(a, b), clip(b, a)]; }
+  const defs = el('defs', {}); // 빗금 — 대신 하는 단계의 칩
+  const hatch = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+  el('rect', { width: 6, height: 6, fill: 'var(--panel)' }, hatch);
+  el('rect', { width: 3, height: 6, fill: 'var(--glow)' }, hatch);
   const layers = { region: el('g', {}), edges: el('g', {}), boxes: el('g', {}), over: el('g', {}), flyer: el('g', {}) };
 
+  /** 그 프로세스에 사는 개념이 선 정도 — 점의 색: 다 ok · 일부 refused · 없음 '' */
+  function grade(id) { const cs = conceptsOf(id); const b = cs.filter((c) => c.built).length; return { b, n: cs.length, dot: cs.length && b === cs.length ? 'ok' : b > 0 ? 'refused' : '' }; }
+  /** 프로세스 셋 — 제 프로세스로 떴다(own) · main 에 조립(main) · 설계만(none). 끊기면 down */
   function procState(id) {
     const node = NODE.get(id);
     if (node.external) return { cls: 'ext', text: '밖' };
+    const g = grade(id);
     const ms = sources.filter((s) => s.metrics && (s.metrics.role === id || s.metrics.role === 'main'));
-    if (!BUILTPROC.has(id)) return { cls: 'none', text: '설계만 — src 에 없다' };
-    if (!ms.length) return { cls: 'down', text: '보고 없음', dot: 'failed' };
+    const own = ms.some((s) => s.metrics.role === id);
+    if (!own && !BUILTPROC.has(id)) return { cls: 'none', text: '설계만 — src 에 없다', dot: '', grade: g };
+    if (!ms.length) return { cls: 'down', text: '보고 없음', dot: 'failed', grade: g };
     const live = ms.filter((s) => s.open);
-    if (!live.length) return { cls: 'down', text: '끊김', dot: 'failed' };
+    if (!live.length) return { cls: 'down', text: '끊김', dot: 'failed', grade: g };
     const closing = live.some((s) => s.metrics.closing);
-    const host = live.map((s) => s.metrics.role).includes(id) ? '' : 'main 에 조립 · ';
-    return { cls: 'up', text: host + (closing ? '내려가는 중' : '듣는 중'), dot: closing ? 'refused' : 'ok' };
+    const mine = live.some((s) => s.metrics.role === id);
+    return { cls: mine ? 'own' : 'main', text: (mine ? '제 프로세스 · ' : 'main 에 조립 · ') + (closing ? '내려가는 중' : '듣는 중'), dot: g.dot, grade: g };
   }
+  const dotClass = (d) => 'st-' + (d === 'ok' ? 'ready' : d === 'failed' ? 'failed' : d === 'refused' ? 'grace' : 'stopped');
   function allUnits() { const u = []; for (const s of sources) for (const x of s.units.values()) u.push(x); return u; }
   function conceptsOf(id) { return MAP.concepts.filter((c) => c.processes.includes(id) && c.processes.length < PROCS.length); }
   const peopleOn = (unit) => [...persons.values()].filter((p) => p.unit === unit && p.state === 'active').length;
@@ -378,8 +411,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       const top = B.y - B.h / 2, left = B.x - B.w / 2;
       txt(LABEL[id] + (node.external ? '' : '  ' + id), { x: left + 12, y: top + 20, 'font-weight': 650, 'font-size': 14 }, g);
       if (!node.external) {
-        if (ps.dot) el('circle', { cx: left + 16, cy: top + 37, r: 4.5, class: 'st-' + (ps.dot === 'ok' ? 'ready' : ps.dot === 'failed' ? 'failed' : 'starting') }, g);
-        txt(ps.text, { x: left + (ps.dot ? 26 : 12), y: top + 41, class: 'mute', 'font-size': 12 }, g);
+        if (ps.cls !== 'none') el('circle', { cx: left + 16, cy: top + 37, r: 4.5, class: dotClass(ps.dot) }, g);
+        txt(ps.text, { x: left + (ps.cls !== 'none' ? 26 : 12), y: top + 41, class: 'mute', 'font-size': 12 }, g);
         const cs = conceptsOf(id);
         txt('개념 ' + cs.filter((c) => c.built).length + ' / ' + cs.length + ' 섰다 · 단계 ' + (s ? s.n : 0), { x: left + 12, y: top + 60, class: 'mute', 'font-size': 12 }, g);
         if (s && s.last) txt('최근 ' + s.last.flow + '·' + s.last.step + ' ' + whoOf(s.last), { x: left + 12, y: top + 79, class: 'mono', 'font-size': 11 }, g);
@@ -397,8 +430,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
         for (const c of chips) {
           const w = 10 + 6.5 * c.label.length;
           if (cx + w > B.x + B.w / 2 + 40) { cx = left; cy += 21; }
-          el('rect', { x: cx, y: cy, width: w, height: 17, rx: 8.5, class: 'chip' + (c.dim ? ' dim' : '') }, layers.over);
-          txt(c.label, { x: cx + w / 2, y: cy + 12.5, class: 'chiptext', 'text-anchor': 'middle' }, layers.over);
+          el('rect', { x: cx, y: cy, width: w, height: 17, rx: 8.5, class: 'chip' + (c.dim ? ' dim' : c.stand ? ' stand' : '') }, layers.over);
+          txt(c.label, { x: cx + w / 2, y: cy + 12.5, class: 'chiptext' + (c.stand ? ' stand' : ''), 'text-anchor': 'middle' }, layers.over);
           if (overlay && overlay.cur === c.key) el('rect', { x: cx - 3, y: cy - 3, width: w + 6, height: 23, rx: 11, fill: 'none', stroke: 'var(--hl)', 'stroke-width': 2 }, layers.over);
           cx += w + 4;
         }
@@ -425,10 +458,11 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   function overlayEdges() {
     const edges = new Map(); const chips = new Map();
     for (const x of overlay.layout) {
-      const dim = overlay.kind === 'flow' && !x.st.traced;
+      const dim = overlay.kind === 'flow' && x.st.stand === 'none';
+      const stand = overlay.kind === 'flow' && x.st.stand === 'stand-in';
       if (!chips.has(x.proc)) chips.set(x.proc, []);
       const list = chips.get(x.proc);
-      if (!list.some((c) => c.label === x.label)) list.push({ label: x.label, key: x.key || x.label, dim });
+      if (!list.some((c) => c.label === x.label)) list.push({ label: x.label, key: x.key || x.label, dim, stand });
       const add = (a, b) => { const e = edgeOf(a, b); if (!e) return; if (!edges.has(e.key)) edges.set(e.key, []); const l = edges.get(e.key); if (!l.includes(x.label)) l.push(x.label); };
       for (const [a, b] of x.hops) add(a, b);
       for (const o of x.ext) add(x.proc, o);
@@ -470,16 +504,30 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
 
   function seqHtml(layout, kind) {
     return '<div class="seq">' + layout.map((x) => {
-      const dim = kind === 'flow' && !x.st.traced;
+      const dim = kind === 'flow' && x.st.stand === 'none';
+      const stand = kind === 'flow' && x.st.stand === 'stand-in';
       const where = LABEL[x.proc] + (x.hops.length ? ' ←' + LABEL[x.hops[0][0]].split(' ')[0] : '') + (x.ext.length ? ' ⇄ ' + x.ext.map((e) => LABEL[e]).join('·') : '');
-      return '<div class="srow' + (dim ? ' dim' : '') + (overlay && overlay.cur === (x.key || x.label) ? ' cur' : '') + '"><span class="no">' + x.label + '</span><span class="where" title="' + esc(where) + '">' + esc(where) + '</span><span><b>' + md(x.st.who || '') + '</b> <span class="what">' + md(x.st.what || '') + '</span>' + (x.s.end ? ' <span class="dot ' + x.s.end + '"></span>' : '') + '</span></div>';
+      const tag = kind !== 'flow' ? '' : stand ? ' ' + standTag(x.st) : dim && x.st.plan ? ' <span class="tag">plan ' + esc(x.st.plan) + '</span>' : '';
+      return '<div class="srow' + (dim ? ' dim' : '') + (stand ? ' stand' : '') + (overlay && overlay.cur === (x.key || x.label) ? ' cur' : '') + '"><span class="no">' + x.label + '</span><span class="where" title="' + esc(where) + '">' + esc(where) + '</span><span><b>' + md(x.st.who || '') + '</b> <span class="what">' + md(x.st.what || '') + '</span>' + tag + (x.s.end ? ' <span class="dot ' + x.s.end + '"></span>' : '') + '</span></div>';
     }).join('') + '</div>';
   }
+  /** 대신 하는 단계의 표 — 지금 그 흔적을 남기는 파일과 그 개념이 설 plan */
+  function standTag(st) { return '<span class="tag stand" title="지금 하는 코드 — ' + esc((st.sites || []).join(' · ')) + '">대신 · ' + esc((st.sites || []).map((f) => f.split('/').pop().replace(/\.ts$/, '')).join(' · ')) + (st.plan ? ' → plan ' + esc(st.plan) : '') + '</span>'; }
+  const standCount = (steps) => ({ b: steps.filter((s) => s.stand === 'built').length, i: steps.filter((s) => s.stand === 'stand-in').length, n: steps.length });
   function flowListHtml(nums, title) {
-    return '<h3>' + title + '</h3>' + nums.map((n) => {
+    return '<h3>' + title + '</h3><p class="sub"><span class="swatch built" style="background:var(--ok)"></span> 섰다 <span class="swatch stand" style="border-color:var(--refused);background:repeating-linear-gradient(135deg, var(--refused) 0 2px, transparent 2px 4px)"></span> 대신 — 섰다 · 대신 / 전부</p>' + nums.map((n) => {
       const f = FLOW.get(n); if (!f) return '';
-      const t = f.steps.filter((s) => s.traced).length;
-      return '<div class="frow' + (overlay && overlay.kind === 'flow' && overlay.flow === n ? ' sel' : '') + '" data-flow="' + n + '"><span class="n">' + n + '</span><span>' + esc(f.name) + '</span><span class="c">' + t + ' / ' + f.steps.length + '</span><span class="bar"><i style="width:' + Math.round((100 * t) / Math.max(1, f.steps.length)) + '%"></i></span></div>';
+      const c = standCount(f.steps); const w = (k) => Math.round((100 * k) / Math.max(1, c.n));
+      return '<div class="frow' + (overlay && overlay.kind === 'flow' && overlay.flow === n ? ' sel' : '') + '" data-flow="' + n + '"><span class="n">' + n + '</span><span>' + esc(f.name) + '</span><span class="c">' + c.b + (c.i ? ' · ' + c.i : '') + ' / ' + c.n + '</span><span class="bar"><i style="width:' + w(c.b) + '%"></i><i class="stand" style="width:' + w(c.i) + '%"></i></span></div>';
+    }).join('');
+  }
+  function planListHtml() {
+    if (!PLANS.length) return '';
+    return '<h3>plan 진행표 — 고르면 그 plan 의 것인 서지 않은 단계</h3>' + PLANS.map((p) => {
+      const ss = PLANSTEPS.get(p.id) || []; const i = ss.filter((s) => s.stand === 'stand-in').length;
+      let h = '<div class="plan' + (selPlan === p.id ? ' sel' : '') + '" data-plan="' + esc(p.id) + '" title="' + esc(p.builds) + '"><span class="g ' + p.state + '">' + GLYPH[p.state] + '</span><span class="n">' + esc(p.id) + '</span><span>' + esc(p.name) + (p.where.includes('online') ? '' : ' <span class="al">' + esc(p.where) + '</span>') + '</span><span class="al">' + (ss.length ? '남은 단계 ' + ss.length + (i ? ' · 대신 ' + i : '') : p.state === 'done' ? '닫힘' : '-') + '</span></div>';
+      if (selPlan === p.id) h += '<div class="psteps">' + (ss.length ? ss.map((s) => '<div class="r" data-flow="' + s.flow + '"><span class="al">' + s.flow + ' · ' + s.step + '</span><span>' + md(s.who) + '</span>' + (s.stand === 'stand-in' ? standTag(Object.assign({}, s, { plan: null })) : '<span class="tag">없다</span>') + '</div>').join('') : '<p class="empty">이 plan 에 붙은 흐름의 단계가 없다' + (p.where.includes('online') ? '' : ' — 엔진 쪽 plan') + '</p>') + '</div>';
+      return h;
     }).join('');
   }
   function overlayHtml() {
@@ -491,7 +539,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       const f = FLOW.get(overlay.flow);
       h += '<h2>' + (overlay.kind === 'flow' ? '흐름의 길 — 설계' : '실행의 길 — 실제로 지나간 것') + '</h2>';
       h += '<p><b>흐름 ' + f.flow + '. ' + esc(f.name) + '</b> <span class="sub">' + md(f.title) + '</span></p><p class="sub">트리거: ' + md(f.trigger) + '</p>';
-      if (overlay.kind === 'flow') h += '<p class="sub">지금 코드가 도는 단계 ' + f.steps.filter((s) => s.traced).length + ' / ' + f.steps.length + ' — 흐린 줄은 아직 없다</p>';
+      if (overlay.kind === 'flow') { const c = standCount(f.steps); h += '<p class="sub">섰다 ' + c.b + ' · 대신 ' + c.i + ' · 없다 ' + (c.n - c.b - c.i) + ' / ' + c.n + ' — 빗금 줄은 다른 코드가 그 일을 하고(그 개념이 서면 옮긴다), 흐린 줄은 아직 없다</p>'; }
       else h += '<p class="sub">run ' + esc(overlay.label) + ' · 단계 ' + overlay.layout.length + (overlay.unit ? ' · 인스턴스 ' + esc(overlay.unit) : '') + '</p>';
     }
     h += '<div class="btns"><button data-act="play">재생</button><button data-act="clear">길 지우기</button></div>';
@@ -506,6 +554,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       h += '<h2>마디</h2><p><b>' + esc(LABEL[sel.id] || n.name) + '</b> <code>' + esc(n.id) + '</code> <span class="sub">' + esc(ps.text) + '</span></p>';
       if (!n.external) h += '<p class="sub">듣는 것: ' + md(n.listens) + '</p><p class="sub">상태: ' + md(n.holds) + '</p><p class="sub">늘리는 법: ' + md(n.scale) + '</p>';
       const cs = conceptsOf(sel.id);
+      if (ps.grade) h += '<p class="sub">개념 ' + ps.grade.b + ' / ' + ps.grade.n + ' 섰다 — 점의 색: 다 초록 · 일부 노랑 · 없음 회색</p>';
       if (cs.length) h += '<p class="sub">사는 개념 — 테가 초록이면 src 에 섰다</p><div class="chips">' + cs.map((c) => '<span class="cchip' + (c.built ? ' built' : '') + '" title="' + esc(c.duty) + '">' + esc(c.name) + '</span>').join('') + '</div>';
       h += '<p class="sub">지금까지 지난 단계 ' + (s ? s.n : 0) + (s && s.bad ? ' · 거절 · 실패 ' + s.bad : '') + '</p>';
     } else if (sel.kind === 'edge') {
@@ -517,7 +566,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     }
     h += overlayHtml();
     h += '<h3>프로세스</h3>' + PROCS.map((id) => { const ps = procState(id); const s = stat.get(id);
-      return '<div class="srv" data-node="' + id + '"><span class="dot ' + (ps.dot || '') + '"></span><span><b>' + esc(LABEL[id]) + '</b> <span class="al">' + id + '</span> <span class="sub">' + esc(ps.text) + '</span></span><span class="al">단계 ' + (s ? s.n : 0) + '</span></div>'; }).join('');
+      return '<div class="srv" data-node="' + id + '"><span class="dot ' + (ps.dot || '') + '"></span><span><b>' + esc(LABEL[id]) + '</b> <span class="al">' + id + '</span> <span class="sub">' + esc(ps.text) + '</span></span><span class="al">개념 ' + ps.grade.b + ' / ' + ps.grade.n + ' · 단계 ' + (s ? s.n : 0) + '</span></div>'; }).join('');
     const us = allUnits();
     h += '<h3>인스턴스 ' + us.length + '</h3>' + (us.length ? us.map((u) => '<div class="srv" data-node="engine"><span class="dot ' + (u.state === 'ready' ? 'ok' : u.state === 'failed' ? 'failed' : u.state === 'stopped' ? '' : 'wait') + '"></span><span><b>' + esc(u.unit) + '</b> <span class="sub">' + esc(u.state || '-') + '</span><br><span class="al">' + esc(kv(u.counts)) + '</span></span><span class="al">접속 중 ' + peopleOn(u.unit) + '</span></div>').join('') : '<p class="empty">인스턴스 없음 — 입장이 띄운다</p>');
     const ops = [...runs.values()].filter((r) => r.owner === 'operator').sort((a, b) => b.at - a.at);
@@ -527,6 +576,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     const bad = [...runs.values()].filter((r) => r.owner === 'machine' && r.bad).sort((a, b) => b.at - a.at).slice(0, 10);
     if (bad.length) h += '<div class="acts">' + bad.map(actHtml).join('') + '</div>';
     h += flowListHtml(MAP.flows.map((f) => f.flow).filter((n) => !PERSON.includes(n)), '서버의 흐름 — 고르면 그 길이 그림 위에 놓인다');
+    h += planListHtml();
     return h;
   }
   function actHtml(r) {
@@ -615,7 +665,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     document.getElementById('vPeople').className = view === 'people' ? 'on' : '';
     document.getElementById('mode').textContent = overlay ? (overlay.kind === 'flow' ? '흐름 ' + overlay.flow + ' 의 길' : overlay.kind === 'person' ? '그 사람의 길' : '실행의 길') : view === 'server' ? '서버의 글이 움직인다' : pick ? '그 사람의 글이 움직인다' : '사람의 글이 움직인다';
     document.getElementById('legend').innerHTML = (view === 'server'
-      ? '<span>상자 = 프로세스 · 밖</span><span>점선 상자 = 설계에만 있다</span><span>선의 수 = 넘은 흔적 전부</span>'
+      ? '<span>상자 = 프로세스 · 밖</span><span>점선 상자 = 설계에만 있다</span><span>점의 색 = 그 프로세스의 개념이 선 정도</span><span>선의 수 = 넘은 흔적 전부</span><span><span class="swatch built"></span> 섰다 <span class="swatch stand"></span> 대신 <span class="swatch none"></span> 없다</span>'
       : '<span>사람 보기 — 선의 수와 움직이는 글은 ' + (pick ? '고른 사람의 것' : '사람의 것') + '만</span><span>보라 테 = 그 사람의 인스턴스</span>')
       + '<span><span class="dot ok"></span> ok</span><span><span class="dot wait"></span> wait</span><span><span class="dot refused"></span> refused</span><span><span class="dot failed"></span> failed</span>';
   }
@@ -657,6 +707,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     const pf = e.target.closest('[data-pf]'); if (pf) { pfilter = pf.dataset.pf; schedule(); return; }
     const f = e.target.closest('[data-flow]'); if (f) { const n = Number(f.dataset.flow); if (overlay && overlay.kind === 'flow' && overlay.flow === n) { overlay = null; schedule(); } else showFlow(n); return; }
     const r = e.target.closest('[data-run]'); if (r) { showRun(r.dataset.run); return; }
+    const pl = e.target.closest('[data-plan]'); if (pl) { selPlan = selPlan === pl.dataset.plan ? null : pl.dataset.plan; schedule(); return; }
     const nd = e.target.closest('[data-node]'); if (nd) pickThing('node', nd.dataset.node);
   });
   side.addEventListener('input', (e) => { if (e.target.id === 'q') { query = e.target.value.trim().toLowerCase(); schedule(); } });

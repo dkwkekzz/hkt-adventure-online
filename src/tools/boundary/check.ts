@@ -16,7 +16,7 @@ const walk = (dir: string, ext: string): string[] =>
       });
 
 const IMPORT = /^\s*(?:import|export)\s+(type\s+)?([^'"]*?)\s*from\s*['"]([^'"]+)['"]/gm;
-const CALL = /\b(directory|signer|fleet|vault)\.((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\(/g;
+const CALL = /\b(directory|signer|fleet|storage|gateway)\.((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*)\s*\(/g;
 
 export function check(root: string): string[] {
   const src = join(root, 'src');
@@ -68,7 +68,7 @@ const direct = process.argv[1] !== undefined && resolve(process.argv[1]) === fil
 if (direct) {
   const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'));
   const found = check(root);
-  if (found.length === 0) console.log('경계 — 어긋남 0 (S · A · T · F · P · N · E)');
+  if (found.length === 0) console.log('경계 — 어긋남 0 (S · A · T · F · G · P · N · E)');
   else {
     for (const f of found) console.log(`✗ ${f}`);
     console.log(`경계 — 어긋남 ${found.length}`);

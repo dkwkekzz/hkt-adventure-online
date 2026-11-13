@@ -11,7 +11,7 @@
 |---|---|---|---|
 | ☑ | proto | 엔진의 Gate — `HOST_AUTH_KEY` 로 토큰을 검증, 키가 없으면 더미. 뷰어 `?token=` · 에이전트 `--token`(엔진 plan 259). 사람의 묶음 `--party`(엔진 plan 260) | 엔진의 `npm run check`. 키를 준 호스트에 이름 글로 붙으면 4002, 서명된 토큰으로 붙으면 open |
 | ☑ | online | 설계 — `design/README.md` · `method.md` · `01-flows` · `02-roles`, 설계 색인(`npm run index`) | 흐름의 단계 `개념.기능` 이 전부 책임에 있다 |
-| ☑ | online | 저장장치 — Vault · Ledger. 볼륨 하나 위 | `src/storage/tests` 가 자리를 내고 베끼고 되돌린다 |
+| ☑ | online | 저장장치 — 볼륨 하나 위의 Store 자리와 표. 지금은 plan 03 의 스토리지 | `src/storage/tests` |
 | ☑ | online | 계정 — Directory · Identity · Account · Signer · Token. 게스트 신원 | 토큰 하나로 엔진의 호스트에 `Host 2` 로 붙으면 open (`src/apps/main/tests/engine.spec.ts`) |
 | ☑ | online | 함대 — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator. 뷰어는 한 번 묶고 Static 이 준다 | 세계를 띄워 브라우저가 묶음을 맡고 NPC 가 움직인다(`npm run shot`). `stop` 뒤 다시 띄우면 `저장된 세계에서 이어간다` |
 | ☑ | online | main 앱 — Service.start · stop, http 의 login · enter · 게스트 페이지, stdin 의 Operator | 셋이 같은 세계에 붙어 각자의 묶음을 받는다. 쉬면 내려가고 다시 오면 이어진다 (`engine.spec.ts`) |

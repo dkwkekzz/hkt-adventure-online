@@ -2,27 +2,36 @@
 
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type { LedgerSlot, LedgerSocket } from '../../protocol/vault';
+import type { DatabaseSocket, Table } from '../../protocol/storage';
 import { Directory, Signer } from '..';
 
-const memory = (): LedgerSocket & { saved: Map<LedgerSlot, unknown> } => {
-  const saved = new Map<LedgerSlot, unknown>();
-  return { saved, load: (s) => saved.get(s) ?? null, save: (s, v) => void saved.set(s, structuredClone(v)) };
+const memory = (): DatabaseSocket & { rows: Map<string, unknown> } => {
+  const rows = new Map<string, unknown>();
+  const k = (t: Table, key: string) => `${t}/${key}`;
+  return {
+    rows,
+    get: async (t, key) => structuredClone(rows.get(k(t, key)) ?? null),
+    put: async (t, key, v) => void rows.set(k(t, key), structuredClone(v)),
+    remove: async (t, key) => void rows.delete(k(t, key)),
+    all: async (t) => [...rows].filter(([x]) => x.startsWith(`${t}/`)).map(([x, v]) => [x.slice(t.length + 1), v]),
+  };
 };
 
 describe('Directory.resolve', () => {
-  it('같은 신원은 같은 id, 다른 신원은 다른 id. 새 id 마다 Ledger.save. 되찾으면 같다', () => {
-    const ledger = memory();
-    const d = new Directory(ledger);
-    const a = d.resolve({ provider: 'guest', subject: 'x' });
+  it('같은 신원은 같은 id, 다른 신원은 다른 id. 표 accounts 에 줄 하나씩, accountInfo 에 마지막으로 온 때. 다시 세워도 같다', async () => {
+    const db = memory();
+    let now = 100;
+    const d = new Directory(db, () => now);
+    const a = await d.resolve({ provider: 'guest', subject: 'x' });
     expect(a).toMatch(/^p[0-9a-f]{12}$/);
-    expect(d.resolve({ provider: 'guest', subject: 'x' })).toBe(a);
-    const b = d.resolve({ provider: 'guest', subject: 'y' });
+    now = 200;
+    expect(await d.resolve({ provider: 'guest', subject: 'x' })).toBe(a);
+    const b = await d.resolve({ provider: 'guest', subject: 'y' });
     expect(b).not.toBe(a);
-    expect(ledger.saved.get('directory')).toEqual({ users: { 'guest:x': a, 'guest:y': b } });
-    const again = new Directory(ledger);
-    expect(again.idOf({ provider: 'guest', subject: 'x' })).toBe(a);
-    expect(again.idOf({ provider: 'guest', subject: 'z' })).toBeNull();
+    expect(Object.fromEntries(db.rows)).toEqual({ 'accounts/guest:x': a, 'accounts/guest:y': b, [`accountInfo/${a}`]: { seen: 200 }, [`accountInfo/${b}`]: { seen: 200 } });
+    const again = new Directory(db); // 다른 API 서버 · 다시 띄운 서비스 — 메모리에 든 것이 없다
+    expect(await again.idOf({ provider: 'guest', subject: 'x' })).toBe(a);
+    expect(await again.idOf({ provider: 'guest', subject: 'z' })).toBeNull();
   });
 });
 

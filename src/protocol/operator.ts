@@ -5,4 +5,4 @@ export const OPERATOR_COMMANDS = ['shards', 'status', 'start', 'stop', 'host', '
 export type OperatorCommand = (typeof OPERATOR_COMMANDS)[number];
 
 export const OPERATOR_USAGE =
-  'shards · status <world> · start <world> · stop <world> · host <world> <Console 글> · backup <world> · restore <world> <사본> · revoke-port <world> · help';
+  'shards · status <world> · start <world> · stop <world> · host <world> <Console 글> · backup <world> · restore <world> <백업> · revoke-port <world> · help';

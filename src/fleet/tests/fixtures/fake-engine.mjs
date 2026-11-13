@@ -1,12 +1,14 @@
 // 가짜 엔진 — 함대의 테스트가 엔진 체크아웃 대신 띄운다. tsx 의 자리에 서서 host · agent 의 말(엔진 web/ONLINE.md §1)만 흉내 낸다.
 //   host:  argv 를 <store>/argv.json 에, 머리글(host … · 새 세계 | 저장된 세계에서 이어간다 — now N · status · 자격 · 명령: …), stdin 의 Console 글(status · grant · stop …)
 //          접속은 http GET /join?account=이름 을 열어 둔 동안 — status 의 접속 칸에 든다. stop · SIGINT 면 <store>/snapshot.json 에 now 를 쓰고 멈춤 — … · exit 0
+//          WebSocket 도 받는다(Link) — 첫 글 `Host 2` 의 자격이 `hkt1.<계정>.…` 이면 Link 1 열림(서명은 보지 않는다), 아니면 거절 · 4002. Link 3 은 Link 2 로 되돌린다
 //          데이터셋 이름에 refuse 가 있으면 데이터셋 거부 — exit 2. silent 가 있으면 머리글을 찍지 않는다. nogrant 가 있으면 grant 에 모르는 명령으로 답한다
 //   agent: --url 의 포트로 /join?account=<--account> 를 열고, 닫히면 exit 0
 import { createServer, get } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
+import { WebSocketServer } from 'ws';
 
 const [entry, ...argv] = process.argv.slice(2);
 const flag = (name) => {
@@ -48,6 +50,28 @@ if (entry === 'apps/agent/main.ts') {
     res.write('open\n');
     links.set(account, res);
     req.on('close', () => links.get(account) === res && links.delete(account));
+  });
+  const wss = new WebSocketServer({ server });
+  wss.on('connection', (ws) => {
+    ws.once('message', (data) => {
+      let hello = null;
+      try {
+        hello = JSON.parse(data.toString());
+      } catch {}
+      if (hello?.step !== 'Host 2') return ws.close(4001);
+      const m = /^hkt1\.([^.]+)\./.exec(String(hello.credential ?? ''));
+      if (m === null) {
+        ws.send(JSON.stringify({ step: 'Link 1', reject: { why: '자격이 틀렸다' } }));
+        return ws.close(4002);
+      }
+      const account = m[1];
+      links.get(account)?.end();
+      const link = { end: () => ws.close(1001) };
+      links.set(account, link);
+      ws.send(JSON.stringify({ step: 'Link 1', open: { bodies: [1, 2], brains: {} } }));
+      ws.on('message', (msg) => ws.send(JSON.stringify({ step: 'Link 2', body: 1, delta: JSON.parse(msg.toString()).input ?? null })));
+      ws.on('close', () => links.get(account) === link && links.delete(account));
+    });
   });
   const tick = setInterval(() => {
     beats++;
