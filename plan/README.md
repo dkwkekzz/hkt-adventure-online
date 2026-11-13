@@ -13,10 +13,10 @@ src 는 ☑ 까지의 모양이다. 지금의 design(존 × 인스턴스 · 프�
 | plan | 어디 | 세우는 것 | 흐름 | 상태 |
 |---|---|---|---|---|
 | [01 세계 하나](01-one-world.md) | proto · online | 엔진의 Gate · 사람의 묶음, 설계, 저장장치 · 계정 · 함대 · main 앱 · 경계 검사 — 세계 하나 · 프로세스 하나의 서비스 | 1 · 2 · 3 · 4 · 5 · 6 · 7 | ☑ |
-| [02 관측](02-observe.md) | online | Monitor · 흔적 · 흐름의 지도 · 관측 페이지. 남은 것: 진행도를 실제대로(대신 하는 단계 · 프로세스 셋 · plan 진행표) | 14 | ◐ |
+| [02 관측](02-observe.md) | online | Monitor · 흔적 · 흐름의 지도 · 관측 페이지 — 진행도를 실제대로(단계 셋 · 프로세스 셋 · plan 진행표) | 14 | ☑ |
 | [03 스토리지](03-storage.md) | online | Database · CharacterStore · Leases · LeaderLock · SnapshotStore 의 뒤를 MongoDB · object storage 로 | 1 · 5 · 7 | ☑ |
 | [04 게이트웨이](04-gateway.md) | online | 게이트웨이 모듈 — 클라이언트가 주소 하나로 붙는다 | 9 · 11 | ☐ |
-| [05 세션 · 캐릭터](05-session-character.md) | online | 세션 모듈과 계정의 캐릭터 · 차단 — 입장이 세션 · 대기열을 거친다 | 2 · 3 의 A · 8 | ☐ |
+| [05 세션 · 캐릭터](05-session-character.md) | online | 세션 모듈과 계정의 캐릭터 · 차단 — 입장이 세션 · 대기열을 거친다 | 2 · 3 의 A · 5 · 8 | ☐ |
 | [06 엔진의 면](06-engine-faces.md) | proto | 통째 저장 · backup, handoff · load · unload · keep, 떠남 줄 · 지연, 뷰어의 다시 열림 · `?exit=` | (엔진) | ☐ |
-| [07 인스턴스 여럿](07-instances.md) | online | 캐릭터의 값(Loader · Leases · CharacterStore)과 한 존의 인스턴스 여럿(Registry · Scheduler · Scaler · Recoverer · Mover · Router) | 3 의 B · 9 · 10 · 12 | ☐ |
+| [07 인스턴스 여럿](07-instances.md) | online | 캐릭터의 값(Loader · Leases · CharacterStore)과 한 존의 인스턴스 여럿(Registry · Scheduler · Scaler · Recoverer · Mover · Router) | 1 · 3 의 B · 5 · 7 · 9 · 10 · 12 | ☐ |
 | [08 프로세스 넷](08-processes.md) | online | 노드(Runner · NodeReporter · Nodes · Reconciler)와 NodeRpc, 운영자의 토큰 · audit, Elector — 프로세스 넷으로 갈라 띄운다 | 1 · 5 · 6 · 7 · 13 · 14 | ☐ |

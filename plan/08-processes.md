@@ -10,7 +10,7 @@
 |---|---|
 | ☐ | 노드 — Runner · NodeReporter, 컨트롤 플레인의 Nodes · Reconciler, NodeRpc |
 | ☐ | SessionRpc — API 서버 · 게이트웨이 ↔ 컨트롤 플레인 |
-| ☐ | 운영자 — 흐름 6 의 명령 전부, 운영자의 토큰(`OPERATOR_KEY`) · audit |
+| ☐ | 운영자 — 흐름 6 의 명령 전부, 운영자의 토큰(`OPERATOR_KEY` — Signer.verify, 흐름 6 의 2) · audit |
 | ☐ | Elector — LeaderLock 과 term. 흐름 13 |
 | ☐ | 관측 — 프로세스마다의 Monitor, SessionRpc · NodeRpc 의 글에 실리는 run, 관측 페이지의 `?from=` 으로 넷을 함께 |
 

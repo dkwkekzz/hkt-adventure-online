@@ -1,6 +1,6 @@
 # plan 07 — 인스턴스 여럿
 
-상태: ☐ · 어디: online · design/02-roles/fleet.md · session.md · storage.md · 흐름 3 의 B · 9 · 10 · 12
+상태: ☐ · 어디: online · design/02-roles/fleet.md · session.md · storage.md · 흐름 1 의 8 · 9 · 3 의 B · 5 · 7 의 3 ~ 6 · 9 · 10 · 12
 
 캐릭터의 값이 인스턴스 사이를 옮겨 다니고, 한 존에 인스턴스가 여럿 선다. plan 06 의 엔진의 면에 기댄다.
 지금의 Shard 는 여기서 Registry 의 줄 · Runner · Console 로 갈린다.
@@ -10,9 +10,9 @@
 | | 무엇 |
 |---|---|
 | ☐ | 캐릭터의 값 — Loader · Leases · CharacterStore. 흐름 9 의 4 ~ 7 · 흐름 5 의 2 |
-| ☐ | 인스턴스 여럿 — Registry · Scheduler · Scaler · Recoverer. 흐름 3 의 B · 5 의 12 · 12 |
+| ☐ | 인스턴스 여럿 — Registry · Scheduler · Scaler · Recoverer · Backuper(엔진의 backup — plan 06 위). 흐름 3 의 B · 5 의 3 · 5 의 12 · 7 의 5 · 12 |
 | ☐ | 존 이동 — 세션의 Mover · Router. 흐름 10 |
-| ☐ | 흐름 3 의 B · 9 · 10 · 12 의 흔적 — 지금 Shard 가 남기는 3 의 11 · 17 · 19, 4 의 3 · 5 는 Registry · Console · Runner 를 부르는 자리로 |
+| ☐ | 흐름 3 의 B · 9 · 10 · 12 의 흔적 — 지금 Shard 가 남기는 3 의 11 · 17 · 19, 4 의 3 · 5 는 Registry · Console · Runner 를 부르는 자리로. 4 의 6(Ports.free)은 Runner 가 |
 
 ## 관측에 보일 것
 

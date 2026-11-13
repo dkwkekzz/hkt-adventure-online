@@ -229,7 +229,7 @@
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 ### Monitor
-- 데이터: role(불변) · build(불변) · server(내부 주소의 http, `monitorPort`) · map(불변, 관측의 지도 — 이 README 에서 뽑은 프로세스 · 연결 · 개념이 사는 곳과, design/01-flows 에서 뽑은 흐름 · 단계 · 순서. 단계마다 코드가 그 흔적을 남기는가) · recent:list<흔적>(상한 `traceKeep`) · units:map<단위, {state, counts}>(흔적이 고친다) · tally:map<(흐름, #, end), 수> · readers:set<열린 stream> · closing:bool · key(불변, 서명 키 — 계정을 가명으로).
+- 데이터: role(불변) · build(불변) · server(내부 주소의 http, `monitorPort`) · map(불변, 관측의 지도 — 이 README 에서 뽑은 프로세스 · 연결 · 개념이 사는 곳과, design/01-flows 에서 뽑은 흐름 · 단계 · 순서. 단계마다 섰는가 — 섰다(흔적을 남기고 그 개념의 파일이 있다) · 대신(흔적은 남기는데 개념의 파일이 없다 — 다른 코드가 그 일을 한다) · 없다, 그리고 서지 않은 단계가 어느 plan 의 것인가. plan/README.md 의 진행표) · recent:list<흔적>(상한 `traceKeep`) · units:map<단위, {state, counts}>(흔적이 고친다) · tally:map<(흐름, #, end), 수> · readers:set<열린 stream> · closing:bool · key(불변, 서명 키 — 계정을 가명으로).
 - 기능: listen · close 는 http 를 열고 닫는다. health 는 이 프로세스가 듣고 있는가. metrics 는 그 role 의 수치(units · tally). page 는 관측 페이지 한 장. stream 은 수치 하나와 recent 를 보낸 뒤 흔적과 간격마다의 수치를 흘린다. trace(흔적) 는 넘겨받은 계정을 가명으로 바꾸고, 흔적 하나를 recent · units · tally 와 readers 마다에 넣는다 — 기다리지 않고 실패하지 않는다. 흐름 14.
 - 생애: Service.start 가 가장 먼저 만든다. 프로세스마다 하나. trace 는 Service 가 그 role 의 개념들에 함수로 준다.
 
