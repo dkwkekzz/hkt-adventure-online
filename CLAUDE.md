@@ -6,7 +6,7 @@
 ```text
 design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연결 여덟) · 앱(README.md), 쓰는 방식(method.md), 흐름 열넷(01-flows/), 책임 다섯(02-roles/), 피드백(00-feedback/). src 가 아직 따라오지 않은 것은 plan 의 ☐
 plan/         design 을 src 에 세우는 순서와 상태. plan 하나 = 파일 하나(README.md 가 진행표). 다음은 진행표의 첫 ☐ · ◐
-notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입, storage.md — 스토리지의 뒤 · 자리). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
+notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입, storage.md — 스토리지의 뒤 · 자리, mongodb-local.md — 로컬의 진짜 MongoDB). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
   protocol/   소켓 선언 — api(로그인 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, 아무것도 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Signer · Identity · Account · Token
@@ -56,6 +56,7 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
 ```text
 npm install            의존(tsx · typescript · vitest). 런타임 의존은 mongodb 드라이버 하나 — MONGODB_URI 가 있을 때만 읽는다. 나머지는 node 22 의 http · crypto · child_process · zlib
 npm run engine         engine.lock 의 커밋을 engine/ 에 세운다(git fetch --depth 1 + npm ci). ENGINE_REPO=로컬 클론 이면 거기서
+npm run mongo:up       로컬의 MongoDB(docker · replica set rs0, scripts/mongo.compose.yaml) — MONGODB_URI='mongodb://localhost:27017/hkt?replicaSet=rs0'. mongo:down 이 내린다
 npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   ← 코드 손대면 이것
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다

@@ -1,0 +1,31 @@
+# 로컬의 MongoDB — 멤버 하나인 replica set(운영과 같은 모양). notes/mongodb-local.md
+#   npm run mongo:up      띄우고 replica set 이 설 때까지 기다린다(healthcheck 가 처음 한 번 rs.initiate)
+#   npm run mongo:down    내린다(데이터는 볼륨 hkt-mongo 에 남는다 — 지우려면 docker volume rm hkt-mongo)
+# 서비스는 MONGODB_URI=mongodb://localhost:27017/hkt?replicaSet=rs0
+# 멤버의 이름을 localhost:27017 로 둔다 — 호스트의 서비스가 포트로 닿고, 컨테이너 안의 mongosh 도 같은 이름으로 닿는다.
+
+name: hkt-online
+
+services:
+  mongo:
+    image: mongo:8.0
+    command: ['--replSet', 'rs0', '--bind_ip_all', '--port', '27017']
+    ports:
+      - '127.0.0.1:27017:27017'
+    volumes:
+      - hkt-mongo:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  hkt-mongo:
+    name: hkt-mongo

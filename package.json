@@ -8,6 +8,8 @@
     "check": "tsx src/tools/boundary/check.ts && tsx src/tools/index/main.ts --quiet && tsc --noEmit -p . && vitest run",
     "test": "npm run check",
     "engine": "bash scripts/engine.sh",
+    "mongo:up": "docker compose -f scripts/mongo.compose.yaml up -d --wait",
+    "mongo:down": "docker compose -f scripts/mongo.compose.yaml down",
     "start": "tsx src/apps/main/main.ts",
     "shot": "tsx src/tools/shot/main.ts"
   },

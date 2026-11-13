@@ -30,7 +30,7 @@
 
 ## 직관 확인
 
-서비스를 내렸다 다른 서버에서 같은 스토리지로 띄우면 계정 · 배정 · 세계가 그대로다 — `src/apps/main/tests/service.spec.ts` 의 「다른 서버에서 같은 스토리지로」(빈 local, 같은 db · bucket). 진짜 MongoDB · object storage 위의 같은 검사는 env 가 있을 때 돈다:
+서비스를 내렸다 다른 서버에서 같은 스토리지로 띄우면 계정 · 배정 · 세계가 그대로다 — `src/apps/main/tests/service.spec.ts` 의 「다른 서버에서 같은 스토리지로」(빈 local, 같은 db · bucket). 진짜 MongoDB · object storage 위의 같은 검사는 env 가 있을 때 돈다 — 로컬에 MongoDB 를 세우는 차례는 `notes/mongodb-local.md`(`npm run mongo:up`):
 
 ```bash
 MONGODB_URI=mongodb://localhost:27017 npx vitest run src/storage/tests/mongo.spec.ts

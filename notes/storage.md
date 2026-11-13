@@ -11,6 +11,7 @@
 | `MONGODB_URI` | 표(계정 · 배정 · audit …) · 캐릭터의 값 · lease · 활성의 잠금 | `<root>/db/` |
 | `SNAPSHOT_URI=s3://<bucket>/<prefix>` | 인스턴스의 Store 와 백업 | `<root>/bucket/` |
 
+- 내 컴퓨터에 MongoDB 를 세우는 차례는 [mongodb-local.md](mongodb-local.md).
 - MongoDB 의 데이터베이스 이름은 URI 의 경로(`mongodb://host/hkt`), 없으면 `hkt`. 트랜잭션을 쓰지 않으므로 단일 서버(mongod 하나)로도 돈다 — 운영은 replica set.
 - object storage 는 S3 호환이면 된다(AWS · MinIO · R2 …). 끝점은 `S3_ENDPOINT`(없으면 `https://s3.<AWS_REGION>.amazonaws.com`), 자격은 `AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY`(· `AWS_SESSION_TOKEN`), region 은 `AWS_REGION`(없으면 `us-east-1`). 부름은 path-style 이다.
 - 자격은 설정 파일 · 기록 · 관측에 싣지 않는다. 시작할 때 찍는 `스토리지 — …` 줄에는 MongoDB 의 호스트와 bucket 이름만 나온다.
