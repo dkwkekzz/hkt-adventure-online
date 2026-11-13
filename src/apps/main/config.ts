@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import type { FleetConfig } from '../../fleet';
+import type { GatewayConfig } from '../../protocol/gateway';
 import type { BucketOptions, StorageOptions } from '../../protocol/storage';
 
 export interface ServiceConfig {
@@ -12,6 +13,8 @@ export interface ServiceConfig {
   readonly keymap: string | null;
   /** 스토리지 — 개발의 뿌리(storageRoot) · lease 의 길이 · 캐릭터의 이력과 환경변수의 뒤. */
   readonly storage: StorageOptions;
+  /** 게이트웨이 — 포트와 한계 · 주기(design/02-roles/gateway.md). env GATE_PORT 가 포트를 덮는다 */
+  readonly gateway: GatewayConfig;
   readonly apiPort: number;
   /** 사람의 토큰 수명(초). */
   readonly tokenTtl: number;
@@ -29,7 +32,7 @@ type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage'> & {
   storageRoot: string;
   leaseMs: number;
   characterHistory: number;
-  fleet: Omit<FleetConfig, 'ports' | 'pageUrl'> & { ports: [number, number] };
+  fleet: Omit<FleetConfig, 'ports' | 'pageUrl' | 'gateUrl' | 'hostName'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string };
 };
 
 /** SNAPSHOT_URI(`s3://<bucket>/<prefix>`)와 S3_ENDPOINT · AWS_* → object storage 의 자리. 없으면 null — Store 는 storageRoot 의 디렉터리로. */
@@ -58,6 +61,7 @@ export function bucketOf(env: NodeJS.ProcessEnv): BucketOptions | null {
  * 스토리지의 뒤는 env 의 MONGODB_URI(표 · 캐릭터 · lease · 잠금)와 SNAPSHOT_URI(Store) — 없는 쪽은 storageRoot 의 디렉터리.
  * build 는 그 파일 곁의 engine.lock 의 커밋.
  * pageUrl 은 SERVICE_PAGE_URL, 없으면 `http(s)://<publicHost>:<apiPort>/play` — 앞에 프록시가 서면 SERVICE_PAGE_URL 로 준다.
+ * gateUrl(게이트웨이의 밖의 주소)은 SERVICE_GATE_URL, 없으면 `ws(s)://<publicHost>:<gateway.port>`.
  */
 export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): ServiceConfig {
   const raw = JSON.parse(readFileSync(file, 'utf8')) as Raw;
@@ -70,6 +74,8 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
   const publicHost = env['SERVICE_PUBLIC_HOST'] ?? raw.fleet.publicHost;
   const secure = env['SERVICE_SECURE'] === undefined ? raw.fleet.secure : env['SERVICE_SECURE'] === '1';
   const { storageRoot, leaseMs, characterHistory, ...rest } = raw;
+  const gateway: GatewayConfig = { ...raw.gateway, port: num(env['GATE_PORT'], raw.gateway.port) };
+  const { publicHost: _p, secure: _s, hostName, ...fleet } = raw.fleet;
   return {
     ...rest,
     storage: {
@@ -82,13 +88,14 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
     apiPort,
     monitorPort: num(env['MONITOR_PORT'], raw.monitorPort),
     build,
+    gateway,
     fleet: {
-      ...raw.fleet,
+      ...fleet,
       engineDir: at(env['SERVICE_ENGINE'] ?? raw.fleet.engineDir),
       viewerOut: at(raw.fleet.viewerOut),
-      publicHost,
-      secure,
       pageUrl: env['SERVICE_PAGE_URL'] ?? `${secure ? 'https' : 'http'}://${publicHost}:${apiPort}/play`,
+      gateUrl: env['SERVICE_GATE_URL'] ?? `${secure ? 'wss' : 'ws'}://${publicHost}:${gateway.port}`,
+      hostName: hostName ?? 'localhost',
     },
   };
 }

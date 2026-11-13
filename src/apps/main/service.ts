@@ -7,7 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Directory, Signer } from '../../account';
 import { Fleet } from '../../fleet';
+import { openGateway } from '../../gateway';
 import { openStorage } from '../../storage';
+import type { GatewaySocket } from '../../protocol/gateway';
 import type { StorageSocket } from '../../protocol/storage';
 import { openApi } from './api';
 import { readMap } from './map';
@@ -29,6 +31,8 @@ export class Service {
   readonly signer: Signer;
   readonly fleet: Fleet;
   readonly api: Server;
+  /** 게이트웨이 — 클라이언트의 소켓을 받아 호스트와 잇는다(흐름 9 · 11). SessionRpc 는 함수 부름 — 받는 쪽은 지금 함대(세션 모듈 plan 05 의 대신) */
+  readonly gateway: GatewaySocket;
   port = 0;
   private stopping: Promise<void> | null = null;
 
@@ -40,6 +44,18 @@ export class Service {
     this.signer = signer;
     this.fleet = fleet;
     this.api = openApi({ directory: this.directory, signer: this.signer, fleet: this.fleet, files: new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap), log, trace: monitor.trace });
+    this.gateway = openGateway({
+      config: config.gateway,
+      name: 'gate-1',
+      address: config.fleet.gateUrl,
+      clockMs: config.fleet.clockMs,
+      verify: (token) => signer.verify(token),
+      attach: (character, gate, run) => fleet.attach(character, gate, run),
+      detach: (character, gate, run) => fleet.detach(character, gate, run),
+      report: () => {}, // Gates.seen 은 세션 모듈(plan 05) — 지금은 흔적(흐름 5 의 6)만
+      trace: monitor.trace,
+      log,
+    });
   }
 
   /** start — 흐름 1. 키가 없으면 시작 거부. Monitor 를 열고, 스토리지에 닿고, 뷰어를 한 번 묶고, Api 를 연다. 샤드는 띄우지 않는다. */
@@ -62,6 +78,7 @@ export class Service {
         service.api.once('error', reject);
         service.api.listen(config.apiPort, () => resolve());
       });
+      await service.gateway.listen(run); // 흐름 1 의 4 · 5 — 소켓을 듣고 자기를 알린다
     } catch (e) {
       monitor.trace({ flow: 1, step: 1, run, unit: '-', end: 'failed' });
       await storage?.close().catch(() => {});
@@ -81,6 +98,7 @@ export class Service {
     const run = freshRun();
     this.stopping = (async () => {
       this.fleet.clock.stop();
+      await this.gateway.close(run); // 흐름 7 의 7 · 8 — 내려간다고 알리고 접속을 닫는다(1001). 세계보다 먼저 — 사람은 rerouting 없이 닫힘을 받는다
       await this.fleet.stopAll(run); // 흐름 7 의 4 · 5 — 표는 바뀔 때마다 스토리지에 있다 — 따로 쓰지 않는다
       await new Promise<void>((resolve) => this.api.close(() => resolve()));
       this.api.closeAllConnections();

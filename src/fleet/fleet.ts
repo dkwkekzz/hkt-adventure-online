@@ -4,6 +4,7 @@
 
 import type { Address } from '../protocol/api';
 import type { TraceFn } from '../protocol/observe';
+import type { Attached, Unattached } from '../protocol/session';
 import type { StorageSocket } from '../protocol/storage';
 import { Assignment } from './assignment';
 import { Clock } from './clock';
@@ -30,8 +31,10 @@ export interface FleetConfig {
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
   readonly ports: readonly [number, number];
-  readonly publicHost: string;
-  readonly secure: boolean;
+  /** 게이트웨이의 밖의 주소 — 입장의 답이 든다(Gates.pick 의 대신 — 게이트웨이는 지금 하나) */
+  readonly gateUrl: string;
+  /** 게이트웨이에서 호스트가 보이는 이름 — 내부망(Node.host) */
+  readonly hostName: string;
   readonly clockMs: number;
   /** 사람의 접속 없이 이만큼 박자가 지나면 세계를 내린다. */
   readonly idleLimit: number;
@@ -56,6 +59,8 @@ export class Fleet {
   readonly storage: FleetStorage;
   readonly config: FleetConfig;
   ticks = 0;
+  /** 입장한 계정 → 그 입장의 run(세션의 대신 — 세션 모듈은 plan 05). attach 는 여기 있는 계정만 잇는다 */
+  readonly entered = new Map<string, string>();
   private readonly ctx: ShardContext;
   private readonly log: (line: string) => void;
   /** 흔적을 남긴다 — 앱이 준 Monitor.trace(흐름 14). Shard · Operator 도 이것으로. */
@@ -114,8 +119,7 @@ export class Fleet {
       sparse: config.sparse,
       npc: config.npc,
       party: config.party,
-      publicHost: config.publicHost,
-      secure: config.secure,
+      gateUrl: config.gateUrl,
       pageUrl: config.pageUrl,
       startLimitMs: config.startLimitMs,
       stopLimitMs: config.stopLimitMs,
@@ -203,7 +207,32 @@ export class Fleet {
     }
     await shard.start(run);
     shard.idle = 0;
+    this.entered.set(account, run); // 세션의 대신 — 입장의 run 이 그 사람의 세션이다
+    this.trace({ flow: 3, step: 8, run, unit: name, end: 'ok', account, session: run }); // Gates.pick 의 일 — 게이트웨이는 지금 하나(gateUrl)
     return shard.address(token);
+  }
+
+  /**
+   * attach — 흐름 9 의 3 · 8 · 9 의 대신(SessionRpc attach — 받는 쪽은 세션 모듈, plan 05). 입장한 계정이고 세계가 ready 면
+   * 호스트의 내부 주소와 호스트에 줄 새 토큰을 준다. 아니면 까닭 — 게이트웨이가 4002 로 닫는다.
+   */
+  async attach(account: string, _gate: string, run: string): Promise<Attached | Unattached> {
+    const name = this.config.world;
+    const shard = this.shards.get(name);
+    const session = this.entered.get(account);
+    const ready = session !== undefined && shard !== undefined && shard.state === 'ready' && shard.row.port !== null;
+    this.trace({ flow: 9, step: 3, run, unit: name, end: ready ? 'ok' : 'refused', account, ...(session === undefined ? {} : { session }) }); // Sessions.get 의 일
+    if (!ready) return { why: session === undefined ? '세션이 없다 — 먼저 입장' : '세계가 떠 있지 않다 — 다시 입장' };
+    this.trace({ flow: 9, step: 8, run, unit: name, end: 'ok', account, session, person: 'active' }); // Sessions.activate 의 일
+    const token = this.ctx.issue(account);
+    this.trace({ flow: 9, step: 9, run, unit: name, end: 'ok', account, session }); // Signer.issue — 호스트에 줄 토큰
+    return { instance: name, address: `ws://${this.config.hostName}:${shard!.row.port}`, token };
+  }
+
+  /** detach — 흐름 11 의 2 의 대신(Sessions.suspend — plan 05). 유예는 아직 없다 — 세계가 떠 있는 동안 다시 붙을 수 있다. */
+  detach(account: string, _gate: string, run: string): void {
+    const session = this.entered.get(account);
+    this.trace({ flow: 11, step: 2, run, unit: this.config.world, end: 'wait', account, ...(session === undefined ? {} : { session }), person: 'grace' });
   }
 
   shardOf(name: string): Shard | null {

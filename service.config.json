@@ -4,6 +4,15 @@
   "characterHistory": 5,
   "apiPort": 8000,
   "monitorPort": 8001,
+  "gateway": {
+    "port": 8002,
+    "helloMs": 5000,
+    "rerouteMs": 10000,
+    "pongMs": 10000,
+    "maxBytes": 65536,
+    "maxRate": 60,
+    "ipLimit": 32
+  },
   "traceKeep": 500,
   "tokenTtl": 21600,
   "agentTtl": 300,
@@ -33,6 +42,7 @@
     ],
     "publicHost": "localhost",
     "secure": false,
+    "hostName": "localhost",
     "clockMs": 5000,
     "idleLimit": 60,
     "startLimitMs": 90000,

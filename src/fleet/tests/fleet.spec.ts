@@ -38,8 +38,8 @@ async function up(over: Partial<FleetConfig> = {}, given?: StorageSocket) {
     sparse: 10,
     npc: NPC,
     ports: portRange(),
-    publicHost: 'example.test',
-    secure: false,
+    gateUrl: 'ws://gate.test:8002',
+    hostName: 'localhost',
     clockMs: 60_000,
     idleLimit: 2,
     startLimitMs: 5000,
@@ -79,8 +79,8 @@ describe('Fleet.enter — 흐름 3', () => {
     const shard = world(fleet);
     const port = config.ports[0];
     expect(shard.state).toBe('ready');
-    const ws = `ws://example.test:${port}`;
-    expect(addr).toEqual({ page: `http://example.test:8000/play?token=hkt1.p1.9.sig&ws=${encodeURIComponent(ws)}`, ws });
+    const gate = 'ws://gate.test:8002'; // 클라이언트는 게이트웨이 하나로 붙는다 — 호스트의 주소는 가지 않는다
+    expect(addr).toEqual({ page: `http://example.test:8000/play?token=hkt1.p1.9.sig&ws=${encodeURIComponent(gate)}`, gate });
     expect(await storage.database.all('instances')).toEqual([['main', { dataset: 'dataset/world.json', port, epoch: 1 }]]); // 띄울 때 세대가 하나 올랐다
     expect(shard.store).toBe(await storage.snapshots.pull('main')); // Store 자리는 SnapshotStore 가 준 이 서버의 자리
     expect(shard.store!.endsWith(join('local', 'main'))).toBe(true);
@@ -102,7 +102,7 @@ describe('Fleet.enter — 흐름 3', () => {
     const { fleet, log } = await up();
     const [a, b, c] = await Promise.all([fleet.enter('p1', 't1'), fleet.enter('p2', 't2'), fleet.enter('p3', 't3')]);
     expect(log.filter((l) => l.includes('호스트를 띄운다'))).toHaveLength(1);
-    expect(new Set([a!.ws, b!.ws, c!.ws]).size).toBe(1);
+    expect(new Set([a!.gate, b!.gate, c!.gate]).size).toBe(1);
     expect(fleet.shards.size).toBe(1);
   });
 
@@ -297,25 +297,39 @@ describe('Fleet.trace — 흐름 5 · 6 의 흔적 (흐름 14)', () => {
   });
 });
 
-describe('Shard.line · exited — 사람의 state (흐름 14 의 person)', () => {
-  it('status 에서 접속한 계정이 늘면 그 사람마다 4 의 3 active, 줄면 grace, 호스트가 끝나면 거기 있던 사람마다 4 의 5 gone. NPC 계정은 사람이 아니다', async () => {
+describe('Fleet.attach · detach — 흐름 9 의 3 · 8 · 9 · 11 의 2 의 대신(세션 모듈 전)', () => {
+  it('입장하지 않은 계정 · 떠 있지 않은 세계는 거절. 입장한 계정은 호스트의 내부 주소와 새 토큰 — 사람은 active, detach 면 grace', async () => {
+    const { fleet, traces, config } = await up();
+    expect(await fleet.attach('p1', 'gate-1', 'r0')).toEqual({ why: '세션이 없다 — 먼저 입장' });
+    await fleet.enter('p1', 'tok', 'enter-run');
+    expect(await fleet.attach('p1', 'gate-1', 'r1')).toEqual({ instance: 'main', address: `ws://localhost:${config.ports[0]}`, token: 'tok-p1' });
+    expect(await fleet.attach('p2', 'gate-1', 'r2')).toMatchObject({ why: expect.stringMatching(/세션이 없다/) });
+    fleet.detach('p1', 'gate-1', 'r1');
+    const people = traces.filter((t) => t.person !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person} ${t.session}`);
+    expect(people).toEqual(['9.8 p1 active enter-run', '11.2 p1 grace enter-run']); // 세션은 입장의 run
+    expect(traces.filter((t) => t.run === 'r1').map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['9.3.ok', '9.8.ok', '9.9.ok', '11.2.wait']);
+    await world(fleet).stop();
+    expect(await fleet.attach('p1', 'gate-1', 'r3')).toEqual({ why: '세계가 떠 있지 않다 — 다시 입장' });
+  });
+});
+
+describe('Shard.line · exited — 노드가 본 사람 (흐름 4 의 3 · 5)', () => {
+  it('status 에서 접속한 계정이 늘고 줄면 그 사람마다 4 의 3 — 맞춰 보기로만(person 없음). 호스트가 끝나면 거기 있던 사람마다 4 의 5 gone. NPC 계정은 사람이 아니다', async () => {
     const { fleet, traces, config } = await up();
     await fleet.enter('p1', 'tok');
     const leave = await join_(config.ports[0], 'p1');
     await join_(config.ports[0], 'p2');
-    const people = () => traces.filter((t) => t.person !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person}`);
+    const seen = () => traces.filter((t) => t.flow === 4 && t.account !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person ?? '-'}`);
     await world(fleet).command('status');
-    await until(() => people().length >= 2);
-    expect(people()).toEqual(['4.3 p1 active', '4.3 p2 active']);
-    expect(traces.find((t) => t.person === 'active')).toMatchObject({ unit: 'main' });
+    await until(() => seen().length >= 2);
+    expect(seen()).toEqual(['4.3 p1 -', '4.3 p2 -']);
     leave();
     await new Promise((r) => setTimeout(r, 50));
     await world(fleet).command('status');
-    await until(() => people().length >= 3);
-    expect(people()[2]).toBe('4.3 p1 grace');
+    await until(() => seen().length >= 3);
+    expect(seen()[2]).toBe('4.3 p1 -');
     await world(fleet).stop();
-    expect(people().slice(3)).toEqual(['4.5 p2 gone']);
+    expect(seen().slice(3)).toEqual(['4.5 p2 gone']);
     expect(traces.some((t) => t.account === NPC.account)).toBe(false);
   });
 });
-

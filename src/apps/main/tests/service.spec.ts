@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { fakeEngine, portRange } from '../../../fleet/tests/fake';
+import { fakeEngine, portRange, until } from '../../../fleet/tests/fake';
 import { loadConfig } from '../config';
 import type { ServiceConfig } from '../config';
 import { Service } from '../service';
@@ -15,8 +15,12 @@ afterEach(async () => {
   services = [];
 });
 
-function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), ports = portRange()): ServiceConfig {
+/** 포트 다섯 — 넷은 호스트, 마지막은 게이트웨이. */
+function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portRange()): ServiceConfig {
+  const ports: [number, number] = [range[0], range[1] - 1];
+  const gatePort = range[1];
   return {
+    gateway: { port: gatePort, helloMs: 2000, rerouteMs: 500, pongMs: 5000, maxBytes: 65536, maxRate: 100, ipLimit: 32 },
     storage: { root: storageRoot, mongodbUri: null, bucket: null, leaseMs: 1000, characterHistory: 2 },
     apiPort: 0,
     monitorPort: 0,
@@ -37,8 +41,8 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), ports = portR
       sparse: 10,
       npc: { account: 'npc', bodies: ['b1'] },
       ports,
-      publicHost: 'localhost',
-      secure: false,
+      gateUrl: `ws://localhost:${gatePort}`,
+      hostName: 'localhost',
       clockMs: 60_000,
       idleLimit: 3,
       startLimitMs: 5000,
@@ -103,10 +107,10 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
 
     const ea = await post('/enter', { token: a.body['token'] });
     expect(ea.code).toBe(200);
-    expect(ea.body['ws']).toBe(`ws://localhost:${s.config.fleet.ports[0]}`);
-    expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(a.body['token']!)}&ws=${encodeURIComponent(ea.body['ws']!)}`);
+    expect(ea.body['gate']).toBe(`ws://localhost:${s.config.gateway.port}`); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
+    expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(a.body['token']!)}&ws=${encodeURIComponent(ea.body['gate']!)}`);
     const eb = await post('/enter', { token: b.body['token'] });
-    expect(eb.body['ws']).toBe(ea.body['ws']); // 같은 세계
+    expect(eb.body['gate']).toBe(ea.body['gate']);
     expect(s.fleet.shards.size).toBe(1);
 
     const t = a.body['token']!;
@@ -137,7 +141,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const c = config();
     const first = await up(c);
     const a = await first.post('/login', { provider: 'guest' });
-    const port = (await first.post('/enter', { token: a.body['token'] })).body['ws'];
+    await first.post('/enter', { token: a.body['token'] });
+    const port = first.s.fleet.shardOf('main')!.row.port;
     await new Promise((r) => setTimeout(r, 100));
     await first.s.stop(); // 흐름 7 의 5 — 내려간 Store 를 올렸다
     expect(first.s.monitor.recent.find((t) => t.flow === 7 && t.step === 5)).toMatchObject({ end: 'ok', unit: 'main' });
@@ -145,25 +150,52 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const other = mkdtempSync(join(tmpdir(), 'svc-other-'));
     cpSync(join(c.storage.root, 'db'), join(other, 'db'), { recursive: true });
     cpSync(join(c.storage.root, 'bucket'), join(other, 'bucket'), { recursive: true });
-    const second = await up({ ...config(other, [...c.fleet.ports] as [number, number]), fleet: { ...c.fleet, viewerOut: join(other, 'viewer', 'viewer.js') } });
+    const second = await up({ ...c, storage: { ...c.storage, root: other }, fleet: { ...c.fleet, viewerOut: join(other, 'viewer', 'viewer.js') } });
     expect(existsSync(join(other, 'local'))).toBe(false);
     const again = await second.post('/login', { provider: 'guest', subject: a.body['subject'] });
     expect(again.body['token']!.split('.')[1]).toBe(a.body['token']!.split('.')[1]); // 같은 계정
     const entered = await second.post('/enter', { token: again.body['token'] });
-    expect(entered.body['ws']).toBe(port); // 같은 배정(포트)
+    expect(entered.code).toBe(200);
+    expect(second.s.fleet.shardOf('main')?.row.port).toBe(port); // 같은 배정(포트)
     expect(second.s.fleet.shardOf('main')?.resumed).toBe(true); // 올라간 Store 를 내려 받아 이어간다
     expect(second.s.fleet.shardOf('main')?.row.epoch).toBe(2); // 세대가 이어진다
+  });
+
+  it('게이트웨이 — 받은 주소 하나로 붙어 호스트와 이어진다. 입장 없이 붙으면 4002. 사람은 9 의 8 에서 active, 닫으면 11 의 2 에서 grace', async () => {
+    const { s, post } = await up();
+    const a = await post('/login', { provider: 'guest' });
+    const b = await post('/login', { provider: 'guest' });
+    const gate = (await post('/enter', { token: a.body['token'] })).body['gate']!;
+    const link = (token: string) =>
+      new Promise<{ first: Record<string, unknown>; code: Promise<number>; ws: WebSocket }>((ok) => {
+        const ws = new WebSocket(gate);
+        const code = new Promise<number>((r) => ws.addEventListener('close', (e) => r(e.code)));
+        ws.addEventListener('open', () => ws.send(JSON.stringify({ step: 'Host 2', credential: token })));
+        ws.addEventListener('message', (m) => ok({ first: JSON.parse(String(m.data)) as Record<string, unknown>, code, ws }), { once: true });
+      });
+    const ok = await link(a.body['token']!);
+    expect(ok.first).toMatchObject({ step: 'Link 1', open: { bodies: [1, 2] } });
+    const none = await link(b.body['token']!); // 입장하지 않았다 — 세션이 없다
+    expect(none.first).toEqual({ step: 'Link 1', reject: { why: '세션이 없다 — 먼저 입장' } });
+    expect(await none.code).toBe(4002);
+    ok.ws.close(1000);
+    expect(await ok.code).toBe(1000);
+    await until(() => s.monitor.recent.some((t) => t.flow === 11 && t.step === 2));
+    const who = s.monitor.recent.find((t) => t.flow === 2 && t.step === 5 && t.who !== undefined)!.who;
+    expect(s.monitor.recent.filter((t) => t.person !== undefined && t.who === who).map((t) => `${t.flow}.${t.step} ${t.person}`)).toEqual(['2.5 login', '3.9 pending', '9.8 active', '11.2 grace']);
+    const run = s.monitor.recent.find((t) => t.flow === 9 && t.step === 10)!.run;
+    expect(s.monitor.recent.filter((t) => t.run === run).map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['9.1.ok', '9.2.ok', '9.3.ok', '9.8.ok', '9.9.ok', '9.10.ok', '9.11.wait', '11.1.ok', '11.2.wait']); // 접속 하나 = run 하나
   });
 
   it('Monitor.trace — 흐름 1 · 2 · 3 · 7 의 단계가 차례로 흔적을 남긴다. 한 입장은 run 하나로 Api · 함대를 잇는다', async () => {
     const { s, post } = await up();
     const steps = (flow: number, run?: string) => s.monitor.recent.filter((t) => t.flow === flow && (run === undefined || t.run === run)).map((t) => `${t.step}.${t.end}`);
-    expect(steps(1)).toEqual(['7.ok', '1.ok', '2.ok', '3.wait']);
+    expect(steps(1)).toEqual(['7.ok', '1.ok', '2.ok', '4.wait', '5.ok', '3.wait']); // 4 · 5 — 게이트웨이가 듣고 알린다. 3(Api.listen)은 시작이 다 끝난 뒤에 남긴다
     const a = await post('/login', { provider: 'guest' });
     expect(steps(2)).toEqual(['1.ok', '2.ok', '4.ok', '5.wait']);
     await post('/enter', { token: a.body['token'] });
     const run = s.monitor.recent.find((t) => t.flow === 3)!.run;
-    expect(steps(3, run)).toEqual(['1.ok', '2.ok', '14.ok', '11.ok', '13.ok', '15.ok', '16.ok', '17.ok', '18.ok', '19.ok', '9.wait']);
+    expect(steps(3, run)).toEqual(['1.ok', '2.ok', '14.ok', '11.ok', '13.ok', '15.ok', '16.ok', '17.ok', '18.ok', '19.ok', '8.ok', '9.wait']); // 8 — 게이트웨이를 고른다(하나)
     expect(s.monitor.units.get('main')).toMatchObject({ state: 'ready' });
     await post('/enter', { token: 'nope' });
     expect(s.monitor.tally.get('3.2.refused')).toBe(1);
@@ -180,7 +212,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const monitor = s.monitor;
     await s.stop();
     const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);
-    expect(stop).toEqual(['4.stopping', '5.', '10.', '11.']); // 내리고 · Store 를 올리고 · Api 를 닫고 · 스토리지를 닫는다
+    expect(stop).toEqual(['7.', '8.', '4.stopping', '5.', '10.', '11.']); // 게이트웨이가 알리고 닫고 · 내리고 · Store 를 올리고 · Api 를 닫고 · 스토리지를 닫는다
     expect(monitor.units.get('main')?.state).toBe('stopped'); // 흐름 4 의 5 — 호스트가 끝났다
   });
 
@@ -188,9 +220,9 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cfg-'));
     const file = join(dir, 'service.config.json');
     const c = config();
-    const { pageUrl: _, ...fleet } = c.fleet;
+    const { pageUrl: _, gateUrl: _g, ...fleet } = c.fleet;
     const { storage: _s, ...rest } = c;
-    writeFileSync(file, JSON.stringify({ ...rest, storageRoot: 'out/storage', leaseMs: 30000, characterHistory: 5, fleet: { ...fleet, engineDir: 'engine', viewerOut: 'out/viewer/viewer.js' } }));
+    writeFileSync(file, JSON.stringify({ ...rest, storageRoot: 'out/storage', leaseMs: 30000, characterHistory: 5, fleet: { ...fleet, publicHost: 'localhost', secure: false, engineDir: 'engine', viewerOut: 'out/viewer/viewer.js' } }));
     const read = loadConfig(file, { PORT: '9001', MONITOR_PORT: '9002', SERVICE_PUBLIC_HOST: 'play.test', SERVICE_SECURE: '1' });
     expect(read.storage).toEqual({ root: join(dir, 'out/storage'), mongodbUri: null, bucket: null, leaseMs: 30000, characterHistory: 5 });
     expect(read.fleet.engineDir).toBe(join(dir, 'engine'));
@@ -198,9 +230,10 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(read.apiPort).toBe(9001);
     expect(read.monitorPort).toBe(9002);
     expect(read.build).toBe('-'); // 곁에 engine.lock 이 없다
-    expect(read.fleet.publicHost).toBe('play.test');
-    expect(read.fleet.secure).toBe(true);
     expect(read.fleet.pageUrl).toBe('https://play.test:9001/play');
+    expect(read.fleet.gateUrl).toBe(`wss://play.test:${c.gateway.port}`);
+    expect(loadConfig(file, { GATE_PORT: '9003', SERVICE_GATE_URL: 'wss://play.test/gate' }).gateway.port).toBe(9003);
+    expect(loadConfig(file, { SERVICE_GATE_URL: 'wss://play.test/gate' }).fleet.gateUrl).toBe('wss://play.test/gate');
     expect(loadConfig(file, { SERVICE_PAGE_URL: 'https://play.test/play' }).fleet.pageUrl).toBe('https://play.test/play');
     // 스토리지의 뒤는 환경변수 — 자격은 설정 파일에 없다
     const remote = loadConfig(file, { MONGODB_URI: 'mongodb://db:27017/hkt', SNAPSHOT_URI: 's3://snaps/hkt/', AWS_ACCESS_KEY_ID: 'id', AWS_SECRET_ACCESS_KEY: 'secret', AWS_REGION: 'ap-northeast-2' }).storage;

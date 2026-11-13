@@ -6,6 +6,8 @@
 - 어느 호스트로 갈지 정하지 않는다. 세션 모듈이 준 주소로만 잇는다.
 - 상태는 열린 소켓뿐이다. 게이트웨이가 죽으면 그 사람들은 다시 들어온다.
 - 호스트의 주소는 클라이언트에게 가지 않는다.
+- 밖에 내보내는 것은 openGateway 하나다. 모양은 `protocol/gateway.ts`, 컨트롤 플레인과의 글(SessionRpc)은 `protocol/session.ts`.
+- 값은 설정의 `gateway` — `port` · `helloMs` · `rerouteMs` · `pongMs` · `maxBytes` · `maxRate`(접속 하나가 초마다 보내는 글) · `ipLimit`. 간격(흐름 5 의 B)은 `clockMs` — 모듈 경계 때문에 openGateway 가 제 간격을 든다.
 
 | 개념 | 책임 하나 |
 |---|---|
@@ -18,7 +20,7 @@
 ## 개념
 
 ### Acceptor
-- 데이터: verify(토큰 → id, 앱이 준다) · limiter(참조) · connections:map<Character.id, Connection>.
+- 데이터: verify(토큰 → id, 앱이 준다) · attach · detach(SessionRpc — 앱이 준다) · limiter(참조) · connections:map<Character.id, Connection>.
 - 기능: listen 은 소켓을 듣는다. accept(socket) 은 한계(`helloMs`) 안에 온 첫 글 `Host 2` 의 토큰을 풀어 Character.id 를 얻는다 — 틀리면 닫는다(4001 · 4002). 같은 캐릭터의 옛 Connection 은 닫는다(4000 — 나중 접속이 이긴다).
 - 생애: Service.start 가 만든다.
 
@@ -29,12 +31,12 @@
 
 ### RateLimiter
 - 데이터: maxBytes · maxRate · ipLimit. 불변.
-- 기능: check(frame) 는 글 하나의 크기와 빈도가 한계 안인가. admit(ip) 는 그 주소의 열린 접속이 한계 안인가.
+- 기능: check(frame) 는 글 하나의 크기와 빈도가 한계 안인가 — 아니면 그 글을 버리고 버린 수를 센다. admit(ip) 는 그 주소의 열린 접속이 한계 안인가 — 아니면 소켓을 받지 않는다(http 429). 받으면 하나 세고, 닫히면 leave(ip) 가 하나 뺀다.
 - 생애: Service.start 가 만든다.
 
 ### Keepalive
 - 데이터: pongMs(불변).
-- 기능: ping(connection) 은 클라이언트에 ping 을 보내고 한계 안에 답이 없으면 그 Connection 을 닫게 한다.
+- 기능: ping(connection) 은 클라이언트에 ping 을 보내고 한계(`pongMs`) 안에 답이 없으면 그 Connection 을 닫게 한다(1001 — 흐름 11).
 - 생애: Service.start 가 만든다.
 
 ### GateReporter

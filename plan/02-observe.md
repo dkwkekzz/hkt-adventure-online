@@ -28,6 +28,9 @@
 | 단계 | 지금 하는 코드 | 옮길 plan |
 |---|---|---|
 | 3 의 6 Placer.pick | `Fleet.enter` | 05 |
+| 3 의 8 Gates.pick | `Fleet.enter`(게이트웨이 하나 — gateUrl) | 05 |
+| 9 의 3 Sessions.get · 9 의 8 Sessions.activate | `Fleet.attach`(입장한 계정의 표) | 05 |
+| 11 의 2 Sessions.suspend | `Fleet.detach`(유예 없음) | 05 |
 | 3 의 11 · 19 Registry.put | `Shard.boot` | 07 |
 | 3 의 17 · 5 의 1 Console.command | `Shard.boot` · `Fleet.tick` | 07 |
 | 4 의 3 Runner.line · 4 의 5 Runner.exited | `Shard.line` · `Shard.exited` | 07 |
@@ -36,7 +39,6 @@
 | 5 의 3 Backuper.backup | `Fleet.tick`(SnapshotStore.copy — 내려가 올린 세계만) | 07 |
 | 7 의 5 Backuper.upload | `Shard.exited` → `Fleet`(SnapshotStore.push — 백업은 5 의 3 이 다음 주기에) | 07 |
 | 6 의 4 (명령의 개념) | `Operator` | 08 |
-| person 의 active · grace | 4 의 3(노드가 본 status) — 설계는 9 의 8 · 11 의 2 | 04 · 05 |
 | session | 입장의 run — 설계는 Session.id | 05 |
 
 ## 덧붙임

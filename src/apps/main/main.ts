@@ -18,6 +18,7 @@ async function main(): Promise<void> {
   const config = loadConfig(file);
   const service = await Service.start(config, process.env[AUTH_ENV]);
   console.log(`service · http://localhost:${service.port}/ · 엔진 ${config.fleet.engineDir} · 데이터셋 ${config.fleet.dataset} · 포트 ${config.fleet.ports.join('-')} · 스토리지 ${service.storage.where}`);
+  console.log(`게이트웨이 · ${service.gateway.address} (port ${service.gateway.port}) — 클라이언트는 이 주소 하나로 붙는다`);
   console.log(`관측 · http://localhost:${service.monitor.port}/observe/page · /health · /metrics (내부 주소)`);
   console.log(`샤드 ${service.fleet.shards.size} (전부 stopped) · 명령: help`);
 

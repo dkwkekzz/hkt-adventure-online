@@ -11,7 +11,7 @@
 |---|---|
 | ☐ | 캐릭터의 값 — Loader · Leases · CharacterStore. 흐름 9 의 4 ~ 7 · 흐름 5 의 2 |
 | ☐ | 인스턴스 여럿 — Registry · Scheduler · Scaler · Recoverer · Backuper(엔진의 backup — plan 06 위). 흐름 3 의 B · 5 의 3 · 5 의 12 · 7 의 5 · 12 |
-| ☐ | 존 이동 — 세션의 Mover · Router. 흐름 10 |
+| ☐ | 존 이동 — 세션의 Mover · Router, 게이트웨이의 Connection.reroute. 흐름 10 |
 | ☐ | 흐름 3 의 B · 9 · 10 · 12 의 흔적 — 지금 Shard 가 남기는 3 의 11 · 17 · 19, 4 의 3 · 5 는 Registry · Console · Runner 를 부르는 자리로. 4 의 6(Ports.free)은 Runner 가 |
 
 ## 관측에 보일 것

@@ -19,6 +19,7 @@ interface Page {
   url(): string;
   $(sel: string): Promise<{ click(): Promise<void> } | null>;
   $$eval<T>(sel: string, f: (els: Element[]) => T): Promise<T>;
+  close(): Promise<void>;
 }
 
 const arg = (name: string, d: string): string => {
@@ -42,9 +43,13 @@ async function main(): Promise<void> {
   mkdirSync(out, { recursive: true });
   const browser = await playwright.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+    let page: Page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
     if (viewer) await shootViewer(page, url, out, wait, query);
     if (monitor !== '') {
+      if (viewer) {
+        await page.close(); // 뷰어의 탭은 3D 를 그리느라 바쁘다 — 닫고 관측은 새 탭에서
+        page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+      }
       await page.goto(`${monitor.replace(/\/$/, '')}/observe/page#3`);
       await page.waitForFunction(() => /듣는 중/.test(document.getElementById('conn')?.textContent ?? ''), null, { timeout: 10000 });
       await page.waitForTimeout(800);

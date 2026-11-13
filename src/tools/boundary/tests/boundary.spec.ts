@@ -38,6 +38,7 @@ describe('경계 검사', () => {
       ['A', { 'src/account/x.ts': "import { Fleet } from '../fleet';\n" }, /규칙 A/],
       ['T', { 'src/storage/x.ts': "import { Signer } from '../account';\n" }, /규칙 T/],
       ['F', { 'src/fleet/x.ts': "import { openStorage } from '../storage';\n" }, /규칙 F/],
+      ['G', { 'src/gateway/x.ts': "import { Signer } from '../account';\n" }, /규칙 G/],
       ['P 안', { 'src/apps/main/x.ts': "import { Shard } from '../../fleet/shard';\n" }, /규칙 P — 앱은 모듈의 index.ts 만/],
       ['P 부름', { 'src/apps/main/x.ts': 'export const f = (fleet: { shards: { clear(): void } }) => fleet.shards.clear();\n' }, /규칙 P — 앱이 fleet\.shards\.clear/],
       ['P 스토리지', { 'src/apps/main/x.ts': "export const f = (storage: { database: { put(t: string): void } }) => storage.database.put('audit');\n" }, /규칙 P — 앱이 storage\.database\.put/],

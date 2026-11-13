@@ -21,8 +21,8 @@ export interface ShardContext {
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
   /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). 계정마다 그 틀에서 묶음이 선다. */
   readonly party: string;
-  readonly publicHost: string;
-  readonly secure: boolean;
+  /** 게이트웨이의 밖의 주소 — 클라이언트는 이것 하나로 붙는다 */
+  readonly gateUrl: string;
   /** 뷰어 페이지의 주소 — 서비스의 Static 이 준다(`…/play`). */
   readonly pageUrl: string;
   readonly startLimitMs: number;
@@ -246,10 +246,10 @@ export class Shard {
       this.mark(4, 3, run, 'ok', read.kind === 'status' ? { counts: { players: this.players, beats: read.status.beats } } : {}); // Runner.line 의 일
     }
     if (read.kind === 'status') {
-      // 접속한 캐릭터가 늘고 줄면 그 사람마다 — 노드가 본 사실(흐름 14 의 person)
+      // 접속한 캐릭터가 늘고 줄면 그 사람마다 — 노드가 본 사실, 맞춰 보기로만(사람의 state 는 흐름 9 의 8 · 11 의 2 가 정한다)
       const run = freshRun();
-      for (const a of this.linked) if (!was.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a, person: 'active' });
-      for (const a of was) if (!this.linked.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a, person: 'grace' });
+      for (const a of this.linked) if (!was.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a });
+      for (const a of was) if (!this.linked.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a });
     }
     if (read.kind === 'ready') {
       this.listening = true;
@@ -401,9 +401,9 @@ export class Shard {
     return this.stopping;
   }
 
-  /** address — 흐름 3 의 8. page 는 서비스의 Static 이 주는 뷰어 페이지 — 자격은 ?token=, 이 샤드는 ?ws=. */
+  /** address — 흐름 3 의 9 의 답. page 는 서비스의 Static 이 주는 뷰어 페이지 — 자격은 ?token=, 소켓은 ?ws= 의 게이트웨이. 호스트의 주소는 가지 않는다. */
   address(token: string): Address {
-    const ws = `${this.ctx.secure ? 'wss' : 'ws'}://${this.ctx.publicHost}:${this.row.port}`;
-    return { page: `${this.ctx.pageUrl}?token=${encodeURIComponent(token)}&ws=${encodeURIComponent(ws)}`, ws };
+    const gate = this.ctx.gateUrl;
+    return { page: `${this.ctx.pageUrl}?token=${encodeURIComponent(token)}&ws=${encodeURIComponent(gate)}`, gate };
   }
 }

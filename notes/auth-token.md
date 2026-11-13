@@ -60,17 +60,17 @@ curl -s -X POST http://localhost:8000/login -H 'content-type: application/json' 
 curl -s -X POST http://localhost:8000/enter -H 'content-type: application/json' -d '{"token":"<①의 token>"}'
 ```
 
-답: `{"page":"http://<서비스>/play?token=…&ws=…","ws":"ws://<publicHost>:<port>"}` — page 는 서비스가 주는 뷰어 페이지, ws 는 세계(모두 같다).
+답: `{"page":"http://<서비스>/play?token=…&ws=…","gate":"ws://<publicHost>:8002"}` — page 는 서비스가 주는 뷰어 페이지, gate 는 게이트웨이의 주소(모두 같다). 세계(호스트)의 주소는 오지 않는다 — 클라이언트는 게이트웨이 하나로 붙고, 게이트웨이가 호스트와 잇는다.
 
 - 세계가 내려가 있으면 여기서 띄운다. 처음은 몇 초 걸린다.
 - 실패는 `{"why":"…"}` — 토큰이 틀렸거나 만료면 400, 세계를 띄우지 못했거나 동시 접속이 상한(capacity)에 찼으면 503.
 
 ### ③ 주입 — WebSocket 의 첫 글로 토큰을 보낸다
 
-`ws` 로 열고 **첫 글**로 `Host 2` 에 토큰을 담는다. 글은 전부 JSON 텍스트 프레임이다.
+`gate` 로 열고 **첫 글**로 `Host 2` 에 토큰을 담는다. 글은 전부 JSON 텍스트 프레임이다. 게이트웨이는 첫 글의 토큰만 읽어 누구인지 알고, 호스트에는 그때 새로 낸 토큰을 보낸다 — 나머지 글은 그대로 넘긴다.
 
 ```js
-const ws = new WebSocket(enter.ws);
+const ws = new WebSocket(enter.gate);
 ws.onopen = () => ws.send(JSON.stringify({ step: 'Host 2', credential: login.token }));
 ws.onmessage = (m) => {
   const msg = JSON.parse(m.data);
@@ -83,11 +83,12 @@ ws.onmessage = (m) => {
 
 엔진이 이미 가진 클라이언트는 이렇게 주입한다.
 
-- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?ws=` 의 세계에 붙어 `?token=` 을 `Host 2` 로 보낸다(페이지는 서비스의 주소, 세계는 다른 포트). `Link 1 open` 의 bodies 가 그 계정의 묶음(요정 넷)이다 — 처음 온 계정이면 엔진이 틀에서 하나 낳는다.
-- 엔진의 에이전트 앱 — `--token` 이 자격이다. `--account` 는 기록의 이름일 뿐이다.
+- 브라우저 뷰어 — `page` 를 그대로 연다. 뷰어가 `?ws=` 의 게이트웨이에 붙어 `?token=` 을 `Host 2` 로 보낸다(페이지는 서비스의 주소, 게이트웨이는 다른 포트). `Link 1 open` 의 bodies 가 그 계정의 묶음(요정 넷)이다 — 처음 온 계정이면 엔진이 틀에서 하나 낳는다.
+- **입장(②) 없이 게이트웨이에 붙으면 4002** — 세션이 없다(`{step:'Link 1', reject:{why:'세션이 없다 — 먼저 입장'}}`). 세계가 쉬어 내려갔으면 `세계가 떠 있지 않다 — 다시 입장`.
+- 엔진의 에이전트 앱 — `--url` 은 게이트웨이, `--token` 이 자격이다(② 를 먼저). `--account` 는 기록의 이름일 뿐이다.
 
 ```bash
-npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brain llm
+npm run agent -- --url ws://localhost:8002 --account me --token "<token>" --brain llm
 ```
 
 ### ④ 그 뒤
@@ -98,8 +99,9 @@ npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brai
 | 코드 | 뜻 |
 |---|---|
 | 4000 | 같은 계정이 다른 곳에서 붙었다 — 나중 접속이 이긴다 |
-| 4002 | 거절 — 토큰이 틀렸거나 만료, 또는 그 세계에 줄 빈 묶음이 없다 |
-| 1001 | 세계가 내려갔다(쉼 · 운영자 · 서비스 종료) — ② 부터 다시 |
+| 4001 | 첫 글이 `Host 2` 가 아니거나 한계(`gateway.helloMs`) 안에 오지 않았다 |
+| 4002 | 거절 — 토큰이 틀렸거나 만료, 입장하지 않았다(세션이 없다), 또는 그 세계에 줄 빈 묶음이 없다 |
+| 1001 | 세계가 내려갔다(쉼 · 운영자 · 서비스 종료) — 게이트웨이가 `gateway.rerouteMs` 를 기다린 뒤 닫는다. ② 부터 다시 |
 
 - 끊긴 뒤 다시 붙을 때 토큰이 만료되었으면 저장한 subject 로 ① 부터 다시.
 
@@ -118,13 +120,13 @@ npm run agent -- --url ws://localhost:3100 --account me --token "<token>" --brai
 export HOST_AUTH_KEY="$(openssl rand -base64 32)"
 ```
 
-공개 주소로 열면 `/enter` 가 `https://…` · `wss://…` 주소를 답한다. 서비스 앞에 프록시가 서서 페이지의 주소가 `https://<호스트>:<PORT>/play` 와 다르면 `SERVICE_PAGE_URL` 로 준다.
+공개 주소로 열면 `/enter` 가 `https://…` · `wss://…` 주소를 답한다. 서비스 앞에 프록시가 서서 페이지의 주소가 `https://<호스트>:<PORT>/play` 와 다르면 `SERVICE_PAGE_URL` 로, 게이트웨이의 주소가 `wss://<호스트>:<GATE_PORT>` 와 다르면 `SERVICE_GATE_URL` 로 준다.
 
 ```bash
 SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start
 ```
 
-세계의 포트(`fleet.ports` 범위의 첫 빈 것, 기본 3100)가 밖에서 닿아야 하고 TLS 는 플랫폼이 종단한다.
+밖에서 닿아야 하는 것은 Api(`PORT`, 기본 8000)와 게이트웨이(`GATE_PORT`, 기본 8002) 둘이다. 세계의 포트(`fleet.ports`)는 게이트웨이만 닿으면 된다 — 내부망. TLS 는 플랫폼이 종단한다.
 키를 바꾸면 이미 낸 토큰은 전부 무효가 된다. 서비스를 다시 띄우면 세계는 새 키로 뜬다(도는 세계는 옛 키 — 내렸다 띄운다).
 
 ### 서비스 없이 토큰을 직접 만들 때
