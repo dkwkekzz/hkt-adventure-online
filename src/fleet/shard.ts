@@ -4,7 +4,6 @@
 import { randomBytes } from 'node:crypto';
 import { EXIT_REFUSED, RESUMED_HEAD } from '../protocol/engine';
 import type { StatusLine } from '../protocol/engine';
-import type { Address } from '../protocol/api';
 import type { TraceEnd, TraceFn } from '../protocol/observe';
 import type { Row } from './assignment';
 import { Probe } from './probe';
@@ -19,12 +18,8 @@ export interface ShardContext {
   readonly beat: number;
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
-  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). 계정마다 그 틀에서 묶음이 선다. */
+  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). 캐릭터(엔진의 계정)마다 그 틀에서 묶음이 선다. */
   readonly party: string;
-  /** 게이트웨이의 밖의 주소 — 클라이언트는 이것 하나로 붙는다 */
-  readonly gateUrl: string;
-  /** 뷰어 페이지의 주소 — 서비스의 Static 이 준다(`…/play`). */
-  readonly pageUrl: string;
   readonly startLimitMs: number;
   readonly stopLimitMs: number;
   readonly commandLimitMs: number;
@@ -231,7 +226,6 @@ export class Shard {
     }
     const read = Probe.read(text);
     const before = this.players;
-    const was = this.linked;
     if (read.kind === 'status') {
       this.lastStatus = read.status;
       this.linked = read.accounts.filter((a) => a !== this.ctx.npc.account);
@@ -244,12 +238,6 @@ export class Shard {
       this.mark(4, 1, run, 'ok'); // Process.onLine
       this.mark(4, 2, run, 'ok'); // Probe.read
       this.mark(4, 3, run, 'ok', read.kind === 'status' ? { counts: { players: this.players, beats: read.status.beats } } : {}); // Runner.line 의 일
-    }
-    if (read.kind === 'status') {
-      // 접속한 캐릭터가 늘고 줄면 그 사람마다 — 노드가 본 사실, 맞춰 보기로만(사람의 state 는 흐름 9 의 8 · 11 의 2 가 정한다)
-      const run = freshRun();
-      for (const a of this.linked) if (!was.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a });
-      for (const a of was) if (!this.linked.includes(a)) this.ctx.trace({ flow: 4, step: 3, run, unit: this.name, end: 'ok', account: a });
     }
     if (read.kind === 'ready') {
       this.listening = true;
@@ -291,11 +279,7 @@ export class Shard {
     this.ctx.log(`${this.name} host 끝났다 — exit ${code}`);
     const run = freshRun();
     this.mark(4, 4, run, 'ok', { counts: { exit: code } }); // Process.onExit
-    const left = this.linked; // 거기 있던 사람은 떠났다 — 흐름 4 의 5 가 사람마다
-    this.linked = [];
-    const gone = (): void => {
-      for (const a of left) this.ctx.trace({ flow: 4, step: 5, run, unit: this.name, end: 'ok', account: a, person: 'gone' });
-    };
+    this.linked = []; // 노드는 캐릭터만 안다 — 사람의 state 는 세션(흐름 9 · 11)이 정한다
     if (this.state === 'starting' || this.ready !== null) {
       if (this.ready === null) return; // boot 가 한계로 끝냈다 — 거기서 센다
       this.ready.reject(new Error(`호스트가 머리글 전에 끝났다 — exit ${code}`));
@@ -309,7 +293,6 @@ export class Shard {
       this.restarts = 0;
       this.players = 0;
       this.mark(4, 5, run, 'ok', { state: 'stopped', counts: { players: 0 } }); // Runner.exited 의 일
-      gone();
       this.save(this.stopRun ?? run); // 호스트가 저장하고 끝났다 — 그 자리를 올린다(흐름 7 의 5)
       return;
     }
@@ -319,7 +302,6 @@ export class Shard {
     else this.restarts++;
     this.players = 0;
     this.mark(4, 5, run, 'failed', { state: 'failed', counts: { players: 0, restarts: this.restarts } });
-    gone();
   }
 
   /** 내려간 Store 자리를 올린다 — stop 이 이것을 기다린다. 되면 dirty(흐름 5 의 3 이 백업한다). */
@@ -399,11 +381,5 @@ export class Shard {
       this.stopRun = null;
     });
     return this.stopping;
-  }
-
-  /** address — 흐름 3 의 9 의 답. page 는 서비스의 Static 이 주는 뷰어 페이지 — 자격은 ?token=, 소켓은 ?ws= 의 게이트웨이. 호스트의 주소는 가지 않는다. */
-  address(token: string): Address {
-    const gate = this.ctx.gateUrl;
-    return { page: `${this.ctx.pageUrl}?token=${encodeURIComponent(token)}&ws=${encodeURIComponent(gate)}`, gate };
   }
 }

@@ -82,8 +82,9 @@ mongosh "$MONGODB_URI"
 ```
 
 ```js
-show collections                                   // accounts · accountInfo · instances · audit …
-db.accounts.find()                                 // { _id: 'guest:<주체>', value: 'p…', v: 1 }
+show collections                                   // accounts · accountInfo · characters · owners · instances · audit …
+db.accounts.find()                                 // { _id: 'guest:<주체>', value: 'a…', v: 1 }
+db.characters.find()                               // { _id: 'a…', value: [{ id: 'p…', name: '…' }], v: 1 }
 db.instances.find()                                // { _id: 'main', value: { dataset, port, epoch }, v }
 db.audit.find().sort({ _id: -1 }).limit(5)         // 운영자의 명령 — { at, operator, line }
 ```
@@ -94,12 +95,12 @@ db.audit.find().sort({ _id: -1 }).limit(5)         // 운영자의 명령 — { 
 
 ```bash
 HOST_AUTH_KEY=dev MONGODB_URI="$MONGODB_URI" SERVICE_STORAGE=out/storage-a npm start
-#   게스트 페이지에서 들어가기 → 세계가 뜬다 → Ctrl+C
+#   게스트 페이지에서 들어가기 → 캐릭터를 만들어 들어가기 → 세계가 뜬다 → Ctrl+C
 HOST_AUTH_KEY=dev MONGODB_URI="$MONGODB_URI" SERVICE_STORAGE=out/storage-b npm start
-#   같은 브라우저로 들어가기
+#   같은 브라우저로 들어가기 — 만든 캐릭터가 목록에 있다
 ```
 
-- 같은 계정이다(브라우저가 든 주체 → `accounts`). 같은 배정이다 — 같은 포트, `instances` 의 epoch 가 하나 오른다.
+- 같은 계정 · 같은 캐릭터다(브라우저가 든 주체 → `accounts` → `characters`). 같은 배정이다 — 같은 포트, `instances` 의 epoch 가 하나 오른다.
 - 세계는 새로 선다 — Store 는 `out/storage-a/bucket` 에 있고 b 는 그것을 모른다. 세계까지 따라오게 하려면 두 번 다 같은 `SNAPSHOT_URI`(S3 호환 object storage — [storage.md](storage.md))를 준다.
 
 ## 막히면

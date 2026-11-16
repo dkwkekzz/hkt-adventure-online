@@ -4,6 +4,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { DatabaseSocket } from '../protocol/storage';
+import { ACCOUNT_HEAD } from './token';
 import { keyOf } from './identity';
 import type { Identity } from './identity';
 
@@ -23,12 +24,12 @@ export class Directory {
     this.now = now;
   }
 
-  /** resolve — 있으면 그 id, 없으면 새 id 를 짓고 적는다. 마지막으로 온 때를 고친다. */
+  /** resolve — 있으면 그 id, 없으면 새 id(`a` 로 시작)를 짓고 적는다. 마지막으로 온 때를 고친다. */
   async resolve(identity: Identity): Promise<string> {
     const key = keyOf(identity);
     let id = await this.idOf(identity);
     if (id === null) {
-      do id = `p${randomBytes(6).toString('hex')}`;
+      do id = `${ACCOUNT_HEAD}${randomBytes(6).toString('hex')}`;
       while ((await this.db.get('accountInfo', id)) !== null);
       await this.db.put('accountInfo', id, { seen: this.now() } satisfies AccountInfo);
       await this.db.put('accounts', key, id);

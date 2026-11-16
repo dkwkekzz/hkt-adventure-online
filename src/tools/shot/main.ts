@@ -1,7 +1,8 @@
-// 화면 확인 — npm run shot [-- --url http://localhost:8000 --out out/shot --wait 6000 --query '&fx=off&scene=off&tiles=flat' --monitor http://localhost:8001 --viewer off]. 검사 밖.
+// 화면 확인 — npm run shot [-- --url http://localhost:8000 --out out/shot --wait 6000 --query '&fx=off&scene=off&tiles=flat' --monitor http://localhost:8001 --viewer off --flow 3]. 검사 밖.
 // --monitor 가 있으면 뷰어 뒤에 관측 페이지를 찍는다 — <out>/observe.png(서버 보기) · observe-flow.png(대신 하는 단계가 있는 서버의 흐름의 길) · observe-plan.png(plan 진행표, 대신이 가장 많은 plan 을 펴서) · observe-people.png(사람 보기, 첫 사람을 골라). --viewer off 면 게스트 페이지 · 뷰어를 건너뛴다.
 // --query 는 뷰어 페이지에 덧붙이는 질의 — 기본은 가벼운 그림(헤드리스의 소프트웨어 GPU 는 큰 세계의 3D 장면을 찍는 동안 멈춘다). 빈 글이면 그대로.
-// 떠 있는 서비스의 게스트 페이지를 헤드리스 크로미움으로 열어 「들어가기」를 누르고, 받은 샤드의 뷰어가 body 를 맡을 때까지 기다려 찍는다.
+// --flow N 이면 사람 보기에서 그 흐름을 골라 그 길을 찍는다 — <out>/observe-flow-N.png(사람의 흐름 2 · 3 · 8 · 9 · 10 · 11 은 사람 보기에 있다).
+// 떠 있는 서비스의 게스트 페이지를 헤드리스 크로미움으로 열어 「들어가기」(로그인) → 캐릭터를 만들고 「들어가기」를 누르고, 받은 뷰어가 body 를 맡을 때까지 기다려 찍는다.
 // 찍는 것: <out>/landing.png(게스트 페이지) · <out>/viewer.png(샤드의 뷰어). playwright 는 이 저장소의 의존이 아니다 — 깔린 것을 쓴다.
 
 import { mkdirSync } from 'node:fs';
@@ -11,6 +12,8 @@ import { join, resolve } from 'node:path';
 interface Page {
   goto(url: string): Promise<unknown>;
   click(sel: string): Promise<void>;
+  fill(sel: string, value: string): Promise<void>;
+  waitForSelector(sel: string, o: { timeout: number }): Promise<unknown>;
   screenshot(o: { path: string; fullPage?: boolean }): Promise<unknown>;
   waitForURL(u: RegExp, o: { timeout: number }): Promise<void>;
   waitForFunction(f: () => boolean, a: null, o: { timeout: number }): Promise<unknown>;
@@ -34,6 +37,7 @@ async function main(): Promise<void> {
   const query = arg('--query', '&fx=off&scene=off&tiles=flat');
   const monitor = arg('--monitor', '');
   const viewer = arg('--viewer', 'on') !== 'off';
+  const pickFlow = arg('--flow', '');
   let playwright: { chromium: { launch(o: object): Promise<{ newPage(o: object): Promise<Page>; close(): Promise<void> }> } };
   try {
     playwright = createRequire(import.meta.url)('playwright');
@@ -89,6 +93,12 @@ async function main(): Promise<void> {
       await people.waitForTimeout(800);
       await people.screenshot({ path: join(out, 'observe-people.png'), fullPage: true });
       console.log(`찍었다 — ${join(out, 'observe-people.png')}`);
+      if (pickFlow !== '') {
+        await people.click(`#side .frow[data-flow="${pickFlow}"]`);
+        await people.waitForTimeout(600);
+        await people.screenshot({ path: join(out, `observe-flow-${pickFlow}.png`), fullPage: true });
+        console.log(`찍었다 — ${join(out, `observe-flow-${pickFlow}.png`)}`);
+      }
     }
   } finally {
     await browser.close();
@@ -99,7 +109,14 @@ async function shootViewer(page: Page, url: string, out: string, wait: number, q
   {
     await page.goto(url);
     await page.screenshot({ path: join(out, 'landing.png') });
-    await page.click('#go');
+    await page.click('#go'); // 로그인
+    await page.waitForSelector('#make:not([disabled])', { timeout: 30000 });
+    if ((await page.$('#chars .enter')) === null) {
+      await page.fill('#name', '찍는이');
+      await page.click('#make');
+      await page.waitForSelector('#chars .enter', { timeout: 30000 });
+    }
+    await page.click('#chars .enter'); // 첫 캐릭터로 입장 — 줄이면 페이지가 순번을 보이고 다시 묻는다
     await page.waitForURL(/\?token=/, { timeout: 120000 });
     if (query !== '') await page.goto(page.url() + query);
     await page.waitForFunction(() => /body \d/.test(document.getElementById('status')?.textContent ?? ''), null, { timeout: 60000 });

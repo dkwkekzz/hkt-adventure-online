@@ -1,5 +1,5 @@
-// Fleet.enter · Shard.start · Probe.read · Shard.exited · Fleet.tick · Shard.stop · Operator.command (흐름 3 · 4 · 5 · 6) — 가짜 엔진 위에서.
-// 세계는 하나 — 사람은 모두 같은 세계에 붙는다. 입장의 한계는 capacity(성능)뿐이다.
+// Fleet.launch · ready · address · Shard.start · Probe.read · Shard.exited · Fleet.tick · Shard.stop · Operator.command (흐름 3 의 B · 4 · 5 · 6) — 가짜 엔진 위에서.
+// 세계는 하나 — 사람은 모두 같은 세계에 붙는다. 누구를 어디에 배정하는가(상한 · 대기열)는 세션 모듈의 것이다(src/session/tests).
 
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,14 +31,11 @@ async function up(over: Partial<FleetConfig> = {}, given?: StorageSocket) {
     world: 'main',
     dataset: 'dataset/world.json',
     party: 'lead-1',
-    capacity: 8,
     viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'),
-    pageUrl: 'http://example.test:8000/play',
     beat: 200,
     sparse: 10,
     npc: NPC,
     ports: portRange(),
-    gateUrl: 'ws://gate.test:8002',
     hostName: 'localhost',
     clockMs: 60_000,
     idleLimit: 2,
@@ -72,15 +69,19 @@ describe('Probe.read · answers', () => {
   });
 });
 
-describe('Fleet.enter — 흐름 3', () => {
-  it('세계의 줄을 내고 호스트를 인자(--party) · 키와 함께 띄우고, NPC 묶음을 grant 하고, NPC 에이전트를 토큰으로 붙여 주소를 답한다', async () => {
+describe('Fleet.launch — 흐름 3 의 B', () => {
+  it('세계의 줄을 내고 호스트를 인자(--party) · 키와 함께 띄우고, NPC 묶음을 grant 하고, NPC 에이전트를 토큰으로 붙인다. ready · address 가 그것을 준다', async () => {
     const { fleet, storage, config } = await up();
-    const addr = await fleet.enter('p1', 'hkt1.p1.9.sig');
+    expect(fleet.ready('main')).toEqual([]);
+    expect(fleet.address('main')).toBeNull();
+    expect(await fleet.launch('main', 'r1')).toBe(true);
     const shard = world(fleet);
     const port = config.ports[0];
     expect(shard.state).toBe('ready');
-    const gate = 'ws://gate.test:8002'; // 클라이언트는 게이트웨이 하나로 붙는다 — 호스트의 주소는 가지 않는다
-    expect(addr).toEqual({ page: `http://example.test:8000/play?token=hkt1.p1.9.sig&ws=${encodeURIComponent(gate)}`, gate });
+    expect(fleet.ready('main')).toEqual(['main']);
+    expect(fleet.address('main')).toBe(`ws://localhost:${port}`); // 호스트의 내부 주소 — 게이트웨이가 잇는다
+    expect(await fleet.launch('main')).toBe(false); // 이미 섰다 — 한 존에 인스턴스 여럿은 plan 07
+    expect(await fleet.launch('elsewhere')).toBe(false); // 모르는 존
     expect(await storage.database.all('instances')).toEqual([['main', { dataset: 'dataset/world.json', port, epoch: 1 }]]); // 띄울 때 세대가 하나 올랐다
     expect(shard.store).toBe(await storage.snapshots.pull('main')); // Store 자리는 SnapshotStore 가 준 이 서버의 자리
     expect(shard.store!.endsWith(join('local', 'main'))).toBe(true);
@@ -98,52 +99,37 @@ describe('Fleet.enter — 흐름 3', () => {
     expect(shard.players).toBe(0); // NPC 는 사람이 아니다
   });
 
-  it('사람은 모두 같은 세계에 — 호스트는 한 번만 뜨고 주소의 소켓이 같다', async () => {
+  it('한꺼번에 띄워도 호스트는 한 번만 뜬다 — 뜨는 가운데 온 것은 그것을 기다린다', async () => {
     const { fleet, log } = await up();
-    const [a, b, c] = await Promise.all([fleet.enter('p1', 't1'), fleet.enter('p2', 't2'), fleet.enter('p3', 't3')]);
+    expect(await Promise.all([fleet.launch('main'), fleet.launch('main'), fleet.launch('main')])).toEqual([true, true, true]);
     expect(log.filter((l) => l.includes('호스트를 띄운다'))).toHaveLength(1);
-    expect(new Set([a!.gate, b!.gate, c!.gate]).size).toBe(1);
     expect(fleet.shards.size).toBe(1);
-  });
-
-  it('입장의 한계는 capacity 뿐 — 찼으면 거절, 이미 붙은 계정의 다시 입장은 받는다, 하나가 떠나면 다시 받는다', async () => {
-    const { fleet } = await up({ capacity: 2 });
-    await fleet.enter('p1', 't');
-    const port = world(fleet).row.port!;
-    const leave1 = await join_(port, 'p1');
-    const leave2 = await join_(port, 'p2');
-    await expect(fleet.enter('p3', 't')).rejects.toThrow(/세계가 가득 찼다 — 사람 2 \/ 2/);
-    await expect(fleet.enter('p1', 't')).resolves.toBeTruthy(); // 붙은 사람의 다시 입장(새로고침)
-    leave2();
-    await until(() => false, 100).catch(() => {});
-    await expect(fleet.enter('p3', 't')).resolves.toBeTruthy();
-    leave1();
   });
 
   it('포트가 다 차면 거절', async () => {
     const p = portRange()[0];
     const { fleet } = await up({ ports: [p, p - 1] }); // 빈 범위
-    await expect(fleet.enter('p1', 't')).rejects.toThrow(/빈 포트/);
+    await expect(fleet.launch('main')).rejects.toThrow(/빈 포트/);
   });
 
   it('데이터셋 거부(exit 2) — failed, 다시 띄우지 않는다. 머리글이 오지 않으면 한계로 failed', async () => {
     const { fleet, log } = await up({ dataset: 'dataset/refuse.json' });
-    await expect(fleet.enter('p1', 't')).rejects.toThrow(/exit 2/);
+    await expect(fleet.launch('main')).rejects.toThrow(/exit 2/);
     expect(world(fleet).state).toBe('failed');
-    await expect(fleet.enter('p2', 't')).rejects.toThrow(/샤드가 멈췄다/);
+    await expect(fleet.launch('main')).rejects.toThrow(/샤드가 멈췄다/);
     expect(log.filter((l) => l.includes('호스트를 띄운다'))).toHaveLength(1);
 
     const silent = await up({ dataset: 'dataset/silent.json', startLimitMs: 300 });
-    await expect(silent.fleet.enter('p1', 't')).rejects.toThrow(/머리글이 300ms/);
+    await expect(silent.fleet.launch('main')).rejects.toThrow(/머리글이 300ms/);
     expect(world(silent.fleet).restarts).toBe(1);
   });
 
   it('NPC 묶음을 grant 하지 못하면 failed — 다시 띄우지 않는다', async () => {
     const { fleet } = await up({ dataset: 'dataset/nogrant.json' });
-    await expect(fleet.enter('p1', 't')).rejects.toThrow(/NPC 묶음을 묶지 못했다 — grant npc b1 → 모르는 명령/);
+    await expect(fleet.launch('main')).rejects.toThrow(/NPC 묶음을 묶지 못했다 — grant npc b1 → 모르는 명령/);
     expect(world(fleet).state).toBe('failed');
     expect(world(fleet).host).toBeNull();
-    await expect(fleet.enter('p1', 't')).rejects.toThrow(/샤드가 멈췄다/);
+    await expect(fleet.launch('main')).rejects.toThrow(/샤드가 멈췄다/);
   });
 });
 
@@ -162,7 +148,7 @@ describe('Fleet.start — 흐름 1 의 6 · 7', () => {
 describe('Shard.stop — 뜨는 가운데', () => {
   it('starting 에 stop 을 받으면 입장은 거절되고 세계는 stopped(셈 없음)', async () => {
     const { fleet } = await up();
-    const entering = fleet.enter('p1', 't');
+    const entering = fleet.launch('main');
     const refused = expect(entering).rejects.toThrow(/뜨는 가운데 내렸다/); // stop 은 Store 를 올린 뒤에 끝난다 — 거절이 먼저 온다
     await until(() => fleet.shardOf('main')?.host != null);
     await fleet.stopAll();
@@ -175,7 +161,7 @@ describe('Shard.stop — 뜨는 가운데', () => {
 describe('Shard.exited — 흐름 4', () => {
   it('에이전트가 끝나면 다시 띄운다. 호스트가 신호로 끝나면 failed 와 셈, 다음 입장이 다시 띄운다', async () => {
     const { fleet } = await up();
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     const shard = world(fleet);
     const first = shard.agent!;
     first.kill('SIGKILL');
@@ -186,7 +172,7 @@ describe('Shard.exited — 흐름 4', () => {
     await until(() => shard.state === 'failed');
     expect(shard.restarts).toBe(1);
     await until(() => shard.agent === null);
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     expect(shard.state).toBe('ready');
   });
 });
@@ -194,7 +180,7 @@ describe('Shard.exited — 흐름 4', () => {
 describe('Fleet.tick — 흐름 5', () => {
   it('사람이 붙어 있으면 쉬지 않는다. 사람 없이 한계를 넘으면 내리고(저장), 다음 박자에 베낀다. 다시 오면 이어간다', async () => {
     const { fleet, storage } = await up({ backupEvery: 1 });
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     const shard = world(fleet);
     const leave = await join_(shard.row.port!, 'p1');
     await fleet.tick();
@@ -216,7 +202,7 @@ describe('Fleet.tick — 흐름 5', () => {
     await fleet.tick();
     expect(await storage.snapshots.list('main')).toHaveLength(1); // 돈 적이 없으면 다시 백업하지 않는다
 
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     expect(shard.resumed).toBe(true);
   });
 });
@@ -226,7 +212,7 @@ describe('Operator.command — 흐름 6', () => {
     const { fleet, storage } = await up({ backupEvery: 0 });
     const op = fleet.operator;
     expect(await op.command('shards')).toBe('샤드 없음');
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     expect(await op.command('shards')).toMatch(/^main · ready · port \d+/);
     expect(await op.command('host main grant npc b3')).toBe('grant — body b3 는 npc 의 것');
     expect(await op.command('host main status')).toMatch(/^beats \d+/);
@@ -246,7 +232,7 @@ describe('Operator.command — 흐름 6', () => {
     const port = world(fleet).row.port;
     expect(await op.command('revoke-port main')).toMatch(/비웠다/);
     expect(world(fleet).row.port).toBeNull();
-    await fleet.enter('p1', 't');
+    await fleet.launch('main');
     expect(world(fleet).row.port).toBe(port); // 비운 포트를 다시 받는다 — 범위의 첫 빈 것
     expect(await op.command('status nowhere')).toBe('세계가 없다 — nowhere');
     expect(await op.command('what')).toMatch(/^모르는 명령 what/);
@@ -255,7 +241,7 @@ describe('Operator.command — 흐름 6', () => {
   it('세계의 자리 표는 함대를 다시 세워도 남는다 — 세계는 stopped 로, 범위 밖 포트는 비운다', async () => {
     const storage = await store();
     const a = await up({}, storage);
-    await a.fleet.enter('p1', 't');
+    await a.fleet.launch('main');
     await a.fleet.stopAll();
     const b = await up({ ports: a.config.ports }, storage);
     expect(world(b.fleet).state).toBe('stopped');
@@ -269,7 +255,7 @@ describe('Operator.command — 흐름 6', () => {
 describe('Fleet.trace — 흐름 5 · 6 의 흔적 (흐름 14)', () => {
   it('박자 하나는 run 하나 — status 마다 5 의 1, 쉬어 내리면 5 의 12 와 같은 run 의 7 의 4. 운영자의 start 는 6 의 1 · 4 · 5 와 같은 run 의 흐름 3 의 B', async () => {
     const { fleet, traces } = await up({ idleLimit: 1, backupEvery: 0 });
-    await fleet.enter('p1', 'tok');
+    await fleet.launch('main');
     traces.length = 0;
     await fleet.tick();
     const tick = traces.filter((t) => t.flow === 5 || t.flow === 7);
@@ -297,39 +283,33 @@ describe('Fleet.trace — 흐름 5 · 6 의 흔적 (흐름 14)', () => {
   });
 });
 
-describe('Fleet.attach · detach — 흐름 9 의 3 · 8 · 9 · 11 의 2 의 대신(세션 모듈 전)', () => {
-  it('입장하지 않은 계정 · 떠 있지 않은 세계는 거절. 입장한 계정은 호스트의 내부 주소와 새 토큰 — 사람은 active, detach 면 grace', async () => {
-    const { fleet, traces, config } = await up();
-    expect(await fleet.attach('p1', 'gate-1', 'r0')).toEqual({ why: '세션이 없다 — 먼저 입장' });
-    await fleet.enter('p1', 'tok', 'enter-run');
-    expect(await fleet.attach('p1', 'gate-1', 'r1')).toEqual({ instance: 'main', address: `ws://localhost:${config.ports[0]}`, token: 'tok-p1' });
-    expect(await fleet.attach('p2', 'gate-1', 'r2')).toMatchObject({ why: expect.stringMatching(/세션이 없다/) });
-    fleet.detach('p1', 'gate-1', 'r1');
-    const people = traces.filter((t) => t.person !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person} ${t.session}`);
-    expect(people).toEqual(['9.8 p1 active enter-run', '11.2 p1 grace enter-run']); // 세션은 입장의 run
-    expect(traces.filter((t) => t.run === 'r1').map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['9.3.ok', '9.8.ok', '9.9.ok', '11.2.wait']);
+describe('Fleet.ready · address — 세션 모듈에 주는 것', () => {
+  it('ready 인 세계만 — 내려가면 비고 주소도 없다', async () => {
+    const { fleet, config } = await up();
+    await fleet.launch('main');
+    expect(fleet.ready('main')).toEqual(['main']);
+    expect(fleet.address('main')).toBe(`ws://localhost:${config.ports[0]}`);
+    expect(fleet.ready('nowhere')).toEqual([]);
     await world(fleet).stop();
-    expect(await fleet.attach('p1', 'gate-1', 'r3')).toEqual({ why: '세계가 떠 있지 않다 — 다시 입장' });
+    expect(fleet.ready('main')).toEqual([]);
+    expect(fleet.address('main')).toBeNull();
   });
 });
 
-describe('Shard.line · exited — 노드가 본 사람 (흐름 4 의 3 · 5)', () => {
-  it('status 에서 접속한 계정이 늘고 줄면 그 사람마다 4 의 3 — 맞춰 보기로만(person 없음). 호스트가 끝나면 거기 있던 사람마다 4 의 5 gone. NPC 계정은 사람이 아니다', async () => {
+describe('Shard.line · exited — 노드가 본 사람 수 (흐름 4 의 3 · 5)', () => {
+  it('status 에서 사람 수가 바뀌면 4 의 3 에 그 수. 노드는 캐릭터만 안다 — 흔적에 사람을 싣지 않는다. NPC 계정은 사람이 아니다', async () => {
     const { fleet, traces, config } = await up();
-    await fleet.enter('p1', 'tok');
+    await fleet.launch('main');
     const leave = await join_(config.ports[0], 'p1');
     await join_(config.ports[0], 'p2');
-    const seen = () => traces.filter((t) => t.flow === 4 && t.account !== undefined).map((t) => `${t.flow}.${t.step} ${t.account} ${t.person ?? '-'}`);
     await world(fleet).command('status');
-    await until(() => seen().length >= 2);
-    expect(seen()).toEqual(['4.3 p1 -', '4.3 p2 -']);
+    await until(() => traces.some((t) => t.flow === 4 && t.step === 3 && t.counts?.['players'] === 2));
     leave();
     await new Promise((r) => setTimeout(r, 50));
     await world(fleet).command('status');
-    await until(() => seen().length >= 3);
-    expect(seen()[2]).toBe('4.3 p1 -');
+    await until(() => traces.some((t) => t.flow === 4 && t.step === 3 && t.counts?.['players'] === 1));
     await world(fleet).stop();
-    expect(seen().slice(3)).toEqual(['4.5 p2 gone']);
-    expect(traces.some((t) => t.account === NPC.account)).toBe(false);
+    expect(traces.find((t) => t.flow === 4 && t.step === 5)).toMatchObject({ state: 'stopped', counts: { players: 0 } });
+    expect(traces.some((t) => t.account !== undefined || t.person !== undefined)).toBe(false);
   });
 });

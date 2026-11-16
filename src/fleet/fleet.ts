@@ -1,10 +1,10 @@
-// Fleet — 세계 하나와 그 프로세스 (design/02-roles/fleet.md 의 Fleet). enter 는 흐름 3, tick 은 흐름 5, stopAll 은 흐름 7 의 2.
-// 사람은 모두 같은 세계에 붙는다 — 계정마다 사람의 묶음 하나는 엔진이 세운다(--party). 입장의 한계는 성능(capacity)뿐이다.
+// Fleet — 세계 하나와 그 프로세스 (design/02-roles/fleet.md 의 Fleet). launch 는 흐름 3 의 B, tick 은 흐름 5, stopAll 은 흐름 7 의 2.
+// 사람은 모두 같은 세계에 붙는다 — 캐릭터마다 사람의 묶음 하나는 엔진이 세운다(--party). 누구를 어디에 배정하는가는 세션 모듈이 정한다 —
+// 플릿은 ready(그 존의 ready 인 인스턴스) · launch(띄운다) · address(호스트의 내부 주소)를 앱을 거쳐 세션 모듈에 준다.
+// 지금은 존 하나 = 세계 하나 = 인스턴스 하나(이름이 config.world). 한 존에 인스턴스 여럿은 plan 07.
 // 스토리지에는 Storage 소켓(Database · SnapshotStore)으로만, 토큰은 앱이 준 issue 로만 닿는다. 게임 명사를 모른다 — 데이터셋 · 틀 · NPC 묶음은 설정 값.
 
-import type { Address } from '../protocol/api';
 import type { TraceFn } from '../protocol/observe';
-import type { Attached, Unattached } from '../protocol/session';
 import type { StorageSocket } from '../protocol/storage';
 import { Assignment } from './assignment';
 import { Clock } from './clock';
@@ -21,18 +21,12 @@ export interface FleetConfig {
   readonly dataset: string;
   /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). */
   readonly party: string;
-  /** 동시에 세계에 붙는 사람의 상한 — 성능으로 잰 값(엔진의 bench). 그 밖의 입장 제한은 없다. */
-  readonly capacity: number;
   /** 뷰어의 묶음이 놓일 자리(viewer.js) — Fleet.start 가 한 번 묶는다. Static 이 준다. */
   readonly viewerOut: string;
-  /** 뷰어 페이지의 주소(`…/play`) — 입장의 답이 든다. */
-  readonly pageUrl: string;
   readonly beat: number;
   readonly sparse: number;
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
   readonly ports: readonly [number, number];
-  /** 게이트웨이의 밖의 주소 — 입장의 답이 든다(Gates.pick 의 대신 — 게이트웨이는 지금 하나) */
-  readonly gateUrl: string;
   /** 게이트웨이에서 호스트가 보이는 이름 — 내부망(Node.host) */
   readonly hostName: string;
   readonly clockMs: number;
@@ -59,8 +53,8 @@ export class Fleet {
   readonly storage: FleetStorage;
   readonly config: FleetConfig;
   ticks = 0;
-  /** 입장한 계정 → 그 입장의 run(세션의 대신 — 세션 모듈은 plan 05). attach 는 여기 있는 계정만 잇는다 */
-  readonly entered = new Map<string, string>();
+  /** 뜨는 가운데의 launch — 한꺼번에 온 것은 이것을 기다린다 */
+  private launching: Promise<boolean> | null = null;
   private readonly ctx: ShardContext;
   private readonly log: (line: string) => void;
   /** 흔적을 남긴다 — 앱이 준 Monitor.trace(흐름 14). Shard · Operator 도 이것으로. */
@@ -119,8 +113,6 @@ export class Fleet {
       sparse: config.sparse,
       npc: config.npc,
       party: config.party,
-      gateUrl: config.gateUrl,
-      pageUrl: config.pageUrl,
       startLimitMs: config.startLimitMs,
       stopLimitMs: config.stopLimitMs,
       commandLimitMs: config.commandLimitMs,
@@ -173,18 +165,37 @@ export class Fleet {
     this.clock.run(() => this.tick());
   }
 
+  /** ready — 그 존의 ready 인 인스턴스들(세션 모듈의 Placer 가 고른다). 지금은 존 하나 = 세계 하나. */
+  ready(zone: string): string[] {
+    const shard = this.shards.get(zone);
+    return zone === this.config.world && shard !== undefined && shard.state === 'ready' && shard.row.port !== null ? [zone] : [];
+  }
+
+  /** address — 그 인스턴스의 호스트 주소(내부망, 게이트웨이가 잇는다 — 흐름 9 의 10). ready 가 아니면 null. 클라이언트에게는 가지 않는다. */
+  address(instance: string): string | null {
+    return this.ready(instance).length === 0 ? null : `ws://${this.config.hostName}:${this.shards.get(instance)!.row.port}`;
+  }
+
   /**
-   * enter — 흐름 3 의 2 ~ 9. 세계의 줄을 찾거나 내고 Shard 를 띄워 주소를 답한다. 사람이 상한(capacity)에 찼으면 거절 — 그 밖의 거절은 없다.
-   * account 는 기록의 이름 — 어느 묶음을 맡는가는 엔진의 Roster 가 토큰의 Account.id 로 정한다. token 은 주소의 ?token= 이 든다. run 은 Api 의 흐름 3 의 것.
+   * launch — 흐름 3 의 B(11 ~ 19). 그 존의 세계가 내려가 있으면 줄을 찾거나 내고 띄운다 — 섰으면 true. 이미 ready 면 false(띄울 곳이 없다 — 한 존에 인스턴스 여럿은 plan 07).
+   * 뜨는 가운데면 그것을 기다린다. 띄우다 실패하면 던진다. run 은 세션 모듈이 넘긴 흐름 3 의 것.
    */
-  async enter(account: string, token: string, run: string = freshRun()): Promise<Address> {
-    const name = this.config.world;
+  launch(zone: string, run: string = freshRun()): Promise<boolean> {
+    if (zone !== this.config.world) return Promise.resolve(false);
+    if (this.launching !== null) return this.launching; // 한꺼번에 온 것은 하나를 기다린다 — 포트 · 줄을 한 번만
+    this.launching = this.boot(zone, run).finally(() => (this.launching = null));
+    return this.launching;
+  }
+
+  private async boot(name: string, run: string): Promise<boolean> {
     const take = async (): Promise<number> => {
       const port = await this.ports.take();
-      this.trace({ flow: 3, step: 14, run, unit: name, end: port === null ? 'failed' : 'ok', account }); // Ports.take
+      this.trace({ flow: 3, step: 14, run, unit: name, end: port === null ? 'failed' : 'ok' }); // Ports.take
       if (port === null) throw new Error('빈 포트가 없다');
       return port;
     };
+    let shard = this.shards.get(name);
+    if (shard?.state === 'ready') return false;
     let row = this.assignment.get(name);
     if (row === null) {
       const port = await take();
@@ -194,45 +205,13 @@ export class Fleet {
       row.port = await take();
       await this.assignment.put(name, row);
     }
-    let shard = this.shards.get(name);
     if (shard === undefined) {
       shard = new Shard(name, row, this.ctx);
       this.shards.set(name, shard);
     }
-    if (shard.state === 'ready') {
-      await shard.command('status'); // 사람 수를 지금 것으로
-      const full = shard.players >= this.config.capacity && !shard.linked.includes(account);
-      this.trace({ flow: 3, step: 6, run, unit: name, end: full ? 'refused' : 'ok', counts: { players: shard.players, capacity: this.config.capacity }, account }); // Placer.pick 의 일 — 슬롯이 비었는가
-      if (full) throw new Error(`세계가 가득 찼다 — 사람 ${shard.players} / ${this.config.capacity}`);
-    }
     await shard.start(run);
     shard.idle = 0;
-    this.entered.set(account, run); // 세션의 대신 — 입장의 run 이 그 사람의 세션이다
-    this.trace({ flow: 3, step: 8, run, unit: name, end: 'ok', account, session: run }); // Gates.pick 의 일 — 게이트웨이는 지금 하나(gateUrl)
-    return shard.address(token);
-  }
-
-  /**
-   * attach — 흐름 9 의 3 · 8 · 9 의 대신(SessionRpc attach — 받는 쪽은 세션 모듈, plan 05). 입장한 계정이고 세계가 ready 면
-   * 호스트의 내부 주소와 호스트에 줄 새 토큰을 준다. 아니면 까닭 — 게이트웨이가 4002 로 닫는다.
-   */
-  async attach(account: string, _gate: string, run: string): Promise<Attached | Unattached> {
-    const name = this.config.world;
-    const shard = this.shards.get(name);
-    const session = this.entered.get(account);
-    const ready = session !== undefined && shard !== undefined && shard.state === 'ready' && shard.row.port !== null;
-    this.trace({ flow: 9, step: 3, run, unit: name, end: ready ? 'ok' : 'refused', account, ...(session === undefined ? {} : { session }) }); // Sessions.get 의 일
-    if (!ready) return { why: session === undefined ? '세션이 없다 — 먼저 입장' : '세계가 떠 있지 않다 — 다시 입장' };
-    this.trace({ flow: 9, step: 8, run, unit: name, end: 'ok', account, session, person: 'active' }); // Sessions.activate 의 일
-    const token = this.ctx.issue(account);
-    this.trace({ flow: 9, step: 9, run, unit: name, end: 'ok', account, session }); // Signer.issue — 호스트에 줄 토큰
-    return { instance: name, address: `ws://${this.config.hostName}:${shard!.row.port}`, token };
-  }
-
-  /** detach — 흐름 11 의 2 의 대신(Sessions.suspend — plan 05). 유예는 아직 없다 — 세계가 떠 있는 동안 다시 붙을 수 있다. */
-  detach(account: string, _gate: string, run: string): void {
-    const session = this.entered.get(account);
-    this.trace({ flow: 11, step: 2, run, unit: this.config.world, end: 'wait', account, ...(session === undefined ? {} : { session }), person: 'grace' });
+    return true;
   }
 
   shardOf(name: string): Shard | null {

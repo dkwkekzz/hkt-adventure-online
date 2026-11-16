@@ -5,6 +5,9 @@
 - 프로세스를 띄우는 법도 캐릭터의 값도 모른다.
 - 인스턴스 하나에 배정하는 수는 그 존의 상한(`capacity`)을 넘지 않는다. 세는 것은 세션이다.
 - 세션은 스토리지에 두지 않는다. 컨트롤 플레인이 바뀌면 노드와 게이트웨이의 보고로 다시 선다(Reconciler).
+- 밖에 내보내는 것은 openSession 하나다. 그것이 내는 소켓 하나가 SessionRpc 의 받는 쪽이다(enter · forget · attach · detach · report) — 흐름의 단계를 차례로 부른다. 한 캐릭터의 enter · forget 은 한 번에 하나다.
+- 다른 모듈의 기능은 앱이 준 함수로만 닿는다 — 계정의 Characters.owner · remove · Banlist.banned, 플릿의 ready · launch(흐름 3 의 B) · address, Signer.issue, 게이트웨이의 kick(SessionRpc). 스토리지는 Storage 소켓(Database · CharacterStore).
+- 값은 설정의 `session` — `capacity` · `pendingMs` · `graceMs` · `gateLimitMs` · `queueForgetMs`. 간격(흐름 5 의 C 가운데 세션의 단계 — Gates.dead · Sessions.expired · Queue.next)은 `clockMs` — 게이트웨이와 같이, 모듈 경계 때문에 openSession 이 제 간격을 든다.
 
 | 개념 | 책임 하나 |
 |---|---|
@@ -21,13 +24,13 @@
 ## 개념
 
 ### Admission
-- 데이터: owner(캐릭터 → 계정) · banned(계정 → bool) — 계정의 기능 둘, 앱이 준다. sessions(참조).
-- 기능: check(character) 는 캐릭터의 줄이 없거나 그 계정이 차단됐으면 거절한다. 그 계정의 다른 캐릭터가 세션을 들고 있으면 그것을 내보내게 한다(한 계정은 한때에 캐릭터 하나 — 나중 입장이 이긴다).
+- 데이터: owner(캐릭터 → 그 캐릭터의 줄 — 계정 · 이름) · banned(계정 → bool) — 계정의 기능 둘, 앱이 준다. sessions(참조) · router(참조).
+- 기능: check(character) 는 캐릭터의 줄이 없거나 그 계정이 차단됐으면 거절한다. 그 계정의 다른 캐릭터가 세션을 들고 있으면 그것을 내보낸다 — 세션을 지우고 Router.kick(4000)(한 계정은 한때에 캐릭터 하나 — 나중 입장이 이긴다). 줄에 서 있던 다른 캐릭터는 줄에서 뺀다.
 - 생애: Service.start 가 만든다.
 
 ### ZoneMap
 - 데이터: zones:map<이름, Zone> · db(참조 — 표 `lastZone`: Character.id → 존 이름, 표 `zones`: 존 이름 → closed) · entry(불변, 처음 서는 존).
-- 기능: zoneOf(character) 는 마지막에 있던 존(없으면 entry). 닫혀 있으면 거절. remember(character, zone) 은 마지막 존을 적는다. forget(character) 는 그 줄을 지운다. close(zone) · open(zone) 은 그 존의 입장을 막고 푼다.
+- 기능: zoneOf(character) 는 마지막에 있던 존(없으면 entry). 닫혀 있으면 거절. zoneOfInstance(instance) 는 그 인스턴스의 존 — 이름 `<존>-<번호>` 가 말한다. remember(character, zone) 은 마지막 존을 적는다. forget(character) 는 그 줄을 지운다. close(zone) · open(zone) 은 그 존의 입장을 막고 푼다.
 - 생애: Service.start 가 만든다.
 
 ### Zone
@@ -41,21 +44,21 @@
 
 ### Sessions
 - 데이터: rows:map<Character.id, Session>.
-- 기능: get(character). hold(character, instance, build) 는 세션을 `pending` 으로 잡는다(만료 `pendingMs`). activate(character, gate) 는 `active` 로. suspend(character) 는 `grace` 로(만료 `graceMs`). reserve(character, to) 는 옮겨 갈 인스턴스에 슬롯을 잡아 둔다. move(character) 는 세션의 인스턴스를 잡아 둔 곳으로 바꾼다. drop(character) 는 지운다. of(instance) 는 그 인스턴스의 세션들. count(instance) 는 그 인스턴스에 잡힌 슬롯의 수(잡아 둔 것 포함). expired() 는 만료된 세션들.
+- 기능: get(character). held(account) 는 그 계정의 세션들. hold(character, account, name, instance, build) 는 세션을 `pending` 으로 잡는다(만료 `pendingMs`). activate(character, gate) 는 `active` 로. suspend(character) 는 `grace` 로(만료 `graceMs`). reserve(character, to) 는 옮겨 갈 인스턴스에 슬롯을 잡아 둔다. move(character) 는 세션의 인스턴스를 잡아 둔 곳으로 바꾼다. drop(character) 는 지운다. of(instance) 는 그 인스턴스의 세션들. count(instance) 는 그 인스턴스에 잡힌 슬롯의 수(잡아 둔 것 포함). expired() 는 만료된 세션들.
 - 생애: Service.start 가 만든다. 스토리지에 두지 않는다.
 
 ### Session
-- 데이터: id(불변, 잡을 때 짓는 이름 — 흔적의 session) · character · account · build · instance · to:인스턴스|null · gate · state:`pending`(값이 아직 로드되지 않았다)|`active`|`grace`(끊겼다 — 값은 인스턴스에 있다) · until.
+- 데이터: id(불변, 잡을 때 짓는 이름 — 흔적의 session) · character · account · name(캐릭터 이름 — 흔적의 name) · build · instance · to:인스턴스|null · gate · state:`pending`(값이 아직 로드되지 않았다)|`active`|`grace`(끊겼다 — 값은 인스턴스에 있다) · until.
 - 기능: 없음.
 
 ### Queue
-- 데이터: zone(불변) · waiting:list<{Character.id, build, 마지막으로 물은 때}>.
-- 기능: push(character, build) → 순번. position(character) 는 순번 — 물은 때를 고친다. next(build) 는 그 빌드의 사람을 앞에서부터 하나 꺼낸다. drop(character) 는 줄에서 뺀다(오래 묻지 않은 사람도).
+- 데이터: zone(불변) · waiting:list<{Character.id, account, name, build, 마지막으로 물은 때}>.
+- 기능: push(character, account, name, build) → 순번(이미 서 있으면 그 순번). position(character) 는 순번(없으면 null) — 물은 때를 고친다. next(build) 는 그 빌드의 사람을 앞에서부터 하나 꺼낸다. drop(character) 는 줄에서 뺀다. stale(before) 는 before 뒤로 묻지 않은 사람들을 줄에서 빼고 준다(`queueForgetMs`). builds() 는 줄에 선 빌드들. 꺼낸 사람의 계정이 이미 세션을 들고 있으면 세션을 잡지 않는다(한 계정에 세션 하나).
 - 생애: 존마다 Service.start 가 만든다.
 
 ### Gates
 - 데이터: rows:map<이름, {address, seen, closing}>.
-- 기능: seen(gate, address, closing) 은 보고가 온 때를 적는다. pick() 은 살아 있고 closing 이 아닌 게이트웨이 하나. dead() 는 보고가 한계(`gateLimitMs`)를 넘겨 끊긴 것들.
+- 기능: seen(gate, address, closing) 은 보고가 온 때를 적는다. pick() 은 살아 있고 closing 이 아닌 게이트웨이 하나 — 여럿이면 차례로 돌린다. dead() 는 보고가 한계(`gateLimitMs`)를 넘겨 끊긴 것들 — 표에서 뺀다.
 - 생애: Service.start 가 만든다.
 
 ### Mover
@@ -64,8 +67,8 @@
 - 생애: Service.start 가 만든다.
 
 ### Router
-- 데이터: gates(참조) · rpc(참조, SessionRpc) · issue(Character.id → Token, 앱이 준다).
-- 기능: reroute(character, instance) 는 그 캐릭터의 게이트웨이에 새 호스트의 주소와 새 토큰을 보낸다. kick(character, code) 는 그 접속을 그 코드로 닫게 한다(4000 · 4002 면 뷰어가 스스로 다시 들어오지 않는다).
+- 데이터: gates(참조) · rpc(참조, SessionRpc 의 reroute · kick — 앱이 준다) · issue(Character.id → Token, 앱이 준다).
+- 기능: reroute(character, instance) 는 그 캐릭터의 게이트웨이에 새 호스트의 주소와 새 토큰을 보낸다. kick(character, gate, code) 는 그 게이트웨이에 그 접속을 그 코드로 닫게 한다(4000 · 4002 면 뷰어가 스스로 다시 들어오지 않는다). 세션이 그 게이트웨이를 아직 모르면(`pending`) 보내지 않는다.
 - 생애: Service.start 가 만든다.
 
 ### Reconciler
@@ -77,7 +80,7 @@
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
-| SessionRpc enter | API 서버 → 컨트롤 플레인 | Character.id · 빌드 | `{page, gate}` · 순번 또는 까닭 |
+| SessionRpc enter | API 서버 → 컨트롤 플레인 | Character.id · 빌드 | `{gate}` · `{wait: 순번}` 또는 까닭(잠시 뒤 다시면 busy). page 는 Api 가 제 빌드의 것으로 짓는다 |
 | SessionRpc forget | API 서버 → 컨트롤 플레인 | Account.id · Character.id | 됨 또는 까닭 |
 | SessionRpc attach · detach · report · reroute · kick | 게이트웨이 ↔ 컨트롤 플레인 | [gateway.md](gateway.md) 의 소켓 표 | |
 | Database get · put · remove | 세션 모듈 → 스토리지 | 표 `lastZone` · `zones` 의 줄 하나 | 값 또는 null |

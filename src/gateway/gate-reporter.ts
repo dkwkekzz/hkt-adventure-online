@@ -16,15 +16,15 @@ export class GateReporter {
     this.send = send;
   }
 
-  /** report — 이름 · 주소 · closing 과 접속마다 {캐릭터, 이어진 인스턴스}. 보낸 글을 준다. */
-  report(connections: Iterable<Connection>): GateReport {
+  /** report — 이름 · 주소 · closing 과 접속마다 {캐릭터, 이어진 인스턴스}. 보낸 글을 준다. run 은 그 간격의 것 — 받는 쪽(Gates.seen)이 같은 run 으로 남긴다. */
+  report(connections: Iterable<Connection>, run: string): GateReport {
     const r: GateReport = {
       name: this.name,
       address: this.address,
       closing: this.closing,
       connections: [...connections].map((c) => ({ character: c.character, instance: c.instance })),
     };
-    this.send(r);
+    this.send(r, run);
     return r;
   }
 }

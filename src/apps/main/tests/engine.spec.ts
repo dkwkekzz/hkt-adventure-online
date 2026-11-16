@@ -1,6 +1,7 @@
 // 진짜 엔진 위의 조립 — engine/(npm run engine) 또는 ENGINE_DIR 이 있을 때만 돈다. 없으면 건너뛴다.
-// plan 01 의 직관 확인: 서비스가 낸 토큰으로 Host 2 를 보내면 open(그 계정의 사람의 묶음), 이름 글은 4002.
-// 세 계정이 같은 세계에 붙어 각자의 묶음을 받는다(엔진의 --party). 내렸다 다시 띄우면 저장된 세계에서 이어가고 낳은 묶음도 그대로다.
+// plan 01 의 직관 확인: 서비스가 낸 토큰으로 Host 2 를 보내면 open(그 캐릭터의 사람의 묶음), 이름 글은 4002.
+// 세 계정이 캐릭터를 만들어 고르고 같은 세계에 붙어 각자의 묶음을 받는다(엔진의 --party — 엔진에게는 캐릭터가 계정이다).
+// 한 계정의 캐릭터 둘은 엔진에게 다른 계정 — 다른 묶음이다(plan 05). 내렸다 다시 띄우면 저장된 세계에서 이어가고 낳은 묶음도 그대로다.
 
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -56,25 +57,37 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     const config: ServiceConfig = {
       ...base,
       apiPort: 0,
+      monitorPort: 0, // 떠 있는 서비스(8001)와 다투지 않게
       storage: { ...base.storage, root: mkdtempSync(join(tmpdir(), 'svc-engine-')) }, // MONGODB_URI · SNAPSHOT_URI 가 있으면 그 뒤 위에서
       gateway: { ...base.gateway, port: 3289 },
-      fleet: { ...base.fleet, engineDir: ENGINE, viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'), ports: [3290, 3299], clockMs: 60_000, gateUrl: 'ws://localhost:3289' },
+      gateUrl: 'ws://localhost:3289',
+      fleet: { ...base.fleet, engineDir: ENGINE, viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'), ports: [3290, 3299], clockMs: 60_000 },
     };
     const logs: string[] = [];
     const s = await Service.start(config, 'engine-test-key', (l) => logs.push(l));
     services.push(s);
-    const post = async (path: string, body: unknown) => (await (await fetch(`http://localhost:${s.port}${path}`, { method: 'POST', body: JSON.stringify(body) })).json()) as Record<string, string>;
+    const api = (port: number) => async (path: string, body: unknown) => (await (await fetch(`http://localhost:${port}${path}`, { method: 'POST', body: JSON.stringify(body) })).json()) as Record<string, string>;
+    const post = api(s.port);
+    /** 로그인(흐름 2) → 첫 캐릭터를 고르거나 만들어 고른다(흐름 8) → 캐릭터의 토큰 */
+    const player = async (p: typeof post, name: string, subject?: string) => {
+      const login = await p('/login', { provider: 'guest', ...(subject === undefined ? {} : { subject }) });
+      const list = (await p('/characters', { token: login['token'] })) as unknown as { characters: { id: string }[] };
+      const id = list.characters[0]?.id ?? ((await p('/create', { token: login['token'], name })) as unknown as { character: { id: string } }).character.id;
+      const chosen = await p('/choose', { token: login['token'], character: id });
+      return { subject: login['subject']!, account: login['token']!, character: id, token: chosen['token']! };
+    };
 
-    const [a, b, c] = [await post('/login', { provider: 'guest' }), await post('/login', { provider: 'guest' }), await post('/login', { provider: 'guest' })];
-    const at = await post('/enter', { token: a['token'] });
-    const bt = await post('/enter', { token: b['token'] });
+    const [a, b, c] = [await player(post, '하나'), await player(post, '둘'), await player(post, '셋')];
+    const at = await post('/enter', { token: a.token });
+    const bt = await post('/enter', { token: b.token });
     expect(at['gate']).toBe('ws://localhost:3289'); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
     expect(bt['gate']).toBe(at['gate']);
-    expect(await connect(at['gate']!, c['token']!)).toMatchObject({ bodies: null, code: 4002 }); // 입장하지 않았다 — 세션이 없다
-    await post('/enter', { token: c['token'] });
+    expect(await connect(at['gate']!, c.token)).toMatchObject({ bodies: null, code: 4002 }); // 입장하지 않았다 — 세션이 없다
+    expect(await connect(at['gate']!, c.account)).toMatchObject({ bodies: null, code: 4002 }); // 계정의 토큰은 게이트웨이를 지나지 못한다
+    await post('/enter', { token: c.token });
 
     // 셋이 게이트웨이를 지나 같은 세계에 붙고 각자의 묶음(요정 넷)을 받는다 — 붙어 있는 동안
-    const opened = await Promise.all([a, b, c].map((x) => hold(at['gate']!, x['token']!)));
+    const opened = await Promise.all([a, b, c].map((x) => hold(at['gate']!, x.token)));
     for (const o of opened) {
       expect(o.bodies).toHaveLength(4);
       expect(o.frames).toBeGreaterThan(0);
@@ -82,23 +95,34 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     expect(new Set(opened.flatMap((o) => o.bodies)).size).toBe(12); // 겹치지 않는다
     const world = s.fleet.shardOf('main')!;
     const status = (await world.command('status'))!;
-    for (const x of [a, b, c]) expect(status).toContain(`${x['token']!.split('.')[1]}(`);
+    for (const x of [a, b, c]) expect(status).toContain(`${x.character}(`); // 엔진의 계정은 캐릭터
     expect(world.players).toBe(3);
     for (const o of opened) o.close();
 
     expect(await connect(at['gate']!, 'someone')).toMatchObject({ bodies: null, code: 4002 }); // 이름 글은 거절
-    const again = await connect(at['gate']!, a['token']!);
-    expect(again.bodies).toEqual(opened[0]!.bodies); // 다시 와도 같은 묶음
+    const again = await connect(at['gate']!, a.token);
+    expect(again.bodies).toEqual(opened[0]!.bodies); // 다시 와도 같은 묶음(유예 안 — 세션이 그대로)
+
+    // 한 계정의 다른 캐릭터 — 엔진에게는 다른 계정, 다른 묶음. 들어가면 앞 캐릭터의 세션은 없다
+    const second = ((await post('/create', { token: a.account, name: '하나의 둘' })) as unknown as { character: { id: string } }).character.id;
+    const t2 = (await post('/choose', { token: a.account, character: second }))['token']!;
+    expect((await post('/enter', { token: t2 }))['gate']).toBe(at['gate']);
+    const other = await connect(at['gate']!, t2);
+    expect(other.bodies).toHaveLength(4);
+    expect(new Set([...other.bodies!, ...opened.flatMap((o) => o.bodies)]).size).toBe(16);
+    expect(await connect(at['gate']!, a.token)).toMatchObject({ bodies: null, code: 4002, why: '세션이 없다 — 먼저 입장' });
 
     await new Promise((r) => setTimeout(r, 1000)); // 몇 박자
     await s.stop();
     const s2 = await Service.start(config, 'engine-test-key', (l) => logs.push(l));
     services.push(s2);
-    const a2 = (await (await fetch(`http://localhost:${s2.port}/login`, { method: 'POST', body: JSON.stringify({ provider: 'guest', subject: b['subject'] }) })).json()) as Record<string, string>;
-    const at2 = (await (await fetch(`http://localhost:${s2.port}/enter`, { method: 'POST', body: JSON.stringify({ token: a2['token'] }) })).json()) as Record<string, string>;
+    const post2 = api(s2.port);
+    const b2 = await player(post2, '-', b.subject);
+    expect(b2.character).toBe(b.character); // 같은 계정의 같은 캐릭터 — 표에서
+    const at2 = await post2('/enter', { token: b2.token });
     expect(at2['gate']).toBe(at['gate']);
     expect(s2.fleet.shardOf('main')!.resumed).toBe(true);
-    expect((await connect(at2['gate']!, a2['token']!)).bodies).toEqual(opened[1]!.bodies); // 낳은 묶음도 이어진다
+    expect((await connect(at2['gate']!, b2.token)).bodies).toEqual(opened[1]!.bodies); // 낳은 묶음도 이어진다
   }, 180000);
 });
 

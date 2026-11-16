@@ -8,25 +8,26 @@
 ```text
 A  Api.enter → Signer.verify → Admission.check → Sessions.get → ZoneMap.zoneOf → Placer.pick
      → Sessions.hold → Gates.pick → 답
-     Placer.pick 이 없다고 하면 B, B 도 안 되면 Queue.push → 순번
+     Placer.pick 이 없다고 하면 B, B 도 안 되면 C
 B  Scheduler.place → Registry.put → Runner.start
      → SnapshotStore.pull → Ports.take → Spawner.host → Probe.read → Console.command → Spawner.agent
      → Registry.put
+C  Queue.push → 순번
 ```
 
 ### A 세션을 잡는다
 
 | # | 누가 | 무엇을 | 결과 |
 |---|---|---|---|
-| 1 | Api.enter | 요청을 받는다. 이 API 서버의 빌드를 함께 넘긴다 | |
-| 2 | Signer.verify | 캐릭터의 토큰을 푼다. 틀리면 거절 | Character.id |
-| 3 | Admission.check | 그 캐릭터가 지금 들어와도 되는가(줄이 있는가 · 차단 · 한 계정에 세션 하나). 안 되면 거절 | |
-| 4 | Sessions.get | 이미 세션이 있으면 그대로 8 로. 대기열에 있으면 Queue.position 의 순번을 답한다 | |
+| 1 | Api.enter | 요청을 받는다. 이 API 서버의 빌드를 함께 넘긴다(SessionRpc enter) | |
+| 2 | Signer.verify | 캐릭터의 토큰을 푼다. 틀리거나 캐릭터의 토큰이 아니면 거절 | Character.id |
+| 3 | Admission.check | 그 캐릭터가 지금 들어와도 되는가(줄이 있는가 · 차단 · 한 계정에 세션 하나). 안 되면 거절 | Character |
+| 4 | Sessions.get | 이미 세션이 있으면 그대로 8 로. 대기열에 있으면 Queue.position 의 순번으로 21 로 | |
 | 5 | ZoneMap.zoneOf | 설 존을 정한다 — 마지막에 있던 존, 없으면 처음 서는 존. 닫혀 있으면 거절 | Zone |
 | 6 | Placer.pick | 그 존에서 같은 빌드이고 슬롯이 빈 인스턴스를 고른다. 없으면 B 로 | Instance |
 | 7 | Sessions.hold | 세션을 `pending` 으로 잡는다 | Session |
 | 8 | Gates.pick | 살아 있는 게이트웨이 하나를 고른다 | |
-| 9 | Api.enter | `{page, gate}` 를 답한다. page 는 이 빌드의 뷰어 페이지, gate 는 게이트웨이의 주소 | 클라이언트 ◇ |
+| 9 | Api.enter | `{page, gate}` 를 답한다. page 는 이 빌드의 뷰어 페이지(자격은 그 캐릭터의 토큰), gate 는 게이트웨이의 주소 | 클라이언트 ◇ |
 
 ### B 인스턴스를 띄운다
 
@@ -45,16 +46,23 @@ B  Scheduler.place → Registry.put → Runner.start
 | 18 | Spawner.agent | NPC 에이전트를 띄운다 | Process |
 | 19 | Registry.put | 줄을 `ready` 로, 포트를 적는다 | A 의 6 으로 |
 
+### C 줄에 세운다
+
+| # | 누가 | 무엇을 | 결과 |
+|---|---|---|---|
+| 20 | Queue.push | 띄울 곳도 없으면 그 존의 줄 끝에 세운다. 이미 서 있으면 그 순번 | 순번 |
+| 21 | Api.enter | `{wait: 순번}` 을 답한다. 클라이언트는 잠시 뒤 다시 묻는다 — 슬롯이 나면 Queue.next(흐름 5 · 11)가 세션을 잡아 두고, 다음 물음의 4 가 그것을 찾는다 | 클라이언트 ◇ |
+
 ## 실패하면
 
-- 띄울 노드가 없으면 Queue.push 로 대기열에 세우고 순번을 답한다. 클라이언트는 다시 묻는다.
+- 띄울 노드가 없으면 C 로 대기열에 세우고 순번을 답한다. 클라이언트는 다시 묻는다. 오래(`queueForgetMs`) 묻지 않으면 줄에서 빠진다.
 - 그 빌드를 띄울 노드가 아예 없으면(물러나는 빌드) 「페이지를 다시 받아라」로 거절한다.
 - 호스트가 한계 안에 서지 않으면 줄을 `failed` 로 하고 다른 노드에 한 번 더 띄운다.
 - 컨트롤 플레인에 닿지 않으면 503 — 클라이언트가 잠시 뒤 다시 묻는다.
 
 ## 멈추는 자리
 
-- 세션이 `pending` 으로 잡혔다. 클라이언트가 게이트웨이의 주소를 든다. 또는 대기열의 순번.
+- 세션이 `pending` 으로 잡혔다(`pendingMs` 안에 접속하지 않으면 흐름 5 의 13 이 지운다). 클라이언트가 게이트웨이의 주소를 든다. 또는 대기열의 순번.
 
 ## 이어지는 흐름
 

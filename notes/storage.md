@@ -26,8 +26,13 @@ HOST_AUTH_KEY=… MONGODB_URI=mongodb://localhost:27017/hkt \
 
 ```text
 문서(MongoDB 의 collection = 디렉터리의 <root>/db/<이름>/)
-  accounts        Identity.key → Account.id
+  accounts        Identity.key → Account.id(a…)
   accountInfo     Account.id → {seen}
+  characters      Account.id → [{id(p…), name}]                 만든 차례
+  owners          Character.id → Account.id
+  bans            Account.id → until(ms)
+  lastZone        Character.id → 존 이름                         유예가 지나 세션을 지울 때 적는다
+  zones           존 이름 → {closed}
   instances       세계의 이름 → {dataset, port, epoch}      epoch 는 띄울 때마다 하나 오른다
   audit           `<ISO 시각> <run>` → {at, operator, line}  운영자의 명령마다
   leases · characterValues · leader                         plan 07 · 08 이 쓴다
