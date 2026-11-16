@@ -57,7 +57,7 @@ export class Connection {
   }
 
   private mark(flow: number, step: number, end: 'ok' | 'wait' | 'refused' | 'failed', extra: { counts?: Record<string, number> } = {}): void {
-    this.ctx.trace({ flow, step, run: this.run, unit: this.instance ?? '-', end, account: this.character, ...extra });
+    this.ctx.trace({ flow, step, run: this.run, unit: this.instance ?? '-', end, ...extra }); // 사람은 같은 run 의 세션 단계가 잇는다
   }
 
   /** open — 흐름 9 의 10. 호스트에 소켓을 열고 첫 글을 그 토큰으로 보낸다. hello 는 클라이언트의 첫 글(자격만 바뀐다). */

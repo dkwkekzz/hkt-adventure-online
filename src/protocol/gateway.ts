@@ -1,7 +1,7 @@
 // 게이트웨이 소켓 — 앱 → 게이트웨이 모듈 (design/02-roles/gateway.md). 밖에 내보내는 것은 openGateway 하나 — 객체는 이 모양 너머다.
 
 import type { TraceFn } from './observe';
-import type { Attach, Detach, Report } from './session';
+import type { Attach, Detach, Kick, Report } from './session';
 
 /** 설정의 `gateway` — 포트와 한계 · 주기. */
 export interface GatewayConfig {
@@ -43,6 +43,8 @@ export interface GatewaySocket {
   listen(run: string): Promise<void>;
   /** 흐름 7 의 7 · 8 — 내려간다고 알리고 접속을 전부 닫는다(1001). */
   close(run: string): Promise<void>;
+  /** SessionRpc kick 의 받는 쪽 — 그 캐릭터의 접속을 그 코드로 닫는다(Connection.close). 없으면 아무것도 하지 않는다. */
+  readonly kick: Kick;
   /** 듣는 포트 · 밖에서 보는 주소 — listen 뒤 */
   readonly port: number;
   readonly address: string;

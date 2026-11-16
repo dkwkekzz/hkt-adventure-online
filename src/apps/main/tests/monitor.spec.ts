@@ -70,7 +70,8 @@ describe('Monitor.map — 관측의 지도', () => {
     expect(link('Storage').pairs.map(([a]) => a)).toEqual(['api', 'gateway', 'control', 'node']);
     for (const l of map.links) expect(l.pairs.length).toBeGreaterThan(0); // 방향 글의 낱말이 전부 마디로 풀린다
     const concept = (n: string) => map.concepts.find((c) => c.name === n)!;
-    expect(concept('Placer')).toMatchObject({ module: 'session', processes: ['control'], built: false });
+    expect(concept('Placer')).toMatchObject({ module: 'session', processes: ['control'], built: true });
+    expect(concept('Mover')).toMatchObject({ module: 'session', built: false });
     expect(concept('Spawner')).toMatchObject({ processes: ['node', 'api'], built: true });
     expect(concept('Api').processes).toEqual(['api']);
     expect(concept('Elector').processes).toEqual(['control']);
@@ -87,15 +88,17 @@ describe('Monitor.map — 관측의 지도', () => {
     expect(map.flows.map((f) => f.flow)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     const enter = map.flows.find((f) => f.flow === 3)!;
     expect(enter.name).toBe('입장');
-    expect(enter.steps.map((s) => s.step)).toEqual(Array.from({ length: 19 }, (_, i) => i + 1));
+    expect(enter.steps.map((s) => s.step)).toEqual(Array.from({ length: 21 }, (_, i) => i + 1));
     expect(enter.steps[0]!.section).toMatch(/^A /);
     expect(enter.steps[10]!.section).toMatch(/^B /);
+    expect(enter.steps[19]).toMatchObject({ section: expect.stringMatching(/^C /), who: 'Queue.push' });
     expect(enter.order).toContain('Api.enter → Signer.verify');
     const by = (who: string) => enter.steps.find((s) => s.who.startsWith(who))!;
     expect(by('Spawner.host')).toMatchObject({ concept: 'Spawner', traced: true });
-    expect(by('Admission.check').traced).toBe(false);
-    // 파일이 있어도 흔적이 없으면 돌지 않는 단계다 — 흐름 8 의 Api.characters
-    expect(map.flows.find((f) => f.flow === 8)!.steps.find((s) => s.who.startsWith('Api.characters'))!.traced).toBe(false);
+    expect(by('Admission.check').traced).toBe(true);
+    expect(by('Scheduler.place').traced).toBe(false);
+    // 파일이 있어도 흔적이 없으면 돌지 않는 단계다 — 흐름 5 의 Directory.sweep
+    expect(map.flows.find((f) => f.flow === 5)!.steps.find((s) => s.who.startsWith('Directory.sweep'))!.traced).toBe(false);
     expect(map.flows.find((f) => f.flow === 1)!.steps[1]!.role).toBe('api');
     for (const f of map.flows) expect(new Set(f.steps.map((s) => s.step)).size).toBe(f.steps.length); // # 은 흐름 안에서 겹치지 않는다
   });
@@ -106,11 +109,12 @@ describe('Monitor.map — 관측의 지도', () => {
     expect(step(3, 13)).toMatchObject({ who: 'SnapshotStore.pull', stand: 'built', plan: null }); // 부른 자리(Fleet)가 흔적을 남겨도 개념이 섰으면 섰다
     expect(step(3, 13).sites).toEqual(['fleet/fleet.ts']);
     expect(step(3, 11)).toMatchObject({ who: 'Registry.put', stand: 'stand-in', sites: ['fleet/shard.ts'], plan: '07' });
-    expect(step(3, 3)).toMatchObject({ who: 'Admission.check', stand: 'none', sites: [], plan: '05' });
+    expect(step(3, 3)).toMatchObject({ who: 'Admission.check', stand: 'built', sites: ['session/index.ts'], plan: null });
+    expect(step(3, 10)).toMatchObject({ who: 'Scheduler.place', stand: 'none', sites: [], plan: '07' });
     expect(step(14, 1)).toMatchObject({ who: 'Monitor.health', stand: 'built' });
     // 대신 하는 단계는 plan 02 의 「대신 하는 단계」 표의 단계와 같다
     const standIn = map.flows.flatMap((f) => f.steps.filter((s) => s.stand === 'stand-in').map((s) => `${f.flow}.${s.step}→${s.plan}`));
-    expect(standIn).toEqual(['3.6→05', '3.8→05', '3.11→07', '3.17→07', '3.19→07', '4.3→07', '4.5→07', '5.1→07', '5.3→07', '5.12→07', '6.4→08', '7.4→07', '7.5→07', '9.3→05', '9.8→05', '11.2→05']);
+    expect(standIn).toEqual(['3.11→07', '3.17→07', '3.19→07', '4.3→07', '4.5→07', '5.1→07', '5.3→07', '5.12→07', '6.4→08', '7.4→07', '7.5→07']);
   });
 
   it('readMap 의 plan — 진행표의 줄, 서지 않은 단계는 닫히지 않은 plan 하나에 붙는다', () => {
@@ -122,8 +126,8 @@ describe('Monitor.map — 관측의 지도', () => {
     const loose = map.flows.flatMap((f) => f.steps.filter((s) => s.stand !== 'built' && (s.plan === null || !open.has(s.plan))).map((s) => `${f.flow}.${s.step}`));
     expect(loose).toEqual([]); // 서지 않은 단계마다 갈 곳이 있다
     const of = (flow: number, n: number) => map.flows.find((f) => f.flow === flow)!.steps.find((s) => s.step === n)!.plan;
-    expect([of(8, 2), of(6, 2), of(13, 2), of(9, 5), of(10, 12), of(11, 4)]).toEqual(['05', '08', '08', '07', '07', '05']); // 계정의 토큰 · 운영자의 토큰 · 전환 · lease · 뒤를 바꿔 잇기 · 세션을 지우기
-    expect(of(9, 1)).toBeNull(); // 섰다 — 게이트웨이(plan 04)
+    expect([of(6, 2), of(13, 2), of(9, 5), of(10, 12), of(11, 3), of(5, 15), of(5, 9)]).toEqual(['08', '08', '07', '07', '07', '08', '08']); // 운영자의 토큰 · 전환 · lease · 뒤를 바꿔 잇기 · 값을 내리기 · 계정의 청소 · 맞추기
+    expect([of(9, 1), of(8, 2), of(11, 4), of(3, 20)]).toEqual([null, null, null, null]); // 섰다 — 게이트웨이(plan 04) · 캐릭터 · 세션 · 대기열(plan 05)
   });
 
   it('readFlow — `| # |` 의 표만 단계다. 다른 표 · 머리가 아닌 파일은 뺀다', () => {

@@ -13,8 +13,17 @@
     "maxRate": 60,
     "ipLimit": 32
   },
+  "session": {
+    "capacity": 32,
+    "pendingMs": 60000,
+    "graceMs": 30000,
+    "gateLimitMs": 20000,
+    "queueForgetMs": 30000
+  },
   "traceKeep": 500,
   "tokenTtl": 21600,
+  "characterTtl": 3600,
+  "characterLimit": 4,
   "agentTtl": 300,
   "keymap": "dataset/adventure-keymap.json",
   "fleet": {
@@ -22,7 +31,6 @@
     "world": "main",
     "dataset": "dataset/glade.json",
     "party": "fairy-1",
-    "capacity": 32,
     "viewerOut": "out/viewer/viewer.js",
     "beat": 200,
     "sparse": 10,

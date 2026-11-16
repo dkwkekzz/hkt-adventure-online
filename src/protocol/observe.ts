@@ -33,8 +33,8 @@ export interface Trace {
   readonly person?: PersonState;
 }
 
-/** 사람의 state — 세션의 state(pending · active · grace)에 앞(login)과 뒤(gone)를 더한 것. 흐름 14 의 person 칸. */
-export const PERSON_STATES = ['login', 'pending', 'active', 'grace', 'gone'] as const;
+/** 사람의 state — 세션의 state(pending · active · grace)에 앞(login · queued)과 뒤(gone)를 더한 것. 흐름 14 의 person 칸. */
+export const PERSON_STATES = ['login', 'queued', 'pending', 'active', 'grace', 'gone'] as const;
 export type PersonState = (typeof PERSON_STATES)[number];
 
 /** 단계를 부른 자리가 넘기는 것 — at · who 는 Monitor 가 짓는다. account 는 가명이 되고 남지 않는다. */

@@ -63,7 +63,7 @@ async function up(over: Partial<GatewayConfig> = {}, attach?: (c: string) => Att
     verify: (t) => (typeof t === 'string' && t.startsWith('ok-') ? t.slice(3) : null),
     attach: async (c) => (attach ? attach(c) : { instance: 'main', address: host.url, token: `host-${c}` }),
     detach: (c) => void detached.push(c),
-    report: (r) => void reports.push(r),
+    report: (r, run) => void reports.push({ ...r, run } as GateReport),
     trace: (t) => void traces.push(t),
     log: () => {},
   });
@@ -112,11 +112,12 @@ describe('Acceptor.accept · Connection.open · Connection.relay — 흐름 9', 
     expect(host.got).toEqual([{ step: 'Link 3', input: { body: 7, actionId: 'a' } }]);
     expect(c.msgs[1]).toEqual({ step: 'Link 2', body: 7, delta: { body: 7, actionId: 'a' } });
     expect(steps(traces).filter((s) => s.startsWith('9.'))).toEqual(['9.1.ok', '9.2.ok', '9.10.ok', '9.11.wait']);
-    expect(traces.find((t) => t.flow === 9 && t.step === 10)).toMatchObject({ unit: 'main', account: 'p1' });
+    expect(traces.find((t) => t.flow === 9 && t.step === 10)).toMatchObject({ unit: 'main' });
+    expect(traces.some((t) => t.account !== undefined)).toBe(false); // 게이트웨이는 캐릭터만 안다 — 사람은 같은 run 의 세션 단계가 잇는다
     c.ws.close(1000);
     await until(() => detached.length === 1);
     expect(detached).toEqual(['p1']);
-    expect(traces.find((t) => t.flow === 11 && t.step === 1)).toMatchObject({ end: 'ok', account: 'p1', counts: { code: 1000 } });
+    expect(traces.find((t) => t.flow === 11 && t.step === 1)).toMatchObject({ end: 'ok', counts: { code: 1000 } });
     await until(() => host.sockets[0]!.readyState === WebSocket.CLOSED);
   });
 
@@ -218,16 +219,29 @@ describe('Keepalive.ping — 흐름 5 의 5', () => {
   });
 });
 
+describe('SessionRpc kick — Router.kick 의 받는 쪽', () => {
+  it('그 캐릭터의 접속을 그 코드로 닫고 detach 를 보낸다. 없는 캐릭터면 아무것도 하지 않는다', async () => {
+    const { gate, detached, url } = await up();
+    const c = await client(url, { step: 'Host 2', credential: 'ok-p1' });
+    await until(() => c.msgs.length >= 1);
+    gate.kick('p9', 4000, 'k0');
+    gate.kick('p1', 4000, 'k1');
+    expect(await c.closed).toBe(4000);
+    await until(() => detached.length === 1);
+    expect(detached).toEqual(['p1']);
+  });
+});
+
 describe('GateReporter.report · 흐름 1 의 4 · 5 · 7 의 7 · 8', () => {
   it('listen 이 듣고 알린다. close 는 closing 을 알리고 접속을 전부 1001 로 닫는다', async () => {
     const { gate, traces, reports, url } = await up();
     expect(steps(traces).slice(0, 2)).toEqual(['1.4.wait', '1.5.ok']);
-    expect(reports[0]).toEqual({ name: 'gate-1', address: `ws://localhost:${gate.port}`, closing: false, connections: [] });
+    expect(reports[0]).toEqual({ name: 'gate-1', address: `ws://localhost:${gate.port}`, closing: false, connections: [], run: 'boot' }); // 보고에 그 흐름의 run 이 실린다
     const c = await client(url, { step: 'Host 2', credential: 'ok-p1' });
     await until(() => c.msgs.length >= 1);
     await gate.close('stop');
     expect(await c.closed).toBe(1001);
-    expect(reports.at(-1)).toEqual({ name: 'gate-1', address: `ws://localhost:${gate.port}`, closing: true, connections: [{ character: 'p1', instance: 'main' }] });
+    expect(reports.at(-1)).toEqual({ name: 'gate-1', address: `ws://localhost:${gate.port}`, closing: true, connections: [{ character: 'p1', instance: 'main' }], run: 'stop' });
     expect(steps(traces).filter((s) => s.startsWith('7.'))).toEqual(['7.7.ok', '7.8.ok']);
     expect(traces.find((t) => t.flow === 7 && t.step === 8)).toMatchObject({ counts: { connections: 1 } });
     opened = opened.filter((o) => o.gate !== gate);

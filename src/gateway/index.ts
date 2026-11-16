@@ -22,7 +22,7 @@ export function openGateway(o: GatewayOptions): GatewaySocket {
   let port = 0;
   /** GateReporter.report 와 그 흔적 — 단위는 `-`(게이트웨이는 인스턴스가 아니다), 수는 counts 에. */
   const mark = (flow: number, step: number, run: string): void => {
-    const r = reporter!.report(acceptor.connections.values());
+    const r = reporter!.report(acceptor.connections.values(), run);
     o.trace({ flow, step, run, unit: '-', end: 'ok', counts: { connections: r.connections.length, dropped: limiter.dropped } });
   };
   const tick = (): void => {
@@ -46,6 +46,9 @@ export function openGateway(o: GatewayOptions): GatewaySocket {
       mark(1, 5, run);
       timer = setInterval(tick, o.clockMs);
       timer.unref();
+    },
+    kick(character: string, code: number, _run: string): void {
+      acceptor.connections.get(character)?.close(code, '컨트롤 플레인이 닫게 했다'); // SessionRpc kick — Connection.close 가 흐름 11 의 1 을 남긴다
     },
     async close(run: string): Promise<void> {
       if (timer !== null) clearInterval(timer);

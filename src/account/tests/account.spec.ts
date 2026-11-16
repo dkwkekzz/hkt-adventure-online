@@ -1,9 +1,9 @@
-// Directory.resolve · Signer.issue · Signer.verify (흐름 2 · 흐름 3 의 1).
+// Directory.resolve · Banlist.banned · Signer.issue · Signer.verify (흐름 2) · Characters.list · create · owner · remove (흐름 8).
 
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { DatabaseSocket, Table } from '../../protocol/storage';
-import { Directory, Signer } from '..';
+import { Banlist, Characters, Directory, Signer, kindOf } from '..';
 
 const memory = (): DatabaseSocket & { rows: Map<string, unknown> } => {
   const rows = new Map<string, unknown>();
@@ -23,7 +23,8 @@ describe('Directory.resolve', () => {
     let now = 100;
     const d = new Directory(db, () => now);
     const a = await d.resolve({ provider: 'guest', subject: 'x' });
-    expect(a).toMatch(/^p[0-9a-f]{12}$/);
+    expect(a).toMatch(/^a[0-9a-f]{12}$/);
+    expect(kindOf(a)).toBe('account');
     now = 200;
     expect(await d.resolve({ provider: 'guest', subject: 'x' })).toBe(a);
     const b = await d.resolve({ provider: 'guest', subject: 'y' });
@@ -65,5 +66,50 @@ describe('Signer.issue · verify', () => {
     expect(() => s.issue('a.b')).toThrow();
     expect(() => s.issue('a b')).toThrow();
     expect(() => new Signer('', 60)).toThrow(/키/);
+  });
+});
+
+describe('Characters.list · create · owner · remove', () => {
+  it('계정마다 캐릭터를 짓는다 — id 는 p 로(엔진의 계정), 이름은 1 ~ 24 자 · 계정 안에서 겹치지 않는다, 한계까지', async () => {
+    const db = memory();
+    const cs = new Characters(db, 2);
+    expect(await cs.list('a1')).toEqual([]);
+    const one = await cs.create('a1', '  하나  ');
+    expect(one).toMatchObject({ name: '하나', account: 'a1', id: expect.stringMatching(/^p[0-9a-f]{12}$/) });
+    if ('why' in one) throw new Error(one.why);
+    expect(kindOf(one.id)).toBe('character');
+    expect(await cs.create('a1', '하나')).toEqual({ why: '같은 이름의 캐릭터가 있다 — 하나' });
+    expect(await cs.create('a1', '')).toMatchObject({ why: expect.stringMatching(/1 ~ 24/) });
+    expect(await cs.create('a1', 'x'.repeat(25))).toMatchObject({ why: expect.stringMatching(/1 ~ 24/) });
+    expect(await cs.create('a1', '줄\n바꿈')).toMatchObject({ why: expect.stringMatching(/제어/) });
+    const two = await cs.create('a1', '둘');
+    expect(await cs.create('a1', '셋')).toEqual({ why: '캐릭터는 계정마다 2 까지' });
+    expect(await cs.create('a2', '하나')).toMatchObject({ name: '하나', account: 'a2' }); // 다른 계정은 같은 이름을 쓸 수 있다
+    expect((await cs.list('a1')).map((c) => c.name)).toEqual(['하나', '둘']);
+    // owner — 다른 API 서버 · 컨트롤 플레인도 표에서 같은 답
+    const again = new Characters(db, 2);
+    expect(await again.owner(one.id)).toEqual(one);
+    expect(await again.owner('p000000000000')).toBeNull();
+    await again.remove(one.id);
+    expect(await cs.owner(one.id)).toBeNull();
+    expect((await cs.list('a1')).map((c) => c.name)).toEqual(['둘']);
+    await cs.remove((two as { id: string }).id);
+    expect(await db.get('characters', 'a1')).toBeNull();
+  });
+});
+
+describe('Banlist.ban · unban · banned', () => {
+  it('until 까지 차단 — 지나면 풀린다. 표 bans 에', async () => {
+    const db = memory();
+    let now = 100;
+    const b = new Banlist(db, () => now);
+    expect(await b.banned('a1')).toBe(false);
+    await b.ban('a1', 200);
+    expect(await new Banlist(db, () => now).banned('a1')).toBe(true);
+    now = 200;
+    expect(await b.banned('a1')).toBe(false);
+    await b.ban('a1', 500);
+    await b.unban('a1');
+    expect(await b.banned('a1')).toBe(false);
   });
 });

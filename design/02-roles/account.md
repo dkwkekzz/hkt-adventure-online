@@ -21,18 +21,18 @@
 - 생애: Service.start 가 만든다.
 
 ### Characters
-- 데이터: db(참조 — 표 `characters`: Account.id → list<Character>).
-- 기능: list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다(한계 `characterLimit`). remove(character) 는 그 줄을 지운다. owner(character) 는 그 캐릭터의 Account.id(없으면 null).
+- 데이터: db(참조 — 표 `characters`: Account.id → list<Character>, 표 `owners`: Character.id → Account.id) · limit(불변, 한 계정의 캐릭터 수 `characterLimit`).
+- 기능: list(account) 는 그 계정의 캐릭터들. create(account, name) 은 새 Character 를 짓고 적는다 — 이름은 앞뒤 공백을 뺀 1 ~ 24 자(제어 글자 없이), 그 계정 안에서 겹치지 않는다. 한계를 넘거나 이름이 틀리면 거절. remove(character) 는 두 표에서 그 줄을 지운다. owner(character) 는 그 캐릭터의 줄(계정 · 이름이 든 Character, 없으면 null).
 - 생애: Service.start 가 만든다.
 
 ### Banlist
-- 데이터: db(참조 — 표 `bans`: Account.id → until).
-- 기능: ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가.
+- 데이터: db(참조 — 표 `bans`: Account.id → until(ms)).
+- 기능: ban(account, until) · unban(account) 는 차단하고 푼다. banned(account) 는 지금 차단됐는가 — until 이 지금보다 뒤면.
 - 생애: Service.start 가 만든다.
 
 ### Signer
-- 데이터: key:string(불변, 엔진의 `HOST_AUTH_KEY` 와 같다) · ttl:int(불변, 초).
-- 기능: issue(id, ttl) → Token. verify(token) → id 또는 null(서명 · 만료 · 모양이 틀리면).
+- 데이터: key:string(불변, 엔진의 `HOST_AUTH_KEY` 와 같다) · ttl:int(불변, 초 — 계정의 토큰 `tokenTtl`. 캐릭터의 토큰은 `characterTtl`, 호스트에 주는 것 · NPC 의 것은 `agentTtl` 을 issue 에 넘긴다).
+- 기능: issue(id, ttl) → Token. verify(token) → id 또는 null(서명 · 만료 · 모양이 틀리면). 어느 토큰인지는 id 의 머리 글자가 말한다(Token) — 부른 자리가 맞는 것만 받는다.
 - 생애: Service.start 가 만든다. 키가 비면 시작 거부.
 
 ### Identity
@@ -55,7 +55,7 @@
 
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
-| Database get · put · remove | 계정 → 스토리지 | 표 `accounts` · `accountInfo` · `characters` · `bans` 의 줄 하나 | 값 또는 null |
+| Database get · put · remove | 계정 → 스토리지 | 표 `accounts` · `accountInfo` · `characters` · `owners` · `bans` 의 줄 하나 | 값 또는 null |
 
 ## 미정
 

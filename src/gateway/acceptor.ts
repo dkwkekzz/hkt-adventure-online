@@ -129,7 +129,7 @@ export class Acceptor {
         },
       });
       this.connections.set(character, conn);
-      this.o.trace({ flow: 9, step: 2, run, unit: '-', end: 'ok', account: character });
+      this.o.trace({ flow: 9, step: 2, run, unit: '-', end: 'ok' }); // 캐릭터는 실지 않는다 — 계정을 모른다. 같은 run 의 Sessions.get 이 그 사람에게 잇는다
       void this.o
         .attach(character, this.o.gate, run) // 흐름 9 의 3 — 컨트롤 플레인에 묻는다(SessionRpc attach). 흔적은 받는 쪽이
         .then((to) => {

@@ -5,11 +5,13 @@ import { randomBytes } from 'node:crypto';
 import type { Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Directory, Signer } from '../../account';
+import { Banlist, Characters, Directory, Signer, kindOf } from '../../account';
 import { Fleet } from '../../fleet';
 import { openGateway } from '../../gateway';
+import { openSession } from '../../session';
 import { openStorage } from '../../storage';
 import type { GatewaySocket } from '../../protocol/gateway';
+import type { SessionSocket } from '../../protocol/session';
 import type { StorageSocket } from '../../protocol/storage';
 import { openApi } from './api';
 import { readMap } from './map';
@@ -23,38 +25,46 @@ const DESIGN = join(SRC, '..', 'design');
 const freshRun = (): string => randomBytes(4).toString('hex');
 
 export class Service {
-  // 데이터 — config(불변) · monitor · storage · directory · signer · fleet · api · 전부 참조
+  // 데이터 — config(불변) · monitor · storage · directory · characters · banlist · signer · fleet · session · api · gateway — 전부 참조
   readonly config: ServiceConfig;
   readonly monitor: Monitor;
   readonly storage: StorageSocket;
   readonly directory: Directory;
+  readonly characters: Characters;
+  readonly banlist: Banlist;
   readonly signer: Signer;
   readonly fleet: Fleet;
+  /** 세션 — SessionRpc 의 받는 쪽(컨트롤 플레인). main 에서는 Api · 게이트웨이가 함수로 부른다 */
+  readonly session: SessionSocket;
   readonly api: Server;
-  /** 게이트웨이 — 클라이언트의 소켓을 받아 호스트와 잇는다(흐름 9 · 11). SessionRpc 는 함수 부름 — 받는 쪽은 지금 함대(세션 모듈 plan 05 의 대신) */
+  /** 게이트웨이 — 클라이언트의 소켓을 받아 호스트와 잇는다(흐름 9 · 11). SessionRpc 는 함수 부름 */
   readonly gateway: GatewaySocket;
   port = 0;
   private stopping: Promise<void> | null = null;
 
-  private constructor(config: ServiceConfig, log: (line: string) => void, monitor: Monitor, storage: StorageSocket, signer: Signer, fleet: Fleet) {
+  private constructor(config: ServiceConfig, log: (line: string) => void, monitor: Monitor, storage: StorageSocket, signer: Signer, fleet: Fleet, characters: Characters, banlist: Banlist, session: SessionSocket, gateway: GatewaySocket) {
     this.config = config;
     this.monitor = monitor;
     this.storage = storage;
     this.directory = new Directory(storage.database);
+    this.characters = characters;
+    this.banlist = banlist;
     this.signer = signer;
     this.fleet = fleet;
-    this.api = openApi({ directory: this.directory, signer: this.signer, fleet: this.fleet, files: new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap), log, trace: monitor.trace });
-    this.gateway = openGateway({
-      config: config.gateway,
-      name: 'gate-1',
-      address: config.fleet.gateUrl,
-      clockMs: config.fleet.clockMs,
-      verify: (token) => signer.verify(token),
-      attach: (character, gate, run) => fleet.attach(character, gate, run),
-      detach: (character, gate, run) => fleet.detach(character, gate, run),
-      report: () => {}, // Gates.seen 은 세션 모듈(plan 05) — 지금은 흔적(흐름 5 의 6)만
-      trace: monitor.trace,
+    this.session = session;
+    this.gateway = gateway;
+    this.api = openApi({
+      directory: this.directory,
+      characters,
+      banlist,
+      signer,
+      session,
+      build: config.build,
+      pageUrl: config.pageUrl,
+      characterTtl: config.characterTtl,
+      files: new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap),
       log,
+      trace: monitor.trace,
     });
   }
 
@@ -66,11 +76,50 @@ export class Service {
     await monitor.listen(config.monitorPort);
     let service: Service;
     let storage: StorageSocket | null = null;
+    let opened: SessionSocket | null = null;
     try {
       storage = await openStorage(config.storage); // 흐름 1 의 1 — 닿지 않으면 시작 거부
       const signer = new Signer(key, config.tokenTtl);
       const fleet = await Fleet.open(config.fleet, storage, key, (account) => signer.issue(account, config.agentTtl), log, monitor.trace, run); // 흐름 1 의 7
-      service = new Service(config, log, monitor, storage, signer, fleet);
+      const characters = new Characters(storage.database, config.characterLimit);
+      const banlist = new Banlist(storage.database);
+      // SessionRpc 는 함수 부름 — 세션 ↔ 게이트웨이는 서로를 부른다(attach · detach · report ↔ kick). 게이트웨이는 아래에서 선다
+      let gateway: GatewaySocket | null = null;
+      const session = await openSession({
+        config: config.session,
+        zones: [{ name: config.fleet.world, dataset: config.fleet.dataset, capacity: config.session.capacity }],
+        entry: config.fleet.world,
+        clockMs: config.fleet.clockMs,
+        database: storage.database,
+        characters: storage.characters,
+        owner: (character) => characters.owner(character),
+        banned: (account) => banlist.banned(account),
+        remove: (character) => characters.remove(character),
+        ready: (zone) => fleet.ready(zone).map((name) => ({ name, build: config.build })), // 빌드는 이 서버의 것 하나 — 노드마다의 빌드는 plan 08
+        launch: (zone, _build, r) => fleet.launch(zone, r),
+        address: (instance) => fleet.address(instance),
+        issue: (character) => signer.issue(character, config.agentTtl), // 호스트에 줄 토큰 — 접속 한 번에만 쓴다
+        kick: (_gate, character, code, r) => gateway?.kick(character, code, r), // 게이트웨이는 지금 하나
+        trace: monitor.trace,
+        log,
+      });
+      opened = session;
+      gateway = openGateway({
+        config: config.gateway,
+        name: 'gate-1',
+        address: config.gateUrl,
+        clockMs: config.fleet.clockMs,
+        verify: (token) => {
+          const id = signer.verify(token);
+          return id !== null && kindOf(id) === 'character' ? id : null; // 캐릭터의 토큰만
+        },
+        attach: (character, gate, r) => session.attach(character, gate, r),
+        detach: (character, gate, r) => session.detach(character, gate, r),
+        report: (report, r) => session.report(report, r),
+        trace: monitor.trace,
+        log,
+      });
+      service = new Service(config, log, monitor, storage, signer, fleet, characters, banlist, session, gateway);
       monitor.trace({ flow: 1, step: 1, run, unit: '-', end: 'ok' });
       log(`service 스토리지 — ${storage.where}`);
       await service.fleet.start(run); // 흐름 1 의 2 — 뷰어를 묶고 박자를 돌린다
@@ -81,6 +130,7 @@ export class Service {
       await service.gateway.listen(run); // 흐름 1 의 4 · 5 — 소켓을 듣고 자기를 알린다
     } catch (e) {
       monitor.trace({ flow: 1, step: 1, run, unit: '-', end: 'failed' });
+      opened?.close(); // 세우다 그만둔 세션의 간격
       await storage?.close().catch(() => {});
       await monitor.close();
       throw e;
@@ -98,6 +148,7 @@ export class Service {
     const run = freshRun();
     this.stopping = (async () => {
       this.fleet.clock.stop();
+      this.session.close(); // 세션의 간격 — 세션은 스토리지에 두지 않는다(다시 서면 보고로, plan 07 · 08)
       await this.gateway.close(run); // 흐름 7 의 7 · 8 — 내려간다고 알리고 접속을 닫는다(1001). 세계보다 먼저 — 사람은 rerouting 없이 닫힘을 받는다
       await this.fleet.stopAll(run); // 흐름 7 의 4 · 5 — 표는 바뀔 때마다 스토리지에 있다 — 따로 쓰지 않는다
       await new Promise<void>((resolve) => this.api.close(() => resolve()));

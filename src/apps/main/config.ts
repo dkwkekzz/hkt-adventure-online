@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import type { FleetConfig } from '../../fleet';
 import type { GatewayConfig } from '../../protocol/gateway';
+import type { SessionConfig } from '../../protocol/session';
 import type { BucketOptions, StorageOptions } from '../../protocol/storage';
 
 export interface ServiceConfig {
@@ -15,9 +16,19 @@ export interface ServiceConfig {
   readonly storage: StorageOptions;
   /** 게이트웨이 — 포트와 한계 · 주기(design/02-roles/gateway.md). env GATE_PORT 가 포트를 덮는다 */
   readonly gateway: GatewayConfig;
+  /** 세션 — 인스턴스의 상한(capacity) · 만료 · 한계(design/02-roles/session.md). 존은 지금 하나 — fleet 의 world · dataset */
+  readonly session: SessionConfig;
   readonly apiPort: number;
-  /** 사람의 토큰 수명(초). */
+  /** 뷰어 페이지의 주소(`…/play`) — Api 가 입장의 답(page)을 짓는다 */
+  readonly pageUrl: string;
+  /** 게이트웨이의 밖의 주소 — GateReporter 가 알리고 Gates.pick 이 준다 */
+  readonly gateUrl: string;
+  /** 계정의 토큰 수명(초) — Api 에만 쓴다. */
   readonly tokenTtl: number;
+  /** 캐릭터의 토큰 수명(초) — 고르기(흐름 8 의 7)가 낸다. 입장 · 게이트웨이 · 뷰어 페이지의 ?token= 이 든다 */
+  readonly characterTtl: number;
+  /** 한 계정의 캐릭터 수 */
+  readonly characterLimit: number;
   /** NPC 에이전트의 토큰 수명(초) — 접속 한 번에만 쓴다. */
   readonly agentTtl: number;
   /** Monitor 의 내부 주소의 포트(흐름 14). 0 이면 빈 포트. */
@@ -28,11 +39,11 @@ export interface ServiceConfig {
   readonly build: string;
 }
 
-type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage'> & {
+type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage' | 'pageUrl' | 'gateUrl'> & {
   storageRoot: string;
   leaseMs: number;
   characterHistory: number;
-  fleet: Omit<FleetConfig, 'ports' | 'pageUrl' | 'gateUrl' | 'hostName'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string };
+  fleet: Omit<FleetConfig, 'ports' | 'hostName'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string };
 };
 
 /** SNAPSHOT_URI(`s3://<bucket>/<prefix>`)와 S3_ENDPOINT · AWS_* → object storage 의 자리. 없으면 null — Store 는 storageRoot 의 디렉터리로. */
@@ -89,12 +100,12 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
     monitorPort: num(env['MONITOR_PORT'], raw.monitorPort),
     build,
     gateway,
+    pageUrl: env['SERVICE_PAGE_URL'] ?? `${secure ? 'https' : 'http'}://${publicHost}:${apiPort}/play`,
+    gateUrl: env['SERVICE_GATE_URL'] ?? `${secure ? 'wss' : 'ws'}://${publicHost}:${gateway.port}`,
     fleet: {
       ...fleet,
       engineDir: at(env['SERVICE_ENGINE'] ?? raw.fleet.engineDir),
       viewerOut: at(raw.fleet.viewerOut),
-      pageUrl: env['SERVICE_PAGE_URL'] ?? `${secure ? 'https' : 'http'}://${publicHost}:${apiPort}/play`,
-      gateUrl: env['SERVICE_GATE_URL'] ?? `${secure ? 'wss' : 'ws'}://${publicHost}:${gateway.port}`,
       hostName: hostName ?? 'localhost',
     },
   };

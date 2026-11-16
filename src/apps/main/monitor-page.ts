@@ -67,7 +67,7 @@ svg .mono { font-family: var(--mono); }
 .olabel { font-size: 11px; fill: var(--hl) !important; font-weight: 650; }
 .chip { fill: var(--hl); } .chip.dim { fill: var(--line); }
 .chiptext { fill: #fff !important; font-size: 10px; font-weight: 650; }
-.st-ready, .st-active { fill: var(--ok); } .st-starting, .st-stopping, .st-pending { fill: var(--wait); } .st-failed { fill: var(--failed); } .st-grace { fill: var(--refused); } .st-stopped, .st-gone, .st-login { fill: var(--mute); }
+.st-ready, .st-active { fill: var(--ok); } .st-starting, .st-stopping, .st-pending, .st-queued { fill: var(--wait); } .st-failed { fill: var(--failed); } .st-grace { fill: var(--refused); } .st-stopped, .st-gone, .st-login { fill: var(--mute); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--mute); margin-top: 8px; align-items: center; }
 .frow { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 3px 8px; border-radius: 7px; cursor: pointer; }
 .frow:hover { background: var(--soft); } .frow.sel { background: var(--glow); outline: 1px solid var(--hl); }
@@ -114,7 +114,7 @@ button:hover { background: var(--soft); }
 .act { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
 .act:hover { background: var(--soft); } .act.sel { border-color: var(--hl); color: var(--hl); }
 .ps { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
-.ps.active { color: var(--ok); } .ps.pending { color: var(--wait); } .ps.grace { color: var(--refused); } .ps.gone, .ps.login, .ps.none { color: var(--mute); }
+.ps.active { color: var(--ok); } .ps.pending, .ps.queued { color: var(--wait); } .ps.grace { color: var(--refused); } .ps.gone, .ps.login, .ps.none { color: var(--mute); }
 .inst { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
 .inst .ih { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--soft); border-radius: 8px 8px 0 0; font-size: 13px; }
 .inst .ih .r { margin-left: auto; font-size: 11px; color: var(--mute); }
@@ -169,8 +169,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   const PROCS = MAP.nodes.filter((n) => !n.external).map((n) => n.id);
   const PERSON = [2, 3, 8, 9, 10, 11], OPERATOR = [6]; // 트리거의 주인 — 그 밖은 기계
   const ownerOf = (flow) => PERSON.includes(flow) ? 'person' : OPERATOR.includes(flow) ? 'operator' : 'machine';
-  const PSTATES = ['login', 'pending', 'active', 'grace', 'gone'];
-  const PLABEL = { login: '로그인함', pending: '입장함', active: '접속 중', grace: '끊김', gone: '떠남' };
+  const PSTATES = ['login', 'queued', 'pending', 'active', 'grace', 'gone'];
+  const PLABEL = { login: '로그인함', queued: '기다림', pending: '입장함', active: '접속 중', grace: '끊김', gone: '떠남' };
   const POS = {
     client: { x: 95, y: 330, w: 150, h: 92 }, operator: { x: 600, y: 52, w: 190, h: 56 },
     api: { x: 340, y: 200, w: 200, h: 104 }, gateway: { x: 340, y: 460, w: 200, h: 104 },
@@ -500,7 +500,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
   const ago = (at) => { const d = Math.max(0, Math.round((Date.now() - at) / 1000)); return d < 60 ? d + '초 전' : d < 3600 ? Math.round(d / 60) + '분 전' : Math.round(d / 3600) + '시간 전'; };
   const flowName = (n) => (FLOW.get(n) ? FLOW.get(n).name : '흐름 ' + n);
   const nameOf = (p) => p.name || '가명 ' + p.who;
-  const pstate = (s) => '<span class="ps ' + (s || 'none') + '"><span class="dot ' + (s === 'active' ? 'ok' : s === 'pending' ? 'wait' : s === 'grace' ? 'refused' : '') + '"></span>' + esc(s ? PLABEL[s] : '모름') + '</span>';
+  const pstate = (s) => '<span class="ps ' + (s || 'none') + '"><span class="dot ' + (s === 'active' ? 'ok' : s === 'pending' || s === 'queued' ? 'wait' : s === 'grace' ? 'refused' : '') + '"></span>' + esc(s ? PLABEL[s] : '모름') + '</span>';
 
   function seqHtml(layout, kind) {
     return '<div class="seq">' + layout.map((x) => {
@@ -597,7 +597,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       h += '<div class="btns"><button data-act="play">이 사람의 길 재생</button><button data-act="unpick">고름 풀기</button></div>';
     } else h += '<h2>사람 — 고르면 그림에 그 사람의 길만, 아래에 그 사람의 일생</h2>';
     h += '<div class="filter"><input id="q" type="search" placeholder="캐릭터 이름 · 가명 · 세션 · 인스턴스로 찾기" aria-label="찾기" value="' + esc(query) + '">'
-      + [['all', '전체 ' + all.length], ['active', '접속 중 ' + by('active')], ['pending', '입장함 ' + by('pending')], ['login', '로그인함 ' + by('login')], ['grace', '끊김 ' + by('grace')], ['gone', '떠남 ' + by('gone')]].map(([k, l]) => '<span class="fchip' + (pfilter === k ? ' on' : '') + '" data-pf="' + k + '">' + l + '</span>').join('') + '</div>';
+      + [['all', '전체 ' + all.length], ['active', '접속 중 ' + by('active')], ['pending', '입장함 ' + by('pending')], ['queued', '기다림 ' + by('queued')], ['login', '로그인함 ' + by('login')], ['grace', '끊김 ' + by('grace')], ['gone', '떠남 ' + by('gone')]].map(([k, l]) => '<span class="fchip' + (pfilter === k ? ' on' : '') + '" data-pf="' + k + '">' + l + '</span>').join('') + '</div>';
     const ok = (p) => (pfilter === 'all' || p.state === pfilter) && (!query || [p.name, p.who, p.unit, ...p.sessions].some((x) => x && String(x).toLowerCase().includes(query)));
     const groups = new Map();
     for (const p of all.filter(ok)) { const k = p.unit || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }

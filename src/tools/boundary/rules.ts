@@ -1,20 +1,20 @@
-// 경계 규칙 — 어느 층이 어느 층을 import 할 수 있는가(S · A · T · F · G · P), 앱이 모듈에 닿는 자리(P), 게임 명사(N), 엔진에 닿는 길(E).
+// 경계 규칙 — 어느 층이 어느 층을 import 할 수 있는가(S · A · T · F · G · C · P), 앱이 모듈에 닿는 자리(P), 게임 명사(N), 엔진에 닿는 길(E).
 // 이 파일은 판단만 한다 — 파일을 읽지 않는다. 읽고 걷는 것은 check.ts. 규칙의 뜻은 CLAUDE.md §경계.
 
 export type Layer =
   | { readonly kind: 'protocol' }
-  | { readonly kind: 'module'; readonly name: 'account' | 'storage' | 'fleet' | 'gateway'; readonly index: boolean; readonly test: boolean }
+  | { readonly kind: 'module'; readonly name: 'account' | 'storage' | 'fleet' | 'gateway' | 'session'; readonly index: boolean; readonly test: boolean }
   | { readonly kind: 'app'; readonly test: boolean }
   | { readonly kind: 'tool' };
 
-export const MODULES = ['account', 'storage', 'fleet', 'gateway'] as const;
+export const MODULES = ['account', 'storage', 'fleet', 'gateway', 'session'] as const;
 
 /** src 상대 경로 → 층. 어느 층도 아니면 null. */
 export function layerOf(rel: string): Layer | null {
   const parts = rel.split(/[\\/]/);
   const top = parts[0];
   if (top === 'protocol') return { kind: 'protocol' };
-  if (top === 'account' || top === 'storage' || top === 'fleet' || top === 'gateway') return { kind: 'module', name: top, index: parts.length === 2 && parts[1] === 'index.ts', test: parts[1] === 'tests' };
+  if (top === 'account' || top === 'storage' || top === 'fleet' || top === 'gateway' || top === 'session') return { kind: 'module', name: top, index: parts.length === 2 && parts[1] === 'index.ts', test: parts[1] === 'tests' };
   if (top === 'apps') return { kind: 'app', test: parts.includes('tests') };
   if (top === 'tools') return { kind: 'tool' };
   return null;
@@ -31,7 +31,7 @@ export function judgeImport(from: Layer, to: Layer): string | null {
     if (to.kind === 'module' && to.name === from.name) return null;
     // 모듈의 tests/ 는 세움에 다른 모듈의 index.ts(밖에 내보낸 것)를 쓸 수 있다 — 안은 보지 않는다
     if (from.test && to.kind === 'module' && (to.index || to.test)) return null;
-    const rule = { account: 'A', storage: 'T', fleet: 'F', gateway: 'G' }[from.name];
+    const rule = { account: 'A', storage: 'T', fleet: 'F', gateway: 'G', session: 'C' }[from.name];
     return `규칙 ${rule} — ${from.name} 는 protocol 만 import 한다 (${to.kind === 'module' ? to.name : to.kind})`;
   }
 
@@ -45,16 +45,20 @@ export function judgeImport(from: Layer, to: Layer): string | null {
 }
 
 /**
- * P. 앱(테스트 밖)이 모듈의 객체에 부르는 것 — 흐름에서 트리거가 (밖)이거나 누가 가 Service · Api 인 단계뿐.
- * 그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — 개발의 main 에서 SessionRpc 는 함수 부름이다(fleet.attach · detach 는 세션 모듈 — plan 05 — 의 대신).
- * gateway.listen · close 는 흐름 1 의 4 · 5 와 흐름 7 의 7 · 8 — Service.start · stop 이 그 role 의 개념을 세우고 내린다.
+ * P. 앱(테스트 밖)이 모듈의 객체에 부르는 것 — 흐름에서 트리거가 (밖)이거나 누가 가 Service · Api 인 단계, 그리고 Api 가 부르는 단계(로그인 · 캐릭터 — 흐름 2 · 8).
+ * 그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — 개발의 main 에서 SessionRpc 는 함수 부름이다(session.enter · forget · attach · detach · report, gateway.kick).
+ * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned, fleet.ready · launch · address).
+ * gateway.listen · close 는 흐름 1 의 4 · 5 와 흐름 7 의 7 · 8, session.close 는 세션의 간격 — Service.start · stop 이 그 role 의 개념을 세우고 내린다.
  */
 export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
   directory: ['resolve'],
+  characters: ['list', 'create', 'owner', 'remove'],
+  banlist: ['banned'],
   signer: ['issue', 'verify'],
-  fleet: ['start', 'enter', 'stopAll', 'clock.stop', 'operator.command', 'attach', 'detach'],
+  fleet: ['start', 'stopAll', 'clock.stop', 'operator.command', 'ready', 'launch', 'address'],
+  session: ['enter', 'forget', 'attach', 'detach', 'report', 'close'],
   storage: ['close'],
-  gateway: ['listen', 'close'],
+  gateway: ['listen', 'close', 'kick'],
 };
 
 export function judgeAppCall(object: string, chain: string): string | null {

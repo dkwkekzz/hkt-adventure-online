@@ -3,7 +3,7 @@
 // 뒤가 MongoDB · object storage 일 수 있으므로 전부 기다린다(Promise).
 
 /** Database 의 표 — 표 하나 = collection 하나. */
-export const TABLES = ['accounts', 'accountInfo', 'characters', 'bans', 'lastZone', 'zones', 'instances', 'nodes', 'audit'] as const;
+export const TABLES = ['accounts', 'accountInfo', 'characters', 'owners', 'bans', 'lastZone', 'zones', 'instances', 'nodes', 'audit'] as const;
 export type Table = (typeof TABLES)[number];
 
 export interface DatabaseSocket {

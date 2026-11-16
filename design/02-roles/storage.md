@@ -24,7 +24,7 @@
 ## 개념
 
 ### Database
-- 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `accountInfo` · `characters` · `bans` · `lastZone` · `zones` · `instances` · `nodes` · `audit`.
+- 데이터: 없음. 값은 스토리지에 — 표 `accounts` · `accountInfo` · `characters` · `owners` · `bans` · `lastZone` · `zones` · `instances` · `nodes` · `audit`.
 - 기능: get(table, key) · put(table, key, value) · remove(table, key) · all(table). 줄 하나의 쓰기는 통째로 되거나 안 된다.
 - 생애: openStorage 와 함께. openStorage 는 Service.start 가 부르고(흐름 1 의 1) 그 close 는 Service.stop 이 마지막에 부른다(흐름 7 의 11).
 

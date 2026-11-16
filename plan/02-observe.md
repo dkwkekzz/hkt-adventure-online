@@ -12,8 +12,8 @@
 | ☑ | 관측의 지도 — README 의 프로세스 넷 · 연결 여덟(짝 · 닿는 개념) · 개념이 사는 프로세스, 흐름 파일의 단계. 단계마다 흔적을 남기는가(traced) · 섰는가(stand — 섰다 · 대신 · 없다)와 그 흔적의 자리(sites) · 서지 않은 단계의 plan. plan/README.md 의 진행표(plans) | `src/apps/main/map.ts` |
 | ☑ | Monitor — 내부 주소(`monitorPort`)의 `/health` · `/metrics` · `/observe`(text/event-stream) · `/observe/page`. recent · units · tally · readers. 느린 읽는 이의 몫만 버린다 | `src/apps/main/monitor.ts` |
 | ☑ | 관측 페이지 — 프로세스 · 밖의 상자(state · 섰는 개념 · 지난 단계), 노드 서버 안의 인스턴스(state · 사람 · 포트), 연결(넘은 수 · 마지막 끝)과 그 위를 움직이는 글. 흐름 · run 을 고르면 마디마다의 # 과 연결마다의 # 으로 길이 놓이고 「재생」이 차례로 보낸다. 보기 둘 — 「서버」(프로세스 · 인스턴스의 state, 운영자의 명령, 기계의 흐름마다의 셈, 서버의 흐름, 서버의 글)와 「사람」(인스턴스마다 묶은 사람들 — 이름 또는 가명 · person · 세션, 고른 사람의 state 줄 · 그 사람의 길만 움직이는 그림 · 그 사람의 일생). 이름 · 가명 · 세션 · 인스턴스로 찾고 person 으로 거른다. `?from=` 으로 여러 Monitor, `#people` 이면 사람 보기로 | `src/apps/main/monitor-page.ts` |
-| ☑ | 사람의 칸 — 단계를 부른 자리가 계정을 넘기면 Monitor 가 가명(who)으로 바꾼다. 로그인(2 의 2 · 4 · 5) · 입장(3 의 2 · 6 · 9 · 14) | Api · Fleet · Monitor |
-| ☑ | 사람의 state(person) — login(2 의 5) · pending(3 의 9), 호스트의 status 에서 접속한 계정이 늘면 active · 줄면 grace(4 의 3), 호스트가 끝나면 gone(4 의 5) | Api · Shard |
+| ☑ | 사람의 칸 — 단계를 부른 자리가 계정(Account.id)을 넘기면 Monitor 가 가명(who)으로 바꾼다. 로그인(2) · 캐릭터(8) · 입장 · 접속 · 끊김(3 · 9 · 11 의 세션 단계 — name · session 도). 게이트웨이 · 노드의 단계는 사람을 싣지 않고 같은 run 으로 잇는다 | Api · 세션 모듈 · Monitor |
+| ☑ | 사람의 state(person) — login(2 의 5) · queued(3 의 20) · pending(3 의 7 · 11 의 6 · 5 의 14) · active(9 의 8) · grace(11 의 2) · gone(11 의 4 · 5 의 13) | Api · 세션 모듈 |
 | ☑ | 단계마다의 흔적 — 흐름 1(1 · 2 · 3 · 7) · 2(1 · 2 · 4 · 5) · 3(1 · 2 · 6 · 9 · 11 · 14 ~ 19) · 4(1 ~ 5) · 5(1 · 3 · 12) · 6(1 · 4 · 5) · 7(4 · 10) | Service · Api · Fleet · Shard · Operator |
 | ☑ | 색인이 코드의 흔적 `(흐름, #)` 이 흐름의 표에 있는가를 본다 | `npm run index` |
 | ☑ | `/health` 는 Api 에서 Monitor 로 옮겼다 | |
@@ -27,10 +27,6 @@
 
 | 단계 | 지금 하는 코드 | 옮길 plan |
 |---|---|---|
-| 3 의 6 Placer.pick | `Fleet.enter` | 05 |
-| 3 의 8 Gates.pick | `Fleet.enter`(게이트웨이 하나 — gateUrl) | 05 |
-| 9 의 3 Sessions.get · 9 의 8 Sessions.activate | `Fleet.attach`(입장한 계정의 표) | 05 |
-| 11 의 2 Sessions.suspend | `Fleet.detach`(유예 없음) | 05 |
 | 3 의 11 · 19 Registry.put | `Shard.boot` | 07 |
 | 3 의 17 · 5 의 1 Console.command | `Shard.boot` · `Fleet.tick` | 07 |
 | 4 의 3 Runner.line · 4 의 5 Runner.exited | `Shard.line` · `Shard.exited` | 07 |
@@ -39,11 +35,10 @@
 | 5 의 3 Backuper.backup | `Fleet.tick`(SnapshotStore.copy — 내려가 올린 세계만) | 07 |
 | 7 의 5 Backuper.upload | `Shard.exited` → `Fleet`(SnapshotStore.push — 백업은 5 의 3 이 다음 주기에) | 07 |
 | 6 의 4 (명령의 개념) | `Operator` | 08 |
-| session | 입장의 run — 설계는 Session.id | 05 |
 
 ## 덧붙임
 
-- 세션은 세션 모듈(plan 05) 전이라 입장의 run 을 그 사람의 세션으로 싣는다(3 의 9). active · grace 는 흐름 9 의 8 · 흐름 11 의 2 가 서기 전이라 노드가 본 사실(흐름 4 의 3)로만 — grace 의 유예와 gone(흐름 11 의 4)은 plan 04 · 05 가 선다. 캐릭터 이름(name)은 캐릭터(plan 05)가 서면 싣는다 — 지금 관측 페이지의 사람은 가명으로만 보인다.
+- 사람의 세션은 Session.id, 이름은 Character.name 이다(plan 05). 노드가 본 사실(흐름 4 의 3 의 사람 수)은 사람을 싣지 않는다 — 노드는 캐릭터만 알고 계정을 모른다.
 - 개발의 main 은 프로세스 넷을 한 프로세스에 조립한다 — 관측 페이지는 그래도 넷을 따로 그리고(「main 에 조립」), 흔적이 하나도 놓이지 않는 프로세스(지금은 gateway)는 점선 상자다.
 
 ## 직관 확인
