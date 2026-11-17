@@ -121,7 +121,7 @@ describe('Monitor.map — 관측의 지도', () => {
     const map = readMap(DESIGN, SRC);
     expect(map.plans.map((p) => p.id)).toEqual(['01', '02', '03', '04', '05', '06', '07', '08']);
     expect(map.plans[0]).toMatchObject({ name: '세계 하나', file: '01-one-world.md', state: 'done' });
-    expect(map.plans.find((p) => p.id === '06')!.where).toBe('proto');
+    expect(map.plans.find((p) => p.id === '06')).toMatchObject({ where: 'proto · online', state: 'done' }); // 엔진에 서고 서비스가 핀해 베꼈다
     const open = new Set(map.plans.filter((p) => p.state !== 'done').map((p) => p.id));
     const loose = map.flows.flatMap((f) => f.steps.filter((s) => s.stand !== 'built' && (s.plan === null || !open.has(s.plan))).map((s) => `${f.flow}.${s.step}`));
     expect(loose).toEqual([]); // 서지 않은 단계마다 갈 곳이 있다

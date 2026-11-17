@@ -1,7 +1,8 @@
 // 진짜 엔진 위의 조립 — engine/(npm run engine) 또는 ENGINE_DIR 이 있을 때만 돈다. 없으면 건너뛴다.
 // plan 01 의 직관 확인: 서비스가 낸 토큰으로 Host 2 를 보내면 open(그 캐릭터의 사람의 묶음), 이름 글은 4002.
 // 세 계정이 캐릭터를 만들어 고르고 같은 세계에 붙어 각자의 묶음을 받는다(엔진의 --party — 엔진에게는 캐릭터가 계정이다).
-// 한 계정의 캐릭터 둘은 엔진에게 다른 계정 — 다른 묶음이다(plan 05). 내렸다 다시 띄우면 저장된 세계에서 이어가고 낳은 묶음도 그대로다.
+// 한 계정의 캐릭터 둘은 엔진에게 다른 계정 — 다른 묶음이다(plan 05). status 에 틱 지연, backup 이 통째의 사본과 끝 줄을 낸다(plan 06).
+// 내렸다 다시 띄우면 저장된 세계에서 이어가고 낳은 묶음도 그대로다.
 
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -111,6 +112,15 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     expect(other.bodies).toHaveLength(4);
     expect(new Set([...other.bodies!, ...opened.flatMap((o) => o.bodies)]).size).toBe(16);
     expect(await connect(at['gate']!, a.token)).toMatchObject({ bodies: null, code: 4002, why: '세션이 없다 — 먼저 입장' });
+
+    // 엔진의 면(plan 06) — status 의 꼬리는 틱 지연, backup 은 다음 창 끝의 저장을 통째로 베끼고 끝 줄을 찍는다(Probe.read 의 backed)
+    expect(world.lastStatus!.text).toMatch(/ · 지연 \d+$/);
+    expect(world.lag).toBe(world.lastStatus!.lag);
+    const copy = join(mkdtempSync(join(tmpdir(), 'svc-backup-')), 'b1');
+    expect(await world.command(`backup ${copy}`)).toBe(`backup — 다음 창 끝에 ${copy} 에 베낀다`);
+    for (let i = 0; i < 100 && world.backed === null; i++) await new Promise((r) => setTimeout(r, 50));
+    expect(world.backed).toMatchObject({ dir: copy, error: null });
+    expect(existsSync(join(copy, 'manifest.json'))).toBe(true); // 그 자체로 저장 자리 — 목록과 그것이 가리키는 파일
 
     await new Promise((r) => setTimeout(r, 1000)); // 몇 박자
     await s.stop();

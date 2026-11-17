@@ -9,7 +9,7 @@ import { freshRun } from './shard';
 import type { Shard } from './shard';
 
 const head = (s: Shard): string => {
-  const status = s.lastStatus === null ? '-' : `beats ${s.lastStatus.beats} · now ${s.lastStatus.now}`;
+  const status = s.lastStatus === null ? '-' : `beats ${s.lastStatus.beats} · now ${s.lastStatus.now} · 지연 ${s.lag}`;
   return `${s.name} · ${s.state} · port ${s.row.port ?? '-'} · ${status} · 사람 ${s.players}${s.why === null ? '' : ` · ${s.why}`}`;
 };
 

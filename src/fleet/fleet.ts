@@ -224,7 +224,7 @@ export class Fleet {
     const run = freshRun();
     const ready = [...this.shards.values()].filter((s) => s.state === 'ready');
     const answers = await Promise.all(ready.map((s) => s.command('status')));
-    ready.forEach((s, i) => this.trace({ flow: 5, step: 1, run, unit: s.name, end: answers[i] === null ? 'failed' : 'ok', counts: { players: s.players, idle: s.idle } })); // Console.command 의 일 — status
+    ready.forEach((s, i) => this.trace({ flow: 5, step: 1, run, unit: s.name, end: answers[i] === null ? 'failed' : 'ok', counts: { players: s.players, idle: s.idle, lag: s.lag } })); // Console.command 의 일 — status(사람 수 · 지연)
     for (const s of ready) {
       if (s.state !== 'ready') continue;
       s.idle = s.players === 0 ? s.idle + 1 : 0;

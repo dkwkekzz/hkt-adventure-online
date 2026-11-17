@@ -67,6 +67,21 @@ describe('Probe.read · answers', () => {
     expect(Probe.answers('grant', 'beats 1 · now 1 · 돈다 · 접속 - · 명부 x')).toBe(false);
     expect(Probe.answers('nope', '모르는 명령 nope — …')).toBe(true);
   });
+
+  it('엔진의 면(plan 06) — status 의 지연 · 떠남 줄 · backup 끝 · 실패 · 건넴의 답', () => {
+    expect(Probe.read('beats 3 · now 9 · 돈다 · 접속 - · 명부 (비었다) · 지연 37')).toMatchObject({ kind: 'status', status: { lag: 37 } });
+    expect(Probe.read('beats 3 · now 9 · 돈다 · 접속 - · 명부 (비었다)')).toMatchObject({ kind: 'status', status: { lag: 0 } }); // 옛 호스트
+    expect(Probe.read('떠남 — pa1b2 → meadow@들머리')).toEqual({ kind: 'handoff', account: 'pa1b2', to: 'meadow@들머리' });
+    expect(Probe.read('떠남 — - → meadow')).toEqual({ kind: 'handoff', account: null, to: 'meadow' });
+    expect(Probe.read('backup 끝 — /tmp/b 1 · now 120')).toEqual({ kind: 'backed', dir: '/tmp/b 1', now: 120, error: null });
+    expect(Probe.read('backup 실패 — /tmp/b · EACCES')).toEqual({ kind: 'backed', dir: '/tmp/b', now: null, error: 'EACCES' });
+    expect(Probe.answers('backup', 'backup — 다음 창 끝에 /tmp/b 에 베낀다')).toBe(true);
+    expect(Probe.answers('backup', 'backup <dir>')).toBe(true);
+    expect(Probe.answers('backup', 'backup 끝 — /tmp/b · now 3')).toBe(false); // 끝 줄은 답이 아니다
+    expect(Probe.answers('load', 'load — pa1 의 묶음 fairy-1(3), 41')).toBe(true);
+    expect(Probe.answers('unload', 'unload 거절 — 맡은 묶음이 없다')).toBe(true);
+    expect(Probe.answers('keep', 'keep — 2 묶음')).toBe(true);
+  });
 });
 
 describe('Fleet.launch — 흐름 3 의 B', () => {
@@ -89,7 +104,7 @@ describe('Fleet.launch — 흐름 3 의 B', () => {
     expect(seen.key).toBe('the-key');
     expect(seen.port).toBeNull(); // 서비스의 PORT 는 새지 않는다
     expect(seen.argv).toEqual(['dataset/world.json', '--port', String(port), '--store', shard.store, '--beat', '200', '--sparse', '10', '--party', 'lead-1']);
-    expect(await shard.command('status')).toMatch(/^beats \d+ · now \d+ · 돈다 · 접속 .* · 명부 b1→npc b2→npc$/); // NPC 묶음은 주소를 답하기 전에 묶였다
+    expect(await shard.command('status')).toMatch(/^beats \d+ · now \d+ · 돈다 · 접속 .* · 명부 b1→npc b2→npc · 지연 0$/); // NPC 묶음은 주소를 답하기 전에 묶였다
     let text = '';
     for (let i = 0; i < 50 && !text.includes('접속 npc('); i++) {
       await new Promise((r) => setTimeout(r, 50)); // NPC 에이전트가 붙는다
@@ -311,5 +326,32 @@ describe('Shard.line · exited — 노드가 본 사람 수 (흐름 4 의 3 · 5
     await world(fleet).stop();
     expect(traces.find((t) => t.flow === 4 && t.step === 5)).toMatchObject({ state: 'stopped', counts: { players: 0 } });
     expect(traces.some((t) => t.account !== undefined || t.person !== undefined)).toBe(false);
+  });
+
+  it('지연이 바뀐 status · 떠남 줄 · backup 끝은 4 의 1 ~ 3 — 지연은 인스턴스의 counts 에(5 의 1 도)', async () => {
+    const { fleet, traces, config, log } = await up();
+    await fleet.launch('main');
+    const shard = world(fleet);
+    expect(await shard.command('status')).toMatch(/ · 지연 0$/);
+    expect(shard.lag).toBe(0);
+    shard.host!.write('lag 42'); // 시험의 손 — 가짜 엔진의 지연
+    expect(await shard.command('status')).toMatch(/ · 지연 42$/);
+    expect(shard.lag).toBe(42);
+    expect(traces.find((t) => t.flow === 4 && t.step === 3 && t.counts?.['lag'] === 42)).toMatchObject({ unit: 'main', end: 'ok', counts: { players: 0, lag: 42 } });
+    await fleet.tick();
+    expect(traces.filter((t) => t.flow === 5 && t.step === 1).at(-1)).toMatchObject({ unit: 'main', counts: { lag: 42 } });
+
+    shard.host!.write('depart p1 meadow@들머리');
+    await until(() => shard.departed !== null);
+    expect(shard.departed).toEqual({ account: 'p1', to: 'meadow@들머리' });
+    expect(traces.filter((t) => t.flow === 4 && t.step === 3).at(-1)).toMatchObject({ end: 'ok', counts: { departed: 1 } });
+    expect(log.some((l) => l.includes('떠남 — p1 → meadow@들머리'))).toBe(true);
+
+    const dir = join(mkdtempSync(join(tmpdir(), 'bk-')), 'b1');
+    expect(await shard.command(`backup ${dir}`)).toBe(`backup — 다음 창 끝에 ${dir} 에 베낀다`);
+    await until(() => shard.backed !== null);
+    expect(shard.backed).toMatchObject({ dir, error: null });
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(true);
+    expect(traces.filter((t) => t.flow === 4 && t.step === 3).at(-1)).toMatchObject({ end: 'ok', counts: { backup: shard.backed!.now! } });
   });
 });

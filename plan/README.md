@@ -8,7 +8,7 @@ src 는 ☑ 까지의 모양이다. 지금의 design(존 × 인스턴스 · 프�
 관측: plan 마다 「관측에 보일 것」이 있다. 닫기 전에 그것을 관측 페이지의 서버 · 사람 보기에서 찍어 보인다(`npm run shot -- --viewer off --monitor http://localhost:8001`). 관측 페이지가 지금의 src 를 실제보다 좋게 보이면 그것도 그 바퀴에서 고친다.
 
 엔진 쪽 일(어디 = proto)은 엔진 저장소에 PR 로 들고, 들어간 커밋을 `engine.lock` 에 핀한다.
-지금의 핀은 엔진 PR dkwkekzz/hkt-adventure-proto#140(엔진 plan 259 Gate · 260 사람의 묶음 · ONLINE.md — 엔진의 main 위)의 커밋이다. 그것이 엔진의 main 에 들어가면 `engine.lock` 을 main 의 그 커밋으로 옮긴다.
+지금의 핀은 엔진 main 의 커밋이다 — 엔진 plan 259 Gate · 260 사람의 묶음과 plan 06 의 면(267 통째 저장 · backup, 268 건넴, 269 떠남 · 지연, 270 뷰어의 다시 열림 · `?exit=`)이 든다.
 
 | plan | 어디 | 세우는 것 | 흐름 | 상태 |
 |---|---|---|---|---|
@@ -17,6 +17,6 @@ src 는 ☑ 까지의 모양이다. 지금의 design(존 × 인스턴스 · 프�
 | [03 스토리지](03-storage.md) | online | Database · CharacterStore · Leases · LeaderLock · SnapshotStore 의 뒤를 MongoDB · object storage 로 | 1 · 5 · 7 | ☑ |
 | [04 게이트웨이](04-gateway.md) | online | 게이트웨이 모듈 — 클라이언트가 주소 하나로 붙는다 | 9 · 11 | ☑ |
 | [05 세션 · 캐릭터](05-session-character.md) | online | 세션 모듈과 계정의 캐릭터 · 차단 — 입장이 세션 · 대기열을 거친다 | 2 · 3 의 A · 5 · 8 | ☑ |
-| [06 엔진의 면](06-engine-faces.md) | proto | 통째 저장 · backup, handoff · load · unload · keep, 떠남 줄 · 지연, 뷰어의 다시 열림 · `?exit=` | (엔진) | ☐ |
+| [06 엔진의 면](06-engine-faces.md) | proto · online | 통째 저장 · backup, handoff · load · unload · keep, 떠남 줄 · 지연, 뷰어의 다시 열림 · `?exit=` — 엔진에 서고 서비스가 핀해 베낀다 | (엔진) · 4 | ☑ |
 | [07 인스턴스 여럿](07-instances.md) | online | 캐릭터의 값(Loader · Leases · CharacterStore)과 한 존의 인스턴스 여럿(Registry · Scheduler · Scaler · Recoverer · Mover · Router) | 1 · 3 의 B · 5 · 7 · 9 · 10 · 12 | ☐ |
 | [08 프로세스 넷](08-processes.md) | online | 노드(Runner · NodeReporter · Nodes · Reconciler)와 NodeRpc, 운영자의 토큰 · audit, Elector — 프로세스 넷으로 갈라 띄운다 | 1 · 5 · 6 · 7 · 13 · 14 | ☐ |

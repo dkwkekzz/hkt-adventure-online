@@ -3,6 +3,8 @@
 //          접속은 http GET /join?account=이름 을 열어 둔 동안 — status 의 접속 칸에 든다. stop · SIGINT 면 <store>/snapshot.json 에 now 를 쓰고 멈춤 — … · exit 0
 //          WebSocket 도 받는다(Link) — 첫 글 `Host 2` 의 자격이 `hkt1.<계정>.…` 이면 Link 1 열림(서명은 보지 않는다), 아니면 거절 · 4002. Link 3 은 Link 2 로 되돌린다
 //          데이터셋 이름에 refuse 가 있으면 데이터셋 거부 — exit 2. silent 가 있으면 머리글을 찍지 않는다. nogrant 가 있으면 grant 에 모르는 명령으로 답한다
+//          status 의 꼬리는 ` · 지연 N` — N 은 stdin 의 `lag N`(시험의 손, 엔진에 없는 말)으로 바꾼다. 기본 0
+//          backup <dir> 은 답 뒤 다음 박자에 <dir>/snapshot.json 을 쓰고 `backup 끝 — <dir> · now N`. 시험의 손 `depart <account> <to>` 는 떠남 줄 하나를 찍는다
 //   agent: --url 의 포트로 /join?account=<--account> 를 열고, 닫히면 exit 0
 import { createServer, get } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -41,6 +43,8 @@ if (entry === 'apps/agent/main.ts') {
   let beats = 0;
   const links = new Map(); // account → res
   const grants = [];
+  let lag = 0;
+  const backups = []; // 다음 박자에 베낄 자리
   const server = createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (u.pathname !== '/join') return void res.end('page');
@@ -76,8 +80,17 @@ if (entry === 'apps/agent/main.ts') {
   const tick = setInterval(() => {
     beats++;
     now++;
+    for (const dir of backups.splice(0)) {
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'snapshot.json'), JSON.stringify({ now }));
+        console.log(`backup 끝 — ${dir} · now ${now}`);
+      } catch (e) {
+        console.log(`backup 실패 — ${dir} · ${e.message}`);
+      }
+    }
   }, 20);
-  const status = () => `beats ${beats} · now ${now} · 돈다 · 접속 ${[...links.keys()].map((a) => `${a}(b1, b2)`).join(' ') || '-'} · 명부 ${grants.join(' ') || '(비었다)'}`;
+  const status = () => `beats ${beats} · now ${now} · 돈다 · 접속 ${[...links.keys()].map((a) => `${a}(b1, b2)`).join(' ') || '-'} · 명부 ${grants.join(' ') || '(비었다)'} · 지연 ${lag}`;
   let stopping = false;
   const stop = () => {
     if (stopping) return;
@@ -95,7 +108,7 @@ if (entry === 'apps/agent/main.ts') {
     console.log(now > 0 ? `저장된 세계에서 이어간다 — now ${now}` : '새 세계');
     console.log(status());
     console.log(`자격: ${process.env.HOST_AUTH_KEY ? '서명된 토큰(HOST_AUTH_KEY)' : '이름 글(더미)'}`);
-    console.log('명령: pause · resume · save · step · stop · grant <account> <body> · revoke <body> · status  (body 는 번호 또는 이름)');
+    console.log('명령: pause · resume · save · backup <dir> · step · stop · grant <account> <body> · revoke <body> · load <account> [공간] · unload <account> · keep [account] · status  (body 는 번호 또는 이름)');
   });
   createInterface({ input: process.stdin }).on('line', (line) => {
     const [name, ...rest] = line.trim().split(/\s+/);
@@ -110,6 +123,16 @@ if (entry === 'apps/agent/main.ts') {
       }
     }
     else if (name === 'save') console.log('save — 다음 창 끝에 저장한다');
+    else if (name === 'backup') {
+      const dir = rest.join(' ');
+      if (dir === '') console.log('backup <dir>');
+      else {
+        backups.push(dir);
+        console.log(`backup — 다음 창 끝에 ${dir} 에 베낀다`);
+      }
+    }
+    else if (name === 'lag') lag = Number(rest[0] ?? 0); // 시험의 손 — 답하지 않는다
+    else if (name === 'depart') console.log(`떠남 — ${rest[0] ?? '-'} → ${rest[1] ?? ''}`); // 시험의 손 — 규칙 depart 대신
     else if (name === 'mute') {} // 답하지 않는다 — 한계 시험
     else console.log(`모르는 명령 ${name} — pause · resume · save · step · stop · grant · revoke · status`);
   });

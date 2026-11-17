@@ -57,6 +57,12 @@ export class Shard {
   lastStatus: StatusLine | null = null;
   players = 0;
   linked: readonly string[] = []; // 지난 status 의 접속한 계정 — NPC 계정 밖
+  /** 틱 지연(ms) — 지난 status 의 꼬리(` · 지연 N`). 지난 창이 박자를 넘긴 만큼, 넘기지 않았으면 0. */
+  lag = 0;
+  /** 지난 떠남 줄 — 컨트롤 플레인에 알리는 길(흐름 10)이 서기 전에는 적어 두고 기록만 한다. */
+  departed: { readonly account: string | null; readonly to: string } | null = null;
+  /** 지난 backup 끝 줄 — 엔진이 다음 창 끝의 저장을 베낀 자리와 그 now(실패면 error). */
+  backed: { readonly dir: string; readonly now: number | null; readonly error: string | null } | null = null;
   idle = 0;
   restarts = 0;
   agentRestarts = 0;
@@ -130,6 +136,7 @@ export class Shard {
     this.resumed = false;
     this.lastStatus = null;
     this.players = 0;
+    this.lag = 0;
     this.idle = 0;
     this.agentRestarts = 0;
     this.listening = false;
@@ -215,7 +222,8 @@ export class Shard {
   }
 
   /**
-   * line — 흐름 4 의 1 ~ 3. 흔적은 알아본 줄(준비됨 · 멈춤 · 명령의 답)과 사람 수를 바꾼 status 에만 남긴다 — 박자마다 오는 같은 줄은 남기지 않는다(흐름 14 규칙).
+   * line — 흐름 4 의 1 ~ 3. 흔적은 알아본 줄(준비됨 · 멈춤 · 명령의 답 · 떠남 · backup 끝)과 사람 수 · 틱 지연을 바꾼 status 에만 남긴다
+   * — 같은 줄이 되풀이되면 남기지 않는다(흐름 14 규칙). 떠남은 컨트롤 플레인에 알리는 길(흐름 10 — plan 07)이 서기 전이라 적고 기록만 한다.
    */
   line(which: 'host' | 'agent', stream: Stream, text: string): void {
     if (which !== 'host') return;
@@ -225,19 +233,29 @@ export class Shard {
       return;
     }
     const read = Probe.read(text);
-    const before = this.players;
+    const before = { players: this.players, lag: this.lag };
     if (read.kind === 'status') {
       this.lastStatus = read.status;
       this.linked = read.accounts.filter((a) => a !== this.ctx.npc.account);
       this.players = this.linked.length;
-    } else if (text.trim() !== '') this.ctx.log(`${this.name} host ${text}`); // status 는 박자마다 온다 — 기록하지 않는다
+      this.lag = read.status.lag;
+    } else if (text.trim() !== '') this.ctx.log(`${this.name} host ${text}`); // status 는 묻는 때마다 온다 — 기록하지 않는다
+    if (read.kind === 'handoff') this.departed = { account: read.account, to: read.to };
+    if (read.kind === 'backed') this.backed = { dir: read.dir, now: read.now, error: read.error };
     const head = this.waiting[0];
     const answer = read.kind !== 'ready' && this.listening && head !== undefined && Probe.answers(head.command, text);
-    if (read.kind === 'ready' || read.kind === 'halt' || answer || (read.kind === 'status' && this.players !== before)) {
+    const changed = read.kind === 'status' && (this.players !== before.players || this.lag !== before.lag);
+    if (read.kind === 'ready' || read.kind === 'halt' || read.kind === 'handoff' || read.kind === 'backed' || answer || changed) {
       const run = freshRun();
       this.mark(4, 1, run, 'ok'); // Process.onLine
       this.mark(4, 2, run, 'ok'); // Probe.read
-      this.mark(4, 3, run, 'ok', read.kind === 'status' ? { counts: { players: this.players, beats: read.status.beats } } : {}); // Runner.line 의 일
+      // Runner.line 의 일 — status 면 사람 수 · 틱 지연, backup 끝이면 그 now, 떠남은 맡은 이가 있는가(사람은 싣지 않는다 — 노드는 캐릭터만 안다)
+      const counts: Record<string, number> | undefined =
+        read.kind === 'status' ? { players: this.players, beats: read.status.beats, lag: this.lag }
+        : read.kind === 'backed' && read.now !== null ? { backup: read.now }
+        : read.kind === 'handoff' ? { departed: read.account === null ? 0 : 1 }
+        : undefined;
+      this.mark(4, 3, run, read.kind === 'backed' && read.error !== null ? 'failed' : 'ok', counts === undefined ? {} : { counts });
     }
     if (read.kind === 'ready') {
       this.listening = true;
