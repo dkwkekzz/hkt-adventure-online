@@ -49,6 +49,8 @@ export function judgeImport(from: Layer, to: Layer): string | null {
  * 그리고 프로세스 사이의 소켓을 잇는 자리 — 개발의 main 에서는 함수 부름, 갈리면 내부망의 글의 받는 쪽이다: SessionRpc(session.enter · forget · attach · detach · report, gateway.reroute · kick),
  * NodeRpc(fleet.register · report · handoff · exited · load · unload · command, node.launch · stop · command · load · unload), 활성 컨트롤 플레인을 찾는 storage.leader.holder.
  * 그리고 Elector 가 부르는 컨트롤 플레인의 자리(fleet.reload · settled · settle · standby, session.settle — 흐름 13), 컨트롤 플레인의 Clock(fleet.start · session.tick), 노드의 시작 · 내림(node.start · close).
+ * 그리고 앱의 Operator(흐름 6)가 명령마다 부르는 개념 — fleet.nodes.list · get · live · cordon · uncordon, fleet.registry.all · get · drain · remove · reset, fleet.launch · stop · command · forgetNode,
+ * 답에 적는 fleet.scheduler.used · seen.get · zoneOf. 스토리지(audit · SnapshotStore · CharacterStore)와 세션 · 계정은 Operator 가 받은 소켓으로.
  * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned · ban · unban, directory.sweep, fleet.ready · launch · address,
  * session.count · recover · drain · handoff · reconcile, 운영자의 것 session.kick · evict · closeZone · openZone · playing).
  * gateway.listen · close 는 흐름 1 의 4 · 5 와 흐름 7 의 7 · 8, session.close 는 세션의 간격 — Service.start · stop 이 그 role 의 개념을 세우고 내린다.
@@ -58,7 +60,9 @@ export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
   characters: ['list', 'create', 'owner', 'remove'],
   banlist: ['banned', 'ban', 'unban'],
   signer: ['issue', 'verify'],
-  fleet: ['start', 'close', 'operator.command', 'ready', 'launch', 'address', 'load', 'unload', 'command', 'register', 'report', 'handoff', 'exited', 'reload', 'settled', 'settle', 'standby'],
+  fleet: ['start', 'close', 'ready', 'launch', 'address', 'load', 'unload', 'command', 'register', 'report', 'handoff', 'exited', 'reload', 'settled', 'settle', 'standby',
+    // Operator(흐름 6)가 명령마다 부르는 개념과 답에 적는 것
+    'nodes.list', 'nodes.get', 'nodes.live', 'nodes.cordon', 'nodes.uncordon', 'registry.all', 'registry.get', 'registry.drain', 'registry.remove', 'registry.reset', 'scheduler.used', 'seen.get', 'zoneOf', 'stop', 'forgetNode'],
   node: ['start', 'close', 'launch', 'stop', 'command', 'load', 'unload'],
   session: ['enter', 'forget', 'attach', 'detach', 'report', 'handoff', 'drain', 'recover', 'count', 'reconcile', 'settle', 'tick', 'kick', 'evict', 'closeZone', 'openZone', 'playing', 'close'],
   storage: ['close', 'leader.holder'],

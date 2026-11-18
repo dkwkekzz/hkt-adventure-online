@@ -2,12 +2,12 @@
 // start 는 흐름 3 의 B(13 ~ 18), line · exited 는 흐름 4, stop 은 흐름 7 의 4. 노드의 반이다 — 줄(Registry)은 모른다. 끝은 컨트롤 플레인에 알린다(NodeRpc exited · handoff).
 // 호스트는 건넴 자리(spool/<인스턴스>)를 든다 — 사람의 묶음은 Loader 가 load 로 맡긴 것만 선다(엔진의 --handoff).
 
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXIT_REFUSED, RESUMED_HEAD } from '../protocol/engine';
 import type { StatusLine } from '../protocol/engine';
 import type { TraceEnd, TraceFn } from '../protocol/observe';
+import { freshRun } from '../protocol/observe';
 import type { Console } from './console';
 import type { Ports } from './ports';
 import { Probe } from './probe';
@@ -15,7 +15,6 @@ import type { Process, Stream } from './process';
 import { Spawner } from './spawner';
 
 /** 새 run 의 이름 — 흐름 하나의 실행을 묶는다(흐름 14). */
-export const freshRun = (): string => randomBytes(4).toString('hex');
 
 /** 띄울 것 — 인스턴스 하나의 이름 · 세대와 그 존의 데이터셋 · NPC 묶음(설정). */
 export interface Spec {
@@ -58,7 +57,7 @@ export interface RunnerContext {
   readonly trace: TraceFn;
 }
 
-/** 서버 하나 — Runner.servers 의 값(fleet.md 의 Runner 의 데이터 줄). */
+/** 서버 하나 — Runner.servers 의 값(node.md 의 Runner 의 데이터 Server). */
 export class Server {
   readonly name: string;
   readonly epoch: number;
@@ -74,8 +73,10 @@ export class Server {
   /** 지난 status 의 접속한 캐릭터들 — NPC 계정 밖 */
   linked: readonly string[] = [];
   lag = 0;
-  /** 사람 없이 지난 Clock 의 수 — Scaler 가 본다 */
+  /** 사람도 로드된 캐릭터도 없이 지난 Clock 의 수 — Scaler 가 본다 */
   idle = 0;
+  /** status 의 답이 잇달아 없은 수 — 셋이면 멈춘 것이다 */
+  silent = 0;
   /** 마지막 시작이 저장된 세계에서 이어갔는가 */
   resumed = false;
   why: string | null = null;
@@ -101,6 +102,9 @@ export class Server {
     return this.linked.length;
   }
 }
+
+/** status 의 답이 잇달아 이만큼 없으면 멈춘 호스트다(흐름 5 의 1). */
+const SILENT_LIMIT = 3;
 
 export class Runner {
   // 데이터 — servers(인스턴스 이름 → 서버) · spool(이 서버의 디렉터리)
@@ -332,6 +336,22 @@ export class Runner {
       const i = server.backups.findIndex((b) => b.dir === read.dir);
       if (i >= 0) server.backups.splice(i, 1)[0]!.resolve({ now: read.now, error: read.error });
     }
+  }
+
+  /**
+   * status — 흐름 5 의 1 의 답을 적는다(Console.command 의 status). 답이 잇달아 셋 없으면 멈춘 것이라 호스트를 끝낸다(⇒ 흐름 4 → 12).
+   * 사람도 로드된 캐릭터도 없으면 쉰 셈을 올린다. 답이 없었으면 true.
+   */
+  status(name: string, answered: boolean, loaded: number): boolean {
+    const server = this.servers.get(name);
+    if (server === undefined) return !answered;
+    server.silent = answered ? 0 : server.silent + 1;
+    server.idle = server.players === 0 && loaded === 0 ? server.idle + 1 : 0;
+    if (server.silent >= SILENT_LIMIT) {
+      this.ctx.log(`${name} fleet status 의 답이 ${server.silent} 번 잇달아 없다 — 멈춘 것이다, 끝낸다`);
+      server.host?.kill('SIGKILL'); // ⇒ 흐름 4 → 12
+    }
+    return !answered;
   }
 
   /** backed — 그 호스트가 `backup <dir>` 의 끝 줄을 찍기를 기다린다(Backuper.backup). 한계 안에 없거나 호스트가 끝나면 error. */

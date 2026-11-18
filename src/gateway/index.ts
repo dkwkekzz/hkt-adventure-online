@@ -2,21 +2,20 @@
 // 토큰은 앱이 준 verify 로만, 컨트롤 플레인에는 앱이 준 attach · detach · report(SessionRpc)로만 닿는다.
 // 간격(흐름 5 의 B — Keepalive.ping · GateReporter.report)은 여기서 돈다: Clock 은 플릿 · 노드 모듈의 개념이라 모듈 경계 안에 같은 간격을 든다.
 
-import { randomBytes } from 'node:crypto';
 import type { GatewayOptions, GatewaySocket } from '../protocol/gateway';
 import { Acceptor } from './acceptor';
 import { GateReporter } from './gate-reporter';
 import { Keepalive } from './keepalive';
 import { RateLimiter } from './rate-limiter';
+import { freshRun } from '../protocol/observe';
 
-const fresh = (): string => randomBytes(4).toString('hex');
 
 /** Service.start(흐름 1 의 1) — 개념들을 만든다. 듣는 것은 listen. */
 export function openGateway(o: GatewayOptions): GatewaySocket {
   const c = o.config;
   const limiter = new RateLimiter(c);
   const keepalive = new Keepalive(c.pongMs);
-  const acceptor = new Acceptor({ gate: o.name, verify: o.verify, attach: o.attach, detach: o.detach, limiter, helloMs: c.helloMs, rerouteMs: c.rerouteMs, trace: o.trace, log: o.log, fresh });
+  const acceptor = new Acceptor({ gate: o.name, verify: o.verify, attach: o.attach, detach: o.detach, limiter, helloMs: c.helloMs, rerouteMs: c.rerouteMs, trace: o.trace, log: o.log, fresh: freshRun });
   let reporter: GateReporter | null = null;
   let timer: NodeJS.Timeout | null = null;
   let port = 0;
@@ -26,7 +25,7 @@ export function openGateway(o: GatewayOptions): GatewaySocket {
     o.trace({ flow, step, run, unit: '-', end: 'ok', counts: { connections: r.connections.length, dropped: limiter.dropped } });
   };
   const tick = (): void => {
-    const run = fresh();
+    const run = freshRun();
     let closed = 0;
     for (const conn of [...acceptor.connections.values()]) if (!keepalive.ping(conn)) closed++;
     o.trace({ flow: 5, step: 5, run, unit: '-', end: 'ok', counts: { connections: acceptor.connections.size, closed } }); // Keepalive.ping

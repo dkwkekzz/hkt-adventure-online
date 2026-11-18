@@ -72,5 +72,5 @@ export interface ControlSocket {
   /** 호스트의 떠남 줄 — 흐름 4 → 10 */
   handoff(instance: string, character: string, to: string, run: string): void;
   /** 호스트가 끝났다 — 흐름 4 의 5. stopped 면 내림(흐름 7 의 6), 아니면 흐름 12 */
-  exited(instance: string, epoch: number, code: number, stopped: boolean, run: string): void;
+  exited(instance: string, epoch: number, code: number, stopped: boolean, run: string): void | Promise<void>;
 }

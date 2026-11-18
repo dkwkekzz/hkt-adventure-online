@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       if (line.trim() === '') return;
       if (token === null) return void console.log('OPERATOR_KEY 가 없다 — 운영자의 명령은 받지 않는다');
       if (service.elector?.role === 'standby') return void console.log('대기의 컨트롤 플레인이다 — 활성의 콘솔에(흐름 13)');
-      void service.fleet!.operator.command(token, line).then((answer) => answer !== '' && console.log(answer));
+      void service.operator!.command(token, line).then((answer) => answer !== '' && console.log(answer));
     });
   }
   const quit = (): void => {

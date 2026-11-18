@@ -25,8 +25,8 @@
 ## 개념
 
 ### Runner
-- 데이터: servers:map<인스턴스 이름, {host:Process, agent:Process, state, loaded:set<Character.id>, linked:set<Character.id>, lag:int}> · spool(이 서버의 디렉터리 — 프로세스의 pid 와 캐릭터 파일).
-- 기능: start(spec) 은 흐름 3 의 B — Store 를 받고 포트를 받아 호스트를 띄우고 NPC 묶음을 묶고 에이전트를 띄운다. stop(instance) 은 호스트에 `stop` 을 쓰고 끝나기를 기다린다(한계를 넘기면 신호로). line(instance, 줄) · exited(instance, code) 는 흐름 4. reap 는 지난 실행이 남긴 프로세스를 끝낸다.
+- 데이터: servers:map<인스턴스 이름, Server{host:Process, agent:Process, state, epoch, port, store(Store 자리), linked:list<Character.id>(접속한 캐릭터), lag:int, idle:int(사람도 로드도 없이 지난 Clock), silent:int(status 의 답이 잇달아 없은 수)}> · spool(이 서버의 디렉터리 — 프로세스의 pid 와 캐릭터 파일).
+- 기능: start(spec) 은 흐름 3 의 B — Store 를 받고 포트를 받아 호스트를 띄우고 NPC 묶음을 묶고 에이전트를 띄운다. stop(instance) 은 호스트에 `stop` 을 쓰고 끝나기를 기다린다(한계를 넘기면 신호로). line(instance, 줄) · exited(instance, code) 는 흐름 4. status(instance, 답, loaded) 는 흐름 5 의 1 의 답을 적는다 — 답이 잇달아 셋 없으면 멈춘 것이라 호스트를 끝내고(⇒ 흐름 4 → 12), 사람도 로드된 캐릭터도 없으면 쉰 셈을 올린다. backed(instance, dir) 는 호스트가 `backup <dir>` 의 끝 줄을 찍기를 기다린다(Backuper.backup). reap 는 지난 실행이 남긴 프로세스를 끝낸다.
 - 생애: Service.start 가 만든다.
 
 ### Spawner

@@ -1,11 +1,11 @@
-// Probe.read · NodeAgent.start(Runner.reap · Loader.recover) · bundleViewer · Loader.load · unload · save · Runner.line
+// Probe.read · NodeAgent.start(Runner.reap · Loader.recover) · Spawner.bundle · Loader.load · unload · save · Runner.line
 // (흐름 1 의 2 · 7 ~ 11 · 4 의 1 ~ 3 · 5 의 2 · 9 의 5 ~ 7 · 10 의 5 ~ 7) — 가짜 엔진 위에서. 컨트롤 플레인은 플릿 모듈의 시험의 세움(harness)으로.
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bundleViewer } from '..';
+import { Spawner } from '..';
 import { Probe } from '../probe';
 import { ZONES, closeAll, nodeOn, onClose, server, steps, store, up } from '../../fleet/tests/harness';
 import { fakeEngine, join_, portRange, until } from './fake';
@@ -46,13 +46,17 @@ describe('Probe.read · answers', () => {
 });
 
 
-describe('bundleViewer · NodeAgent.start — 흐름 1 의 2 · 7 ~ 11', () => {
+describe('Spawner.bundle · NodeAgent.start — 흐름 1 의 2 · 7 ~ 11', () => {
   it('뷰어를 한 번 묶는다. 엔트리가 없으면 시작 거부', async () => {
-    const { config, traces } = await up();
-    await bundleViewer(config.engineDir, config.viewerOut, (t) => traces.push(t), 'r', () => {});
+    const { config } = await up();
+    expect(await Spawner.bundle(config.engineDir, config.viewerOut).exited).toBe(0);
     expect(readFileSync(config.viewerOut, 'utf8')).toContain('fake viewer');
     expect(existsSync(`${config.viewerOut}.map`)).toBe(true);
-    await expect(bundleViewer(fakeEngine({ viewer: false }), config.viewerOut, () => {}, 'r', () => {})).rejects.toThrow(/뷰어를 묶지 못했다 — exit 1 — .*Could not resolve/);
+    const bad = Spawner.bundle(fakeEngine({ viewer: false }), config.viewerOut);
+    const said: string[] = [];
+    bad.onLine((_s, line) => said.push(line));
+    expect(await bad.exited).toBe(1);
+    expect(said.join('\n')).toMatch(/Could not resolve/);
   });
 
   it('노드의 시작 — 엔진이 있는가 · 지난 실행이 남긴 프로세스를 끝낸다(reap) · 남은 캐릭터 파일을 저장한다(recover) · 컨트롤 플레인에 알린다', async () => {
@@ -148,5 +152,23 @@ describe('Runner.line — 노드가 본 것 (흐름 4 의 3)', () => {
     expect(existsSync(join(dir, 'snapshot.json'))).toBe(true);
     expect(traces.filter((t) => t.flow === 4 && t.step === 3).at(-1)).toMatchObject({ end: 'ok', counts: { backup: s.backed!.now! } });
     expect(traces.some((t) => t.account !== undefined || t.person !== undefined)).toBe(false);
+  });
+});
+
+describe('Runner.status — 흐름 5 의 1', () => {
+  it('status 의 답이 잇달아 셋 없으면 멈춘 것이라 호스트를 끝낸다(⇒ 흐름 4 → 12). 사람도 로드도 없으면 쉰 셈을 올린다', async () => {
+    const { fleet, node, moved } = await up();
+    await fleet.launch('main', 'b1');
+    const s = server(node);
+    expect(node.runner.status('main-1', true, 0)).toBe(false);
+    expect(s.idle).toBe(1);
+    expect(node.runner.status('main-1', true, 1)).toBe(false);
+    expect(s.idle).toBe(0); // 로드된 캐릭터가 있다
+    node.runner.status('main-1', false, 0);
+    node.runner.status('main-1', false, 0);
+    expect(s.silent).toBe(2);
+    expect(node.runner.status('main-1', false, 0)).toBe(true);
+    await until(() => moved.length === 1); // 호스트가 끝났다 ⇒ 흐름 12(사람을 다시 배정하게 한다)
+    await until(() => fleet.registry.get('main-1')?.epoch === 2 && fleet.registry.get('main-1')?.state === 'ready', 10_000); // 같은 이름으로 다시 섰다
   });
 });

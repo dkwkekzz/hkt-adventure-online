@@ -74,6 +74,16 @@ export class Registry {
     return this.all().filter((i) => i.zone === zone && i.state === 'ready' && !i.draining && i.port !== null);
   }
 
+  /** reset — 운영자가 보았다: 죽은 셈을 비우고, failed 면 stopped 로 — 다시 띄울 수 있다(흐름 6 의 start · restore). */
+  async reset(name: string): Promise<Instance | null> {
+    const i = this.rows.get(name);
+    if (i === undefined) return null;
+    i.restarts = 0;
+    if (i.state === 'failed') i.state = 'stopped';
+    await this.put(i);
+    return i;
+  }
+
   /** drain — 비우는 가운데 표시를 켜고 끈다(새 세션을 받지 않는다). */
   async drain(name: string, on: boolean): Promise<Instance | null> {
     const i = this.rows.get(name);

@@ -16,12 +16,12 @@ src/
   session/    세션 (design/02-roles/session.md) — Admission · ZoneMap · Zone · Placer · Sessions · Session · Queue · Gates · Mover(흐름 10 · 12 의 5) · Router(reroute · kick) · Reconciler(보고와 세션을 맞춘다 — 흐름 5 의 9 · 13 의 5). 밖에 내보내는 것은 openSession 하나 — 그 소켓이 SessionRpc 의 받는 쪽
               다른 모듈의 기능(Characters.owner · remove · Banlist.banned · 플릿의 ready · launch · address · load · unload · Signer.issue · 게이트웨이의 reroute · kick)은 앱이 준 함수. 간격은 컨트롤 플레인의 Clock 이 tick 으로 부른다
   fleet/      플릿 (design/02-roles/fleet.md) — 컨트롤 플레인에서 인스턴스를 어느 노드에 띄우고 지키고 내릴지 정한다. 밖에 내보내는 것은 Fleet 하나
-              (Registry · Instance · Nodes · Node · Scheduler · Scaler · Recoverer · Operator · Clock — NodeRpc 의 받는 쪽 ControlSocket). 노드에는 앱이 준 NodeSocket 으로만 닿는다.
+              (Registry · Instance · Nodes · Node · Scheduler · Scaler · Recoverer · Clock — NodeRpc 의 받는 쪽 ControlSocket). 운영자의 명령은 앱의 Operator 가 이 개념들을 부른다. 노드에는 앱이 준 NodeSocket 으로만 닿는다.
               세션에 주는 것은 ready · launch(흐름 3 의 B) · address · load · unload, 받는 것은 count · move · drain · handoff · reconcile · tick
-  node/       노드 (design/02-roles/node.md) — 서버 하나에서 인스턴스의 엔진 프로세스를 띄우고 내리고, 캐릭터의 값을 올리고 내린다. 밖에 내보내는 것은 NodeAgent 와 bundleViewer
+  node/       노드 (design/02-roles/node.md) — 서버 하나에서 인스턴스의 엔진 프로세스를 띄우고 내리고, 캐릭터의 값을 올리고 내린다. 밖에 내보내는 것은 NodeAgent 와 Spawner(API 서버가 뷰어를 묶는다 — 흐름 1 의 2)
               (Runner · Spawner · Process · Ports · Probe · Console · Loader · Backuper · NodeReporter · Clock — NodeRpc 의 받는 쪽 NodeSocket). 컨트롤 플레인에는 앱이 준 ControlSocket 으로만.
               엔진의 가짜(tests/fake · fixtures)는 여기 — 플릿 · 앱의 시험이 쓴다
-  apps/main/  서비스 프로세스 — Service(흐름 1 · 7, role 마다 그 role 의 개념을 세운다 — main · api · gateway · control · node) · rpc(내부망의 글 — POST /rpc/<이름> {args, run, term} · POST /operator) · Elector(흐름 13 — LeaderLock 과 term) · Api(http — GET / 게스트 페이지 · POST /login · /characters · /create · /choose · /delete · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
+  apps/main/  서비스 프로세스 — Service(흐름 1 · 7, role 마다 그 role 의 개념을 세운다 — main · api · gateway · control · node) · rpc(내부망의 글 — POST /rpc/<이름> {args, run, term} · POST /operator) · Elector(흐름 13 — LeaderLock 과 term) · Operator(흐름 6 — 명령마다 그 개념에) · Api(http — GET / 게스트 페이지 · POST /login · /characters · /create · /choose · /delete · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
               Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design 에서 뽑는 관측의 지도 — 프로세스 · 연결 · 개념이 사는 곳 · 흐름) · monitor-page(관측 페이지 — 구조의 그림)
   tools/      boundary(경계 검사) · index(설계 색인 · 코드의 흔적이 흐름에 있는가) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
@@ -56,10 +56,12 @@ service.config.json   서비스의 값 — 엔진 자리 · 존의 줄(zones —
  C. session/** 은 protocol/ 만 import 한다 — 계정 · 플릿 · 게이트웨이의 기능은 앱이 준 함수, 스토리지는 Storage 소켓(Database · CharacterStore)
     모듈의 tests/ 는 세움에 다른 모듈의 index.ts 를 쓸 수 있다. 두 모듈을 같이 세우는 조립 테스트는 apps/*/tests/ 에
  P. apps 는 모듈의 index.ts 만 import 하고, 모듈의 객체에 부르는 것은 흐름에서 Service · Api 가 부르는 단계뿐이다 —
-    directory.resolve · characters.list · create · owner · banlist.banned · signer.issue · signer.verify · fleet.start · fleet.close · fleet.operator.command · node.start · node.close · storage.close · gateway.listen · gateway.close · session.close
+    directory.resolve · characters.list · create · owner · banlist.banned · signer.issue · signer.verify · fleet.start · fleet.close · node.start · node.close · Spawner.bundle · storage.close · gateway.listen · gateway.close · session.close
     그리고 프로세스 사이의 소켓을 잇는 자리(main 에서는 함수 부름, 갈리면 내부망의 글의 받는 쪽) — SessionRpc 의 session.enter · forget · attach · detach · report, gateway.reroute · kick,
       NodeRpc 의 fleet.register · report · handoff · exited · load · unload · command 와 node.launch · stop · command · load · unload, 활성 컨트롤 플레인을 찾는 storage.leader.holder
     그리고 Elector(흐름 13)와 컨트롤 플레인의 Clock 의 자리 — fleet.reload · settled · settle · standby, session.settle · tick
+    그리고 앱의 Operator(흐름 6)가 명령마다 부르는 개념 — fleet.nodes.list · get · live · cordon · uncordon, fleet.registry.all · get · drain · remove · reset, fleet.launch · stop · command · forgetNode
+      (답에 적는 fleet.scheduler.used · seen.get · zoneOf). 스토리지 · 세션 · 계정의 것은 Operator 가 받은 소켓으로
     그리고 개념에 다른 모듈의 기능을 함수로 넘기는 자리(책임 문서가 「앱이 준다」고 적은 것) — characters.owner · remove, banlist.banned · ban · unban, directory.sweep, fleet.ready · launch · address,
       session.count · recover · drain · handoff · reconcile · kick · evict · closeZone · openZone · playing
  N. 모듈 · 앱 · protocol 의 코드(테스트 밖)와 design 의 책임 · 흐름 문서에 게임 명사가 없다

@@ -12,7 +12,8 @@ import { Console } from './console';
 import { Loader } from './loader';
 import { NodeReporter } from './node-reporter';
 import { Ports } from './ports';
-import { Runner, freshRun } from './runner';
+import { Runner } from './runner';
+import { freshRun } from '../protocol/observe';
 import { Spawner } from './spawner';
 
 /** 노드의 설정 — service.config.json 의 fleet 가운데 노드의 것. */
@@ -61,8 +62,6 @@ export class NodeAgent implements NodeSocket {
   private readonly control: ControlSocket;
   private readonly trace: TraceFn;
   private readonly log: (line: string) => void;
-  /** status 의 답이 잇달아 없은 수 */
-  private readonly silent = new Map<string, number>();
   /** 내리는 가운데의 인스턴스 — 호스트의 끝(올림)까지 */
   private readonly settling = new Map<string, { promise: Promise<void>; resolve: () => void }>();
   private closed: Promise<void> | null = null;
@@ -144,7 +143,6 @@ export class NodeAgent implements NodeSocket {
     if (this.reporter.closing) return { why: '노드가 내려가는 가운데다', refused: false, stopped: false };
     try {
       const port = await this.runner.start({ name: instance, epoch, dataset: spec.dataset, npc: spec.npc }, run);
-      this.silent.delete(instance);
       return { port };
     } catch (e) {
       return { why: (e as Error).message, refused: (e as { refused?: boolean }).refused === true, stopped: this.runner.get(instance)?.state === 'stopped' };
@@ -174,15 +172,9 @@ export class NodeAgent implements NodeSocket {
     const ready = [...this.runner.servers.values()].filter((s) => s.state === 'ready');
     const answers = await Promise.all(ready.map((s) => this.console.command(s.name, 'status')));
     ready.forEach((s, k) => {
-      const none = answers[k] === null;
-      const missed = none ? (this.silent.get(s.name) ?? 0) + 1 : 0;
-      this.silent.set(s.name, missed);
-      s.idle = s.players === 0 && this.loader.of(s.name).length === 0 ? s.idle + 1 : 0;
-      this.trace({ flow: 5, step: 1, run, unit: s.name, end: none ? 'failed' : 'ok', counts: { players: s.players, loaded: this.loader.of(s.name).length, idle: s.idle, lag: s.lag } }); // Console.command — status(사람 수 · 지연)
-      if (missed >= 3) {
-        this.log(`${s.name} fleet status 의 답이 ${missed} 번 잇달아 없다 — 멈춘 것이다, 끝낸다`);
-        s.host?.kill('SIGKILL'); // ⇒ 흐름 4 → 12
-      }
+      const loaded = this.loader.of(s.name).length;
+      const none = this.runner.status(s.name, answers[k] !== null, loaded); // Runner.status — 잇달아 없으면 끝낸다 · 쉰 셈
+      this.trace({ flow: 5, step: 1, run, unit: s.name, end: none ? 'failed' : 'ok', counts: { players: s.players, loaded, idle: s.idle, lag: s.lag } }); // Console.command — status(사람 수 · 지연)
     });
     for (const s of ready) await this.loader.save(s.name, run); // Loader.save — 흔적은 Loader 가
     if (this.config.backupEvery > 0 && this.ticks % this.config.backupEvery === 0) {
@@ -218,11 +210,10 @@ export class NodeAgent implements NodeSocket {
 
   /** 호스트가 끝났다(Runner.exited — 흐름 4 의 5). 내림이면 Store 를 올리고(흐름 7 의 5), 컨트롤 플레인에 알린다(NodeRpc exited). */
   private async exited(name: string, epoch: number, code: number, stopped: boolean, run: string): Promise<void> {
-    this.silent.delete(name);
     const server = this.runner.get(name);
     this.loader.forget(name); // 내림이면 남은 것은 7 의 3 이 내렸다, 죽음이면 lease 는 컨트롤 플레인이 끊는다(흐름 12 의 3)
     if (stopped && server?.store != null) await this.backuper.upload(name, server.store, epoch, run); // 흐름 7 의 5
-    this.control.exited(name, epoch, code, stopped, run); // NodeRpc exited ⇒ 7 의 6 또는 흐름 12
+    await this.control.exited(name, epoch, code, stopped, run); // NodeRpc exited ⇒ 7 의 6 또는 흐름 12 — 같은 프로세스면 줄을 적기까지
     const settle = this.settling.get(name);
     this.settling.delete(name);
     settle?.resolve();

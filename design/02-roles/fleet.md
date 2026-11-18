@@ -20,7 +20,7 @@
 
 ### Registry
 - 데이터: db(참조 — 표 `instances`: 이름 → Instance).
-- 기능: all 은 줄 전부. put(instance) 는 줄을 적는다. remove(instance) 는 내려간 인스턴스의 줄을 지운다. ready(zone) 은 그 존의 `ready` 이고 비우는 가운데가 아닌 인스턴스들. drain(instance, on) 은 비우는 가운데 표시를 켜고 끈다(새 세션을 받지 않는다).
+- 기능: all 은 줄 전부. put(instance) 는 줄을 적는다. remove(instance) 는 내려간 인스턴스의 줄을 지운다. ready(zone) 은 그 존의 `ready` 이고 비우는 가운데가 아닌 인스턴스들. drain(instance, on) 은 비우는 가운데 표시를 켜고 끈다(새 세션을 받지 않는다). reset(instance) 은 운영자가 본 인스턴스의 죽은 셈을 비우고, `failed` 면 `stopped` 로 둔다 — 다시 띄울 수 있다(흐름 6 의 start · restore).
 - 생애: Service.start 가 만든다.
 
 ### Instance
@@ -28,8 +28,8 @@
 - 기능: 없음. 인스턴스 하나 = 호스트 하나 = Store 자리 하나.
 
 ### Nodes
-- 데이터: rows:map<이름, Node> · db(참조 — 표 `nodes`: 이름 → cordoned).
-- 기능: register(node) 는 노드를 적는다. heartbeat(node, 보고) 는 보고가 온 때와 그 인스턴스들의 state · 사람 수 · 틱 지연을 적는다. dead() 는 보고가 한계(`reportLimitMs`)를 넘겨 끊긴 노드들. cordon(node) · uncordon(node) 는 그 노드에 새로 띄우지 않게 하고 푼다. list.
+- 데이터: rows:map<이름, Node> · db(참조 — 표 `nodes`: 이름 → cordoned) · registry(참조) · missing:map<인스턴스 이름, int>(보고에 잇달아 없던 수).
+- 기능: register(node) 는 노드를 적는다. heartbeat(보고) 는 보고가 온 때와 그 보고(인스턴스들의 state · 사람 수 · 틱 지연 · 로드된 캐릭터)를 적고 표와 맞춘다 — 표에 없는(세대가 다른) 인스턴스는 내릴 것으로, 표에서는 그 노드에서 `ready` 인데 보고에 잇달아 둘 없는 인스턴스는 죽은 것으로 준다(⇒ 흐름 12). 하나는 방금 띄운 것과 엇갈린 보고일 수 있다. dead() 는 보고가 한계(`reportLimitMs`)를 넘겨 끊긴 노드들 — 노드의 절반 넘게가 한꺼번에 끊겨 보이면 컨트롤 플레인 쪽 망을 의심해 판정하지 않고 그 노드들을 둔다(흐름 5 의 「실패하면」). cordon(node) · uncordon(node) 는 그 노드에 새로 띄우지 않게 하고 푼다. forget(node) 는 표에서 뺀다. list · live.
 - 생애: Service.start 가 만든다.
 
 ### Node

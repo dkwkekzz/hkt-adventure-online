@@ -225,8 +225,8 @@
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 ### Operator
-- 데이터: verify(운영자의 토큰 → 이름) · operators:set<이름>(설정) · db(참조 — 표 `audit`).
-- 기능: command(글 한 줄) → 답 글 한 줄. 흐름 6.
+- 데이터: verify(운영자의 토큰 → 이름) · operators:set<이름>(설정) · db(참조 — 표 `audit`) · 명령을 맡은 개념들(참조 — 플릿의 Nodes · Registry · Scheduler · Recoverer, 스토리지의 SnapshotStore · CharacterStore, 세션 모듈의 ZoneMap · Router 와 계정의 Banlist 는 그 소켓의 기능).
+- 기능: command(글 한 줄) → 답 글 한 줄. 흐름 6 — 명령 하나를 흐름 6 의 표의 개념 하나에 넘긴다. 운영자의 일은 모듈 어디에도 속하지 않으므로 앱이다.
 - 생애: 컨트롤 플레인의 Service.start 가 만든다.
 
 ### Monitor

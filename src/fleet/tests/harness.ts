@@ -123,13 +123,6 @@ export async function up(over: Partial<TestConfig> = {}, given?: StorageSocket, 
     reconcile: (n, instances) => void reconciled.push(`${n} ${instances.map((i) => `${i.name}:${i.loaded.join(',')}`).join(' ')}`),
     tick: async () => {},
     sweep: async () => 0,
-    verify: (t) => (t === 'op-token' ? 'tester' : null),
-    closeZone: async (z) => void kicked.push(`close ${z}`),
-    openZone: async (z) => void kicked.push(`open ${z}`),
-    kick: (c) => (kicked.push(`kick ${c}`), c === 'p1'),
-    ban: async (a, until) => void kicked.push(`ban ${a} ${until}`),
-    unban: async (a) => void kicked.push(`unban ${a}`),
-    playing: (c) => c === 'p1',
   };
   const agents = new Map<string, NodeAgent>();
   const fleet = await Fleet.open(config, zones, storage, hooks, (address) => agents.get(address) as NodeSocket, (l) => log.push(l), (t) => traces.push(t));
