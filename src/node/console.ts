@@ -1,4 +1,4 @@
-// Console — 호스트에 글 한 줄을 쓰고 답을 받는다 (design/02-roles/fleet.md 의 Console, 흐름 3 의 17 · 5 의 1 · 9 의 7 · 10 의 5 · 6 의 host).
+// Console — 호스트에 글 한 줄을 쓰고 답을 받는다 (design/02-roles/node.md 의 Console, 흐름 3 의 17 · 5 의 1 · 9 의 7 · 10 의 5 · 6 의 host).
 // 답은 Runner.line 이 넘긴 줄 가운데 그 명령의 답(Probe.answers)이다 — 머리글 뒤의 줄만. 한계 안에 없으면 null.
 
 import type { Process } from './process';

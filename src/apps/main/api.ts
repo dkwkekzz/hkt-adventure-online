@@ -12,6 +12,7 @@ import type { Banlist, Character, Characters, Directory, Signer } from '../../ac
 import { PROVIDERS } from '../../protocol/api';
 import type { Address, CharactersAnswer, CharactersRequest, CharacterView, ChooseAnswer, CreateAnswer, DeleteAnswer, EnterRequest, LoginAnswer, LoginRequest, Refusal, Wait } from '../../protocol/api';
 import type { TraceEnd, TraceFn } from '../../protocol/observe';
+import { freshRun } from '../../protocol/observe';
 import type { SessionSocket } from '../../protocol/session';
 import { PAGE } from './page';
 import type { Static } from './static';
@@ -35,7 +36,6 @@ export interface ApiParts {
   readonly trace: TraceFn;
 }
 
-const freshRun = (): string => randomBytes(4).toString('hex');
 
 const SUBJECT = /^[A-Za-z0-9_-]{8,64}$/;
 

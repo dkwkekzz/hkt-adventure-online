@@ -43,6 +43,9 @@ export type TraceInput = Omit<Trace, 'at' | 'who'> & { readonly account?: string
 /** 단계가 흔적을 남기는 함수 — 앱(Monitor.trace)이 개념에 준다. 기다리지 않고 실패하지 않는다. */
 export type TraceFn = (trace: TraceInput) => void;
 
+/** run 하나의 이름 — 한 번의 실행(흐름 14 의 run). 16 진 8 자. 어느 모듈이든 이것으로 짓는다 */
+export const freshRun = (): string => [...globalThis.crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
 /** 단위 하나의 지금 — 흔적이 고친다. */
 export interface UnitNow {
   readonly unit: string;
@@ -124,7 +127,7 @@ export interface MapLink {
   readonly pairs: readonly (readonly [string, string])[];
 }
 
-/** 개념 하나가 사는 곳 — README 「모듈 다섯과 그 개념」 · 「앱」. */
+/** 개념 하나가 사는 곳 — README 「모듈 여섯과 그 개념」 · 「앱」. */
 export interface MapConcept {
   readonly name: string;
   readonly module: string;

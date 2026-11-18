@@ -3,19 +3,20 @@
 // main 은 넷을 한 프로세스에 조립한 것이다 — SessionRpc · NodeRpc 가 함수 부름이 될 뿐 흐름은 같다. 갈린 role 사이는 내부망의 글(rpc.ts)이다.
 // Monitor(흐름 14)를 먼저 세우고 그 trace 를 개념들에 준다 — 흐름 1 의 단계부터 흔적이 남는다.
 
-import { randomBytes } from 'node:crypto';
 import type { Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Banlist, Characters, Directory, Signer, kindOf } from '../../account';
-import { Fleet, NodeAgent, bundleViewer } from '../../fleet';
-import type { FleetHooks, OperatorHooks } from '../../fleet';
+import { Fleet } from '../../fleet';
+import { NodeAgent, Spawner } from '../../node';
+import type { FleetHooks } from '../../fleet';
 import { openGateway } from '../../gateway';
 import { openSession } from '../../session';
 import { openStorage } from '../../storage';
 import type { GatewaySocket } from '../../protocol/gateway';
 import type { ControlSocket, LaunchSpec, Launched, NodeHello, NodeReport, NodeSocket } from '../../protocol/node';
 import type { TraceFn } from '../../protocol/observe';
+import { freshRun } from '../../protocol/observe';
 import { OPERATOR_HEAD } from '../../protocol/operator';
 import type { Attached, Entered, GateReport, SessionSocket, Unattached, Waiting } from '../../protocol/session';
 import type { StorageSocket } from '../../protocol/storage';
@@ -24,6 +25,7 @@ import type { ServiceConfig } from './config';
 import { Elector } from './elector';
 import { readMap } from './map';
 import { Monitor } from './monitor';
+import { Operator } from './operator';
 import { RpcError, call, listen, serveRpc } from './rpc';
 import type { RpcMeta } from './rpc';
 import { Static } from './static';
@@ -31,7 +33,6 @@ import { Static } from './static';
 /** 이 파일에서 src 와 design 의 자리 — 흐름의 지도는 저장소의 design/01-flows 에서 뽑는다. */
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DESIGN = join(SRC, '..', 'design');
-const freshRun = (): string => randomBytes(4).toString('hex');
 const has = (role: ServiceConfig['role'], ...want: ServiceConfig['role'][]): boolean => role === 'main' || want.includes(role);
 
 /**
@@ -107,6 +108,8 @@ export class Service {
   readonly api: Server | null = null;
   readonly gateway: GatewaySocket | null = null;
   readonly elector: Elector | null = null;
+  /** 운영자의 명령(흐름 6) — 컨트롤 플레인에만 */
+  readonly operator: Operator | null = null;
   /** 운영자의 콘솔 토큰 — stdin 의 글을 이 토큰으로(OPERATOR_KEY 가 있을 때) */
   readonly console: string | null = null;
   /** 내부망의 http — role 마다 하나 */
@@ -170,25 +173,7 @@ export class Service {
       const gates = new Map<string, string>();
       if (has(role, 'control')) {
         const opSigner = operatorKey === undefined || operatorKey === '' ? null : new Signer(operatorKey, 12 * 3600);
-        const opHooks: OperatorHooks = {
-          verify: (token) => {
-            const id = opSigner?.verify(token) ?? null;
-            if (id === null || kindOf(id) !== 'operator') return null;
-            const name = id.slice(OPERATOR_HEAD.length);
-            return config.operators.includes(name) ? name : null;
-          },
-          closeZone: (zone) => session!.closeZone(zone),
-          openZone: (zone) => session!.openZone(zone),
-          kick: (character, r) => session!.kick(character, r),
-          ban: async (account, until, r) => {
-            await banlist!.ban(account, until);
-            await session!.evict(account, r); // 차단하면 그 계정의 세션도 내보낸다
-          },
-          unban: (account) => banlist!.unban(account),
-          playing: (character) => session!.playing(character),
-        };
         const hooks: FleetHooks = {
-          ...opHooks,
           count: (instance) => session?.count(instance) ?? 0, // Scaler
           move: async (instance, r) => await session?.recover(instance, r), // Recoverer ⇒ 흐름 12 의 4 · 5
           drain: async (instance, r) => (await session?.drain(instance, r)) ?? 0, // 비움 ⇒ 흐름 10
@@ -266,6 +251,26 @@ export class Service {
           trace,
           log,
         );
+        const operator = new Operator({
+          verify: (token) => {
+            const id = opSigner?.verify(token) ?? null; // Signer.verify(OPERATOR_KEY)
+            if (id === null || kindOf(id) !== 'operator') return null;
+            const name = id.slice(OPERATOR_HEAD.length);
+            return config.operators.includes(name) ? name : null;
+          },
+          db: store.database,
+          fleet: f,
+          snapshots: store.snapshots,
+          values: store.characters,
+          session: s,
+          ban: async (account, until, r) => {
+            await banlist!.ban(account, until);
+            await s.evict(account, r); // 차단하면 그 계정의 세션도 내보낸다
+          },
+          unban: (account) => banlist!.unban(account),
+          trace,
+        });
+        Object.assign(parts, { operator });
         if (opSigner !== null && config.operators.length > 0) Object.assign(parts, { console: opSigner.issue(`${OPERATOR_HEAD}${config.operators[0]}`, 365 * 24 * 3600) });
         else log('service OPERATOR_KEY 가 없다 — 운영자의 명령은 받지 않는다(흐름 6 의 2)');
         if (role === 'control') {
@@ -290,7 +295,7 @@ export class Service {
               exited: (a, m) => f.exited(a[0] as string, a[1] as number, a[2] as number, a[3] as boolean, m.run),
             },
             (name) => ready(name),
-            (token, line) => (ctl.role === 'standby' ? Promise.resolve('대기의 컨트롤 플레인이다 — 활성에게') : f.operator.command(token, line)),
+            (token, line) => (ctl.role === 'standby' ? Promise.resolve('대기의 컨트롤 플레인이다 — 활성에게') : operator.command(token, line)),
           );
           await listen(server, config.rpc.controlPort);
           servers.push(server);
@@ -403,7 +408,13 @@ export class Service {
       // ── API 서버 ──────────────────────────────────────────────────────────────
       let apiServer: Server | null = null;
       if (has(role, 'api')) {
-        await bundleViewer(config.fleet.engineDir, config.fleet.viewerOut, trace, run, log); // 흐름 1 의 2
+        const bundle = Spawner.bundle(config.fleet.engineDir, config.fleet.viewerOut); // 흐름 1 의 2 — 뷰어를 한 번 묶는다
+        const said: string[] = [];
+        bundle.onLine((_s, line) => said.push(line));
+        const code = await bundle.exited;
+        trace({ flow: 1, step: 2, run, unit: '-', end: code === 0 ? 'ok' : 'failed', counts: { exit: code } }); // Spawner.bundle
+        if (code !== 0) throw new Error(`뷰어를 묶지 못했다 — exit ${code}${said.length === 0 ? '' : ` — ${said.slice(-3).join(' / ')}`}`);
+        log(`service 뷰어를 묶었다 — ${config.fleet.viewerOut}`);
         const files = new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap, config.scheme);
         // Keymap 을 찾지 못하면 뷰어는 단축키 없이 메뉴로만 고른다 — 엔진을 올려 자리가 바뀌어도 조용히 지나가지 않게 알린다
         if (config.keymap !== null && files.keymapFile() === null) log(`service Keymap 이 없다 — ${files.keymap}${config.scheme === null ? '' : ` (조작 틀 ${config.scheme})`}. 뷰어는 메뉴로만 고른다`);

@@ -4,8 +4,8 @@
 // 흐름의 단계마다 흔적을 남긴다 — 사람은 account(가명이 된다) · name · session 으로. 게이트웨이 · 노드는 계정을 모르므로 같은 run 의 이 단계들이 그 사람에게 잇는다.
 // 간격(흐름 5 의 C 가운데 세션의 단계 — Gates.dead · Sessions.expired · Queue.next)은 여기서 돈다: Clock 은 플릿의 개념이라 모듈 경계 안에 같은 간격을 든다.
 
-import { randomBytes } from 'node:crypto';
 import type { TraceEnd, TraceInput } from '../protocol/observe';
+import { freshRun } from '../protocol/observe';
 import type { Attached, Entered, SessionOptions, SessionSocket, Unattached, Waiting } from '../protocol/session';
 import { Admission } from './admission';
 import { Gates } from './gates';
@@ -19,7 +19,6 @@ import { Sessions } from './sessions';
 import type { Zone } from './zone';
 import { ZoneMap } from './zone-map';
 
-const fresh = (): string => randomBytes(4).toString('hex');
 
 /** 한 캐릭터의 enter · forget 은 한 번에 하나 — 그 사이에 다른 것이 끼지 않는다(흐름 8 의 「실패하면」). */
 class Turns {
@@ -123,7 +122,7 @@ export async function openSession(o: SessionOptions): Promise<SessionSocket> {
   };
 
   /** 흐름 5 의 C 가운데 세션의 단계 — 끊긴 게이트웨이(11) · 만료(13) · 줄(14). 8(Gates.seen) · 9(Reconciler.match)는 보고가 올 때. 컨트롤 플레인의 Clock 이 부른다. */
-  const tick = async (run: string = fresh()): Promise<void> => {
+  const tick = async (run: string = freshRun()): Promise<void> => {
     for (const gate of gates.dead()) {
       const on = [...sessions.rows.values()].filter((s) => s.gate === gate && s.state === 'active');
       o.trace({ flow: 5, step: 11, run, unit: '-', end: 'ok', counts: { sessions: on.length } }); // 단위는 `-` — 게이트웨이는 인스턴스가 아니다(게이트웨이 모듈과 같다)

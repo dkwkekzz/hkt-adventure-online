@@ -73,7 +73,8 @@ describe('Monitor.map — 관측의 지도', () => {
     expect(concept('Placer')).toMatchObject({ module: 'session', processes: ['control'], built: true });
     expect(concept('Mover')).toMatchObject({ module: 'session', built: true });
     expect(concept('Reconciler')).toMatchObject({ module: 'session', processes: ['control'], built: true });
-    expect(concept('NodeReporter')).toMatchObject({ module: 'fleet', processes: ['node'], built: true });
+    expect(concept('NodeReporter')).toMatchObject({ module: 'node', processes: ['node'], built: true });
+    expect(concept('Scheduler')).toMatchObject({ module: 'fleet', processes: ['control'], built: true });
     expect(concept('Spawner')).toMatchObject({ processes: ['node', 'api'], built: true });
     expect(concept('Api').processes).toEqual(['api']);
     expect(concept('Elector').processes).toEqual(['control']);
@@ -110,11 +111,11 @@ describe('Monitor.map — 관측의 지도', () => {
     const map = readMap(DESIGN, SRC);
     const step = (flow: number, n: number) => map.flows.find((f) => f.flow === flow)!.steps.find((s) => s.step === n)!;
     expect(step(3, 13)).toMatchObject({ who: 'SnapshotStore.pull', stand: 'built', plan: null }); // 부른 자리(Fleet)가 흔적을 남겨도 개념이 섰으면 섰다
-    expect(step(3, 13).sites).toEqual(['fleet/node-agent.ts']); // 노드가 Store 를 내려 받는다
+    expect(step(3, 13).sites).toEqual(['node/node-agent.ts']); // 노드가 Store 를 내려 받는다
     expect(step(3, 11)).toMatchObject({ who: 'Registry.put', stand: 'built', sites: ['fleet/fleet.ts'], plan: null });
     expect(step(3, 3)).toMatchObject({ who: 'Admission.check', stand: 'built', sites: ['session/index.ts'], plan: null });
     expect(step(3, 10)).toMatchObject({ who: 'Scheduler.place', stand: 'built', plan: null });
-    expect(step(1, 9)).toMatchObject({ who: 'Loader.recover', stand: 'built', sites: ['fleet/loader.ts'], plan: null });
+    expect(step(1, 9)).toMatchObject({ who: 'Loader.recover', stand: 'built', sites: ['node/loader.ts'], plan: null });
     expect(step(6, 4)).toMatchObject({ who: '아래 표의 개념', stand: 'built', plan: null }); // 명령마다의 개념(아래 표)이 다 섰다
     expect(step(14, 1)).toMatchObject({ who: 'Monitor.health', stand: 'built' });
     // 대신 하는 단계는 plan 02 의 「대신 하는 단계」 표의 단계와 같다

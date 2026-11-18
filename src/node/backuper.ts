@@ -1,4 +1,4 @@
-// Backuper — 인스턴스의 Store 를 백업해 올린다 (design/02-roles/fleet.md 의 Backuper, 흐름 5 의 3 · 7 의 5).
+// Backuper — 인스턴스의 Store 를 백업해 올린다 (design/02-roles/node.md 의 Backuper, 흐름 5 의 3 · 7 의 5).
 // 도는 호스트의 Store 자리를 그대로 올리지 않는다 — 엔진이 `backup <dir>` 으로 낸 사본(한 저장의 것)을 올린다(흐름 5 의 규칙).
 
 import { rm } from 'node:fs/promises';

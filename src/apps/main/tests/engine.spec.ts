@@ -182,7 +182,7 @@ describe.skipIf(!have)('진짜 엔진 — 인스턴스 여럿 · 비움 · 장�
     expect(s.node!.loader.of('main-1')).toEqual([a.character]);
 
     // 비움 — 하나를 main-1 에서 다른 인스턴스로(빈 곳이 없어 main-3 을 띄운다). 접속은 그대로, 뷰어는 다시 온 열림을 받는다
-    expect(await s.fleet!.operator.command(s.console!, 'drain main-1')).toMatch(/옮겼다 — 1$/);
+    expect(await s.operator!.command(s.console!, 'drain main-1')).toMatch(/옮겼다 — 1$/);
     await wa.opened(2);
     expect(wa.closed).toBeNull();
     expect(s.node!.loader.of('main-1')).toEqual([]);

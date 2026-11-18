@@ -1,4 +1,4 @@
-// Fleet — 플릿 모듈의 컨트롤 플레인의 반의 조립: Registry · Nodes · Scheduler · Scaler · Recoverer · Operator (design/02-roles/fleet.md).
+// Fleet — 플릿 모듈의 조립(컨트롤 플레인): Registry · Nodes · Scheduler · Scaler · Recoverer · Clock (design/02-roles/fleet.md). 운영자의 명령은 앱의 Operator 가 이 개념들을 부른다.
 // 어느 노드에 무엇이 있는가를 들고, 노드에는 NodeRpc(앱이 준 nodeOf — 개발의 main 에서는 같은 프로세스의 NodeAgent, 갈리면 내부망의 글)로만 닿는다.
 // 노드가 알리는 것(register · report · handoff · exited)을 받는다 — ControlSocket. launch 는 흐름 3 의 B, tick 은 흐름 5 의 C(10 · 12 와 세션의 11 · 13 · 14 · 계정의 15),
 // report 는 흐름 5 의 7(과 9 — 세션에 넘긴다) · 7 의 1 · 2, exited 는 흐름 7 의 6 또는 흐름 12, stop 은 흐름 7 의 3 ~ 6.
@@ -7,61 +7,37 @@
 
 import type { ControlSocket, InstanceReport, NodeHello, NodeReport, NodeSocket } from '../protocol/node';
 import type { TraceFn } from '../protocol/observe';
+import { freshRun } from '../protocol/observe';
 import type { ZoneSpec } from '../protocol/session';
 import type { StorageSocket } from '../protocol/storage';
 import { Clock } from './clock';
 import type { Instance } from './instance';
 import { Nodes } from './nodes';
-import { Operator } from './operator';
-import type { OperatorHooks } from './operator';
 import { Recoverer } from './recoverer';
 import { Registry } from './registry';
-import { freshRun } from './runner';
 import { Scaler } from './scaler';
 import { Scheduler } from './scheduler';
 
-export { freshRun };
 
-/** service.config.json 의 fleet — 컨트롤 플레인 · 노드가 같이 읽는다. */
+/** service.config.json 의 fleet 가운데 컨트롤 플레인이 읽는 것(노드의 것은 노드 모듈의 NodeConfig). */
 export interface FleetConfig {
-  readonly engineDir: string;
-  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). */
-  readonly party: string;
-  /** 뷰어의 묶음이 놓일 자리(viewer.js) — API 서버가 시작 때 한 번 묶는다(흐름 1 의 2). Static 이 준다. */
-  readonly viewerOut: string;
-  readonly beat: number;
-  readonly sparse: number;
-  /** NPC 계정과, 존의 줄에 npc 가 없을 때의 NPC 묶음 */
+  /** NPC 계정과, 존의 줄에 npc 가 없을 때의 NPC 묶음 — 띄울 때 노드에 준다(LaunchSpec) */
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
-  readonly ports: readonly [number, number];
-  /** 게이트웨이에서 이 노드의 호스트가 보이는 이름 — 내부망(Node.host) */
-  readonly hostName: string;
-  /** 이 서버의 노드 — 이름과 slots(띄울 수 있는 인스턴스의 수) */
-  readonly node: { readonly name: string; readonly slots: number };
-  /** 이 서버의 디렉터리 — 인스턴스마다 건넴 자리(캐릭터 파일) · 프로세스 기록 · 백업의 사본 */
-  readonly spool: string;
   readonly clockMs: number;
   /** 사람 없이 이만큼 Clock 이 지나면 쉬는 인스턴스다(Scaler). */
   readonly idleLimit: number;
-  readonly startLimitMs: number;
   readonly stopLimitMs: number;
-  readonly commandLimitMs: number;
+  /** 죽은 셈이 이만큼을 넘으면 다시 띄우지 않는다(흐름 12 의 6) */
   readonly restartLimit: number;
-  /** 이만큼 Clock 마다 도는 인스턴스를 백업한다(흐름 5 의 3). 0 이면 하지 않는다. */
-  readonly backupEvery: number;
-  /** 인스턴스마다 남기는 백업의 수 */
-  readonly backupKeep: number;
   /** 노드의 보고가 이만큼 없으면 끊긴 것이다(흐름 5 의 10) */
   readonly reportLimitMs: number;
-  /** 노드가 내려갈 때 사람이 옮겨지기를 기다리는 한계(흐름 7 의 3) */
-  readonly closingMs: number;
 }
 
 /** 존의 줄 — 세션 모듈의 Zone 에 이 존의 NPC 묶음(없으면 설정의 npc.bodies)을 더한 것. */
 export type FleetZone = ZoneSpec & { readonly npc?: readonly string[] };
 
 /** 세션 모듈 · 계정의 기능 — 앱이 준다(design/02-roles/session.md 의 머리). */
-export interface FleetHooks extends OperatorHooks {
+export interface FleetHooks {
   /** 그 인스턴스에 잡힌 슬롯 — Scaler */
   count(instance: string): number;
   /** 죽은 인스턴스의 사람을 다시 배정한다 — Recoverer(흐름 12 의 4 · 5) */
@@ -92,7 +68,6 @@ export class Fleet implements ControlSocket {
   readonly scaler: Scaler;
   readonly recoverer: Recoverer;
   readonly clock: Clock;
-  readonly operator: Operator;
   readonly storage: FleetStorage;
   readonly config: FleetConfig;
   readonly zones: readonly FleetZone[];
@@ -112,8 +87,6 @@ export class Fleet implements ControlSocket {
   private readonly launching = new Map<string, Promise<boolean>>();
   /** 내리는 가운데의 인스턴스 — 노드가 끝을 알릴 때까지 */
   private readonly settling = new Map<string, { promise: Promise<void>; resolve: () => void }>();
-  /** 보고에 잇달아 없던 수 — 둘이면 죽은 것이다(방금 띄운 것과 엇갈린 보고에 속지 않게) */
-  private readonly missing = new Map<string, number>();
   /** 내려간다고 알린 노드의 비운 인스턴스 */
   private readonly evacuated = new Set<string>();
   private lastSweep = 0;
@@ -131,7 +104,7 @@ export class Fleet implements ControlSocket {
   ): Promise<Fleet> {
     const { registry, skipped } = await Registry.load(storage.database);
     if (skipped.length > 0) log(`fleet 표 instances 의 모양이 아닌 줄을 건너뛴다 — ${skipped.join(' ')}`);
-    const nodes = await Nodes.load(storage.database, config.reportLimitMs);
+    const nodes = await Nodes.load(storage.database, registry, config.reportLimitMs);
     for (const i of registry.all()) trace({ flow: 13, step: 3, run, unit: i.name, end: 'ok', state: i.state, counts: { epoch: i.epoch } }); // Registry.all — 표의 줄마다
     return new Fleet(config, zones, storage, registry, nodes, hooks, nodeOf, log, trace);
   }
@@ -150,7 +123,6 @@ export class Fleet implements ControlSocket {
     this.scheduler = new Scheduler(nodes, registry, config.restartLimit);
     this.scaler = new Scaler(registry, (i) => hooks.count(i), zones, config.idleLimit);
     this.recoverer = new Recoverer(registry, storage.leases, (i, r) => hooks.move(i, r), (zone, name, r) => this.launch(zone, this.buildOf(name), r, name), config.restartLimit, trace, log);
-    this.operator = new Operator(this, hooks);
   }
 
   /** 그 인스턴스의 빌드 — 줄의 것, 없으면 살아 있는 노드의 첫 빌드. */
@@ -246,7 +218,6 @@ export class Fleet implements ControlSocket {
     i.port = answer.port;
     i.state = 'ready';
     i.restarts = 0;
-    this.missing.delete(i.name);
     await this.registry.put(i).catch((e: unknown) => this.log(`${i.name} fleet 줄을 적지 못했다 — ${(e as Error).message}`));
     this.trace({ flow: 3, step: 19, run, unit: i.name, end: 'ok', state: 'ready', counts: { port: answer.port, players: 0, epoch: i.epoch } }); // Registry.put
     return true;
@@ -293,37 +264,22 @@ export class Fleet implements ControlSocket {
   }
 
   /**
-   * report — NodeRpc report(흐름 5 의 7 — Nodes.heartbeat). 보고와 표를 맞춘다 — 표에 없는(또는 세대가 다른) 인스턴스는 내리게 하고,
-   * 표에서는 그 노드에서 도는데 보고에 잇달아 없는 인스턴스는 죽은 것이다(⇒ 흐름 12). 로드된 캐릭터는 세션 모듈이 맞춘다(5 의 9).
-   * 노드가 내려간다고 알렸으면 그 노드의 사람을 다른 노드로 옮기게 한다(흐름 7 의 2).
+   * report — NodeRpc report(흐름 5 의 7 — Nodes.heartbeat). Nodes 가 보고와 인스턴스의 표를 맞춰 준 것을 한다 — 표에 없는 인스턴스는 내리게 하고,
+   * 죽은 인스턴스는 흐름 12. 세션은 세션 모듈의 Reconciler 가 맞춘다(5 의 9). 노드가 내려간다고 알렸으면 그 노드의 사람을 다른 노드로 옮기게 한다(흐름 7 의 2).
+   * 표가 서는 가운데(활성이 아니다 — 흐름 13)는 적기만 한다.
    */
   report(report: NodeReport, run: string): void {
     if (this.nodes.get(report.name) === null) this.trace({ flow: 13, step: 4, run, unit: report.name, end: 'ok' }); // Nodes.register — 새 활성에 다시 알렸다(보고의 알림으로)
-    const node = this.nodes.heartbeat(report);
+    const { node, stop, dead } = this.nodes.heartbeat(report, this.active);
     for (const r of report.instances) this.seen.set(r.name, r);
-    this.trace({ flow: 5, step: 7, run, unit: node.name, end: 'ok', counts: { instances: report.instances.length, closing: report.closing ? 1 : 0 } }); // Nodes.heartbeat
+    this.trace({ flow: 5, step: 7, run, unit: node.name, end: 'ok', counts: { instances: report.instances.length, closing: report.closing ? 1 : 0, stop: stop.length, dead: dead.length } }); // Nodes.heartbeat
     this.hooks.reconcile(node.name, report.instances, run); // Reconciler.match — 흔적은 세션 모듈이
-    if (!this.active) return; // 표가 서는 가운데 — 고치지 않는다(흐름 13 의 6)
-    const here = new Set(report.instances.map((r) => r.name));
-    for (const r of report.instances) {
-      const i = this.registry.get(r.name);
-      if (i !== null && i.node === node.name && i.epoch === r.epoch) continue;
+    if (!this.active) return;
+    for (const r of stop) {
       this.log(`${r.name} fleet 표에 없는 인스턴스가 ${node.name} 에서 돈다 — 내리게 한다`);
-      void this.nodeOf(node.address).stop(r.name, run).catch(() => {}); // 표에 없는 인스턴스는 내리게 한다
+      void this.nodeOf(node.address).stop(r.name, run).catch(() => {}); // NodeRpc stop
     }
-    for (const i of this.registry.all()) {
-      if (i.node !== node.name || i.state !== 'ready') continue;
-      if (here.has(i.name)) {
-        this.missing.delete(i.name);
-        continue;
-      }
-      const n = (this.missing.get(i.name) ?? 0) + 1;
-      this.missing.set(i.name, n);
-      if (n >= 2) {
-        this.missing.delete(i.name);
-        void this.recoverer.recover(i.name, i.epoch, `${node.name} 의 보고에 없다`, run); // ⇒ 흐름 12
-      }
-    }
+    for (const i of dead) void this.recoverer.recover(i.name, i.epoch, `${node.name} 의 보고에 없다`, run); // ⇒ 흐름 12
     if (report.closing) {
       for (const r of report.instances) {
         if (r.loaded.length === 0 || this.evacuated.has(`${r.name}@${r.epoch}`)) continue;
@@ -340,9 +296,8 @@ export class Fleet implements ControlSocket {
   }
 
   /** exited — NodeRpc exited(흐름 4 의 5). 내림이면 줄을 stopped 로(흐름 7 의 6), 아니면 흐름 12. */
-  exited(name: string, epoch: number, code: number, stopped: boolean, run: string): void {
+  exited(name: string, epoch: number, code: number, stopped: boolean, run: string): Promise<void> {
     this.seen.delete(name);
-    this.missing.delete(name);
     const i = this.registry.get(name);
     const settle = (): void => {
       const s = this.settling.get(name);
@@ -352,13 +307,16 @@ export class Fleet implements ControlSocket {
     if (!stopped) {
       settle();
       void this.recoverer.recover(name, epoch, `exit ${code}`, run);
-      return;
+      return Promise.resolve();
     }
-    if (i === null || i.epoch !== epoch) return settle();
+    if (i === null || i.epoch !== epoch) {
+      settle();
+      return Promise.resolve();
+    }
     i.state = 'stopped';
     i.port = null;
     i.draining = false;
-    this.registry.put(i).then(
+    return this.registry.put(i).then(
       () => this.trace({ flow: 7, step: 6, run, unit: name, end: 'ok', state: 'stopped', counts: { players: 0 } }), // Registry.put
       () => this.trace({ flow: 7, step: 6, run, unit: name, end: 'failed', state: 'stopped' }),
     ).finally(settle);
@@ -372,13 +330,10 @@ export class Fleet implements ControlSocket {
     if (!this.active) return;
     this.ticks++;
     const run = freshRun();
-    const all = this.nodes.list().length;
-    const dead = this.nodes.dead();
-    if (dead.length > 0 && all > 1 && dead.length * 2 > all) {
-      // 노드의 큰 몫이 한꺼번에 끊겨 보인다 — 컨트롤 플레인 쪽 망을 의심한다. 죽음의 판정은 운영자가 한다(forget)
-      for (const n of dead) this.nodes.register({ name: n.name, address: n.address, host: n.host, build: n.build, slots: n.slots });
-      this.trace({ flow: 5, step: 10, run, unit: '-', end: 'refused', counts: { dead: dead.length, nodes: all } });
-      this.log(`fleet 노드 ${dead.length} / ${all} 이 한꺼번에 끊겨 보인다 — 죽음을 판정하지 않는다(운영자: forget <node>)`);
+    const { dead, held, of } = this.nodes.dead();
+    if (held) {
+      this.trace({ flow: 5, step: 10, run, unit: '-', end: 'refused', counts: { dead: dead.length, nodes: of } }); // Nodes.dead — 판정하지 않았다
+      this.log(`fleet 노드 ${dead.length} / ${of} 이 한꺼번에 끊겨 보인다 — 죽음을 판정하지 않는다(운영자: forget <node>)`);
     } else {
       for (const n of dead) {
         this.trace({ flow: 5, step: 10, run, unit: n.name, end: 'ok' }); // Nodes.dead ⇒ 흐름 12
@@ -415,7 +370,6 @@ export class Fleet implements ControlSocket {
   async reload(run: string): Promise<void> {
     this.active = false;
     this.seen.clear();
-    this.missing.clear();
     await this.registry.reload();
     await this.nodes.reload();
     for (const i of this.registry.all()) this.trace({ flow: 13, step: 3, run, unit: i.name, end: 'ok', state: i.state, counts: { epoch: i.epoch } }); // Registry.all
@@ -431,8 +385,7 @@ export class Fleet implements ControlSocket {
   standby(): void {
     this.active = false;
     this.seen.clear();
-    this.missing.clear();
-    this.nodes.rows.clear();
+    this.nodes.clear();
   }
 
   /**

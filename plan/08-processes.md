@@ -8,7 +8,7 @@
 
 | | 무엇 |
 |---|---|
-| ☑ | 노드 — NodeAgent(Runner · NodeReporter · Console · Loader · Backuper — `src/fleet/node-agent.ts`), 컨트롤 플레인의 Nodes · Node · Reconciler, NodeRpc(`src/protocol/node.ts` — NodeSocket · ControlSocket). 노드의 시작(흐름 1 의 7 ~ 11 — Spawner.missing · Runner.reap · Loader.recover · 알림)과 내려감(흐름 7 의 1 ~ 6 — 컨트롤 플레인이 사람을 다른 노드로 옮기고, 비거나 한계가 지나면 남은 값을 내리고 Store 를 올린다) |
+| ☑ | 노드 — NodeAgent(Runner · NodeReporter · Console · Loader · Backuper — `src/node/node-agent.ts`), 컨트롤 플레인의 Nodes · Node · Reconciler, NodeRpc(`src/protocol/node.ts` — NodeSocket · ControlSocket). 노드의 시작(흐름 1 의 7 ~ 11 — Spawner.missing · Runner.reap · Loader.recover · 알림)과 내려감(흐름 7 의 1 ~ 6 — 컨트롤 플레인이 사람을 다른 노드로 옮기고, 비거나 한계가 지나면 남은 값을 내리고 Store 를 올린다) |
 | ☑ | SessionRpc — API 서버 · 게이트웨이 ↔ 컨트롤 플레인(`src/apps/main/rpc.ts` — `POST /rpc/<이름> {args, run, term}`). 활성은 스토리지의 자리(LeaderLock.holder)로 찾고, 대기는 503 으로 돌려보낸다. 받는 쪽은 낮은 term 의 글을 409 로 버린다 |
 | ☑ | 운영자 — 흐름 6 의 명령 전부(nodes · instances · start · drain · undrain · stop · remove · host · backup · restore · purge · close · open · cordon · uncordon · forget · kick · ban · unban · versions · rollback), 운영자의 토큰(`OPERATOR_KEY` — `o<이름>`, 설정의 `operators`, 흐름 6 의 2) · audit(그 이름). 밖에서는 `POST /operator` |
 | ☑ | 컨트롤 플레인의 Clock — 흐름 5 의 C 를 한 간격에(세션 모듈의 간격은 `tick` 이 되었다), Directory.sweep(흐름 5 의 15 — 하루에 한 번) |

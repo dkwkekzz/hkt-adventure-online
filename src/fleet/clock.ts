@@ -1,4 +1,4 @@
-// Clock — 함대의 박자 (design/02-roles/fleet.md 의 Clock, 흐름 5 의 트리거). 앞의 tick 이 끝나기 전에는 다음을 부르지 않는다.
+// Clock — 컨트롤 플레인의 박자 (design/02-roles/fleet.md 의 Clock, 흐름 5 의 트리거). 앞의 tick 이 끝나기 전에는 다음을 부르지 않는다.
 
 export class Clock {
   // 데이터 — interval(불변, ms) · timer

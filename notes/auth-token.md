@@ -16,8 +16,8 @@ HOST_AUTH_KEY=change-me npm start
 | 어디 | 하는 일 | 코드 |
 |---|---|---|
 | 서비스의 Signer | 로그인한 사람에게 계정의 토큰을, 캐릭터를 고르면 캐릭터의 토큰을 서명해 낸다. `/characters` · `/enter` · 게이트웨이에서 토큰을 푼다. 호스트에는 접속마다 새로 낸 캐릭터의 토큰을 준다 | `src/account/signer.ts` |
-| 엔진(호스트) 프로세스 | 서비스가 세계를 띄울 때 환경변수 `HOST_AUTH_KEY` 로 넘긴다. 엔진의 Gate 가 이것으로 접속의 토큰을 검증한다 | `src/fleet/spawner.ts` → 엔진 `web/host/gate.ts` |
-| NPC 에이전트 | 키를 받지 않는다. 서비스가 NPC 계정(`service.config.json` 의 `fleet.npc.account`)의 토큰을 `agentTtl`(300 초)로 내어 `--token` 으로 준다. 에이전트를 다시 띄울 때마다 새로 낸다 | `src/fleet/shard.ts` 의 spawnAgent |
+| 엔진(호스트) 프로세스 | 서비스가 세계를 띄울 때 환경변수 `HOST_AUTH_KEY` 로 넘긴다. 엔진의 Gate 가 이것으로 접속의 토큰을 검증한다 | `src/node/spawner.ts` → 엔진 `web/host/gate.ts` |
+| NPC 에이전트 | 키를 받지 않는다. 서비스가 NPC 계정(`service.config.json` 의 `fleet.npc.account`)의 토큰을 `agentTtl`(300 초)로 내어 `--token` 으로 준다. 에이전트를 다시 띄울 때마다 새로 낸다 | `src/node/runner.ts` 의 에이전트 띄우기 |
 
 키가 없으면 서비스는 시작하지 않는다(흐름 1 — 토큰 없는 서비스는 외부에 열지 않는다).
 엔진을 서비스 없이 `npm run dev` 로만 띄우고 키를 주지 않으면 예전처럼 이름 글이 그대로 계정이다(개발 · 테스트 · play).

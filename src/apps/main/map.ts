@@ -1,5 +1,5 @@
 // 관측의 지도 — design 에서 뽑는다 (design/README.md 의 Monitor.map, 흐름 14). 손으로 쓰지 않는다.
-//   구조: README 의 「프로세스 넷」(마디) · 「연결 여덟」(연결 · 닿는 개념) · 「모듈 다섯과 그 개념」 · 「앱」(개념이 사는 프로세스)
+//   구조: README 의 「프로세스 넷」(마디) · 「연결 여덟」(연결 · 닿는 개념) · 「모듈 여섯과 그 개념」 · 「앱」(개념이 사는 프로세스)
 //   흐름: design/01-flows 의 머리 · 트리거 · 한 줄 · 순서 블록 · 머리가 `#` 인 표
 //   plan: plan/README.md 의 진행표와 plan 파일마다의 「세울 것」 · 「남은 것」
 // 단계의 traced 는 src 의 코드(tests 밖)가 그 흔적 `(흐름, #)` 을 남기는가 — npm run index 도 traceSites 로 같은 것을 본다.
@@ -102,7 +102,7 @@ export function readStructure(readme: string): { nodes: MapNode[]; links: MapLin
   }
 
   const concepts: Omit<MapConcept, 'built'>[] = [];
-  const mods = tableAfter(lines, '### 모듈 다섯과 그 개념');
+  const mods = tableAfter(lines, '### 모듈 여섯과 그 개념');
   let module = '';
   for (const row of mods?.rows ?? []) {
     if ((row[0] ?? '') !== '') module = row[0]!.split(/\s+/).at(-1)!;
@@ -251,7 +251,7 @@ export function remainingOf(text: string): string {
 }
 
 /** 모듈의 한국어 이름 — plan 의 글이 모듈을 부르는 말. */
-const MODULE_WORD: Readonly<Record<string, string>> = { account: '계정', gateway: '게이트웨이', session: '세션', fleet: '플릿', storage: '스토리지' };
+const MODULE_WORD: Readonly<Record<string, string>> = { account: '계정', gateway: '게이트웨이', session: '세션', fleet: '플릿', node: '노드', storage: '스토리지' };
 
 /**
  * 서지 않은 단계가 어느 plan 의 것인가 — 닫히지 않은 plan 가운데 차례대로 처음 맞는 것.

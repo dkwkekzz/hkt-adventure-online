@@ -3,6 +3,7 @@
 
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -68,4 +69,20 @@ export const portRange = (): [number, number] => {
   const from = next;
   next += 5;
   return [from, from + 4];
+};
+
+const free = (port: number): Promise<boolean> =>
+  new Promise((ok) => {
+    const s = createServer();
+    s.once('error', () => ok(false));
+    s.listen(port, () => s.close(() => ok(true)));
+  });
+
+/** 지금 다 열 수 있는 포트 범위 다섯 — 앞서 돈 시험의 프로세스가 아직 든 범위는 건너뛴다(내부망의 글처럼 미리 정한 포트를 쓰는 시험). */
+export const freeRange = async (): Promise<[number, number]> => {
+  for (;;) {
+    const r = portRange();
+    const all = await Promise.all([0, 1, 2, 3, 4].map((k) => free(r[0] + k)));
+    if (all.every(Boolean)) return r;
+  }
 };

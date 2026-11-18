@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Signer } from '../../../account';
-import { fakeEngine, portRange, until } from '../../../fleet/tests/fake';
+import { fakeEngine, freeRange, portRange, until } from '../../../node/tests/fake';
 import type { ServiceConfig } from '../config';
 import { Service } from '../service';
 
@@ -73,7 +73,7 @@ function config(root: string, engineDir: string, role: ServiceConfig['role'], rp
 async function cluster() {
   const root = mkdtempSync(join(tmpdir(), 'split-'));
   const engine = fakeEngine();
-  const [p0] = portRange();
+  const [p0] = await freeRange();
   const rpc = (over: Partial<ServiceConfig['rpc']>): ServiceConfig['rpc'] => ({ host: 'localhost', controlPort: p0, nodePort: 0, gatewayPort: p0 + 4, limitMs: 3000, ...over });
   const start = async (c: ServiceConfig): Promise<Service> => {
     const s = await Service.start(c, 'k', process.env['SPLIT_LOG'] === undefined ? () => {} : (l) => console.log(`[${c.role} ${c.fleet.node.name}] ${l}`), 'operator-test-key');

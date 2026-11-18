@@ -1,4 +1,4 @@
-// Loader — 캐릭터의 값을 인스턴스에 올리고 내린다 (design/02-roles/fleet.md 의 Loader).
+// Loader — 캐릭터의 값을 인스턴스에 올리고 내린다 (design/02-roles/node.md 의 Loader).
 // load 는 흐름 9 의 5 ~ 7, unload 는 흐름 10 의 5 ~ 7(흐름 11 의 3 · 7 의 3 도 이 길), save 는 흐름 5 의 2.
 // 캐릭터의 값은 한때에 인스턴스 하나만 든다 — 그것을 지키는 것은 Leases(holder = `<인스턴스>@<세대>`)다. 값의 파일은 그 인스턴스의 건넴 자리(엔진의 --handoff)에 드나든다.
 // 파일의 안을 보지 않는다 — 같은 값인가는 바이트의 해시로만 본다.
@@ -9,8 +9,9 @@ import { join } from 'node:path';
 import { KEEP_DONE, LOAD_DONE, UNLOAD_DONE } from '../protocol/engine';
 import type { TraceEnd, TraceFn } from '../protocol/observe';
 import type { CharacterStoreSocket, Lease, LeasesSocket } from '../protocol/storage';
+import { leaseHolder } from '../protocol/node';
 import type { Console } from './console';
-import { holderOf } from './instance';
+
 import type { Runner } from './runner';
 
 /** 로드된 캐릭터 하나 — 든 lease 와 마지막으로 저장한 값의 해시. */
@@ -78,7 +79,7 @@ export class Loader {
     } else {
       let lease: Lease | null;
       try {
-        lease = await this.leases.acquire(character, holderOf({ name: instance, epoch: server.epoch }));
+        lease = await this.leases.acquire(character, leaseHolder(instance, server.epoch));
       } catch (e) {
         this.mark(9, 5, run, instance, 'failed');
         return `스토리지에 닿지 않는다 — ${(e as Error).message}`;

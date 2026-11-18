@@ -12,7 +12,7 @@
 | ☑ | 268 | `--handoff <dir>` · `load` · `unload` · `keep` | `HostArgs.handoff` · `hostArgv`, 명령 열둘 `CONSOLE_COMMANDS`, 답 글 `LOAD_DONE` · `UNLOAD_DONE` · `KEEP_DONE` · `HANDOFF_REFUSED` |
 | ☑ | 269 | 떠남 줄 `떠남 — <account> → <to>` · status 의 꼬리 ` · 지연 N` | `DEPART_LINE` · `STATUS_LAG` · `StatusLine.lag`. Probe.read 의 `handoff` · status 의 지연 |
 | ☑ | 270 | 뷰어의 다시 열림 · `?exit=` | 뷰어 묶음 안의 일 — 서비스의 코드는 그대로. 쓰는 것은 plan 07(Connection.reroute) · 08 |
-| ☑ | — | Runner.line — 떠남 · backup 끝 줄과 사람 수 · 지연을 바꾼 status 가 흐름 4 의 1 ~ 3 의 흔적. 4 의 3 의 counts 는 status 면 `players` · `beats` · `lag`, backup 끝이면 `backup`(그 now), 떠남이면 `departed`(맡은 이가 있으면 1). 흐름 5 의 1 의 counts 에도 `lag` | `src/fleet/runner.ts` · `fleet.ts` · `probe.ts` |
+| ☑ | — | Runner.line — 떠남 · backup 끝 줄과 사람 수 · 지연을 바꾼 status 가 흐름 4 의 1 ~ 3 의 흔적. 4 의 3 의 counts 는 status 면 `players` · `beats` · `lag`, backup 끝이면 `backup`(그 now), 떠남이면 `departed`(맡은 이가 있으면 1). 흐름 5 의 1 의 counts 에도 `lag` | `src/node/runner.ts` · `node/probe.ts` · `fleet/fleet.ts` |
 
 ## 관측에 보이는 것
 
@@ -24,7 +24,7 @@
 
 - 서비스는 아직 `--handoff` 를 주지 않는다 — 캐릭터의 값을 서비스가 들기(Loader · CharacterStore — 흐름 9 의 4 ~ 7)는 plan 07. 그때 Spawner.host 가 `--handoff <spool>` 을 준다(fleet.md 의 Spawner).
 - 백업은 아직 내려가 올린 세계의 Store 를 베낀다(plan 02 의 「대신」 5 의 3). 도는 호스트의 `backup` 으로 올리는 Backuper 는 plan 07.
-- 가짜 엔진(`src/fleet/tests/fixtures/fake-engine.mjs`)은 지연 꼬리와 `backup` 을 엔진처럼 하고, 시험의 손 `lag N` · `depart <account> <to>` 로 지연과 떠남 줄을 낸다.
+- 가짜 엔진(`src/node/tests/fixtures/fake-engine.mjs`)은 지연 꼬리와 `backup` 을 엔진처럼 하고, 시험의 손 `lag N` · `depart <account> <to>` 로 지연과 떠남 줄을 낸다.
 
 ## 직관 확인
 
