@@ -8,16 +8,17 @@ design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연�
 plan/         design 을 src 에 세우는 순서와 상태. plan 하나 = 파일 하나(README.md 가 진행표). 다음은 진행표의 첫 ☐ · ◐
 notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입, storage.md — 스토리지의 뒤 · 자리, mongodb-local.md — 로컬의 진짜 MongoDB). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
-  protocol/   소켓 선언 — api(로그인 · 캐릭터 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · gateway(게이트웨이 소켓 · 설정) · session(SessionRpc — enter · forget · attach · detach · report · reroute · kick, 플릿과 주고받는 handoff · drain · recover · count, 존의 줄 · 세션의 설정 · openSession 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, protocol 밖을 import 하지 않는다
+  protocol/   소켓 선언 — api(로그인 · 캐릭터 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · gateway(게이트웨이 소켓 · 설정) · node(NodeRpc — 컨트롤 플레인 ↔ 노드: launch · stop · command · load · unload 와 register · report · handoff · exited) · session(SessionRpc — enter · forget · attach · detach · report · reroute · kick, 플릿과 주고받는 handoff · drain · recover · count, 존의 줄 · 세션의 설정 · openSession 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, protocol 밖을 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Characters · Banlist · Signer · Identity · Account · Character · Token. Account.id 는 a…, Character.id 는 p…(엔진의 계정) — 토큰의 종류는 id 의 머리(kindOf)
   storage/    스토리지 (design/02-roles/storage.md) — Database · CharacterStore · Leases · SnapshotStore · LeaderLock. 밖에 내보내는 것은 openStorage 하나
               뒤는 둘씩 — 문서: MongoDB(mongo) · 디렉터리(docs), 물건: S3 호환(s3) · 디렉터리(bucket). Store 는 tar.gz 하나(pack)
   gateway/    게이트웨이 (design/02-roles/gateway.md) — Acceptor · Connection · RateLimiter · Keepalive · GateReporter. 밖에 내보내는 것은 openGateway 하나. 소켓은 ws
-  session/    세션 (design/02-roles/session.md) — Admission · ZoneMap · Zone · Placer · Sessions · Session · Queue · Gates · Mover(흐름 10 · 12 의 5) · Router(reroute · kick). 밖에 내보내는 것은 openSession 하나 — 그 소켓이 SessionRpc 의 받는 쪽
-              다른 모듈의 기능(Characters.owner · remove · Banlist.banned · 플릿의 ready · launch · address · load · unload · Signer.issue · 게이트웨이의 reroute · kick)은 앱이 준 함수. 간격(흐름 5 의 11 · 13 · 14)은 제 것
-  fleet/      함대 (design/02-roles/fleet.md) — 컨트롤 플레인의 반 Registry · Instance · Scheduler · Scaler · Recoverer, 노드의 반 Runner · Console · Loader · Backuper · Ports · Spawner · Process · Probe · Clock, 그리고 Operator.
-              Fleet 이 조립한다(노드는 지금 이 서버의 것 하나 — NodeRpc 는 함수 부름). 세션에 주는 것은 ready · launch(흐름 3 의 B) · address · load · unload, 받는 것은 count · move · drain · handoff
-  apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · POST /login · /characters · /create · /choose · /delete · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
+  session/    세션 (design/02-roles/session.md) — Admission · ZoneMap · Zone · Placer · Sessions · Session · Queue · Gates · Mover(흐름 10 · 12 의 5) · Router(reroute · kick) · Reconciler(보고와 세션을 맞춘다 — 흐름 5 의 9 · 13 의 5). 밖에 내보내는 것은 openSession 하나 — 그 소켓이 SessionRpc 의 받는 쪽
+              다른 모듈의 기능(Characters.owner · remove · Banlist.banned · 플릿의 ready · launch · address · load · unload · Signer.issue · 게이트웨이의 reroute · kick)은 앱이 준 함수. 간격은 컨트롤 플레인의 Clock 이 tick 으로 부른다
+  fleet/      함대 (design/02-roles/fleet.md) — 컨트롤 플레인의 반 Fleet(Registry · Instance · Nodes · Node · Scheduler · Scaler · Recoverer · Operator — NodeRpc 의 받는 쪽 ControlSocket),
+              노드의 반 NodeAgent(Runner · NodeReporter · Console · Loader · Backuper · Ports · Spawner · Process · Probe · Clock — NodeSocket). 둘은 NodeRpc 로만 잇는다(main 은 함수 부름, 갈리면 내부망의 글).
+              세션에 주는 것은 ready · launch(흐름 3 의 B) · address · load · unload, 받는 것은 count · move · drain · handoff · reconcile · tick
+  apps/main/  서비스 프로세스 — Service(흐름 1 · 7, role 마다 그 role 의 개념을 세운다 — main · api · gateway · control · node) · rpc(내부망의 글 — POST /rpc/<이름> {args, run, term} · POST /operator) · Elector(흐름 13 — LeaderLock 과 term) · Api(http — GET / 게스트 페이지 · POST /login · /characters · /create · /choose · /delete · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
               Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design 에서 뽑는 관측의 지도 — 프로세스 · 연결 · 개념이 사는 곳 · 흐름) · monitor-page(관측 페이지 — 구조의 그림)
   tools/      boundary(경계 검사) · index(설계 색인 · 코드의 흔적이 흐름에 있는가) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
@@ -51,9 +52,12 @@ service.config.json   서비스의 값 — 엔진 자리 · 존의 줄(zones —
  C. session/** 은 protocol/ 만 import 한다 — 계정 · 플릿 · 게이트웨이의 기능은 앱이 준 함수, 스토리지는 Storage 소켓(Database · CharacterStore)
     모듈의 tests/ 는 세움에 다른 모듈의 index.ts 를 쓸 수 있다. 두 모듈을 같이 세우는 조립 테스트는 apps/*/tests/ 에
  P. apps 는 모듈의 index.ts 만 import 하고, 모듈의 객체에 부르는 것은 흐름에서 Service · Api 가 부르는 단계뿐이다 —
-    directory.resolve · characters.list · create · owner · banlist.banned · signer.issue · signer.verify · fleet.start · fleet.stopAll · fleet.clock.stop · fleet.operator.command · storage.close · gateway.listen · gateway.close · session.close
-    그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — SessionRpc 의 session.enter · forget · attach · detach · report, gateway.reroute · kick, NodeRpc 의 fleet.load · unload · session.handoff
-    그리고 개념에 다른 모듈의 기능을 함수로 넘기는 자리(책임 문서가 「앱이 준다」고 적은 것) — characters.owner · remove, banlist.banned, fleet.ready · launch · address, session.count · recover · drain
+    directory.resolve · characters.list · create · owner · banlist.banned · signer.issue · signer.verify · fleet.start · fleet.close · fleet.operator.command · node.start · node.close · storage.close · gateway.listen · gateway.close · session.close
+    그리고 프로세스 사이의 소켓을 잇는 자리(main 에서는 함수 부름, 갈리면 내부망의 글의 받는 쪽) — SessionRpc 의 session.enter · forget · attach · detach · report, gateway.reroute · kick,
+      NodeRpc 의 fleet.register · report · handoff · exited · load · unload · command 와 node.launch · stop · command · load · unload, 활성 컨트롤 플레인을 찾는 storage.leader.holder
+    그리고 Elector(흐름 13)와 컨트롤 플레인의 Clock 의 자리 — fleet.reload · settled · settle · standby, session.settle · tick
+    그리고 개념에 다른 모듈의 기능을 함수로 넘기는 자리(책임 문서가 「앱이 준다」고 적은 것) — characters.owner · remove, banlist.banned · ban · unban, directory.sweep, fleet.ready · launch · address,
+      session.count · recover · drain · handoff · reconcile · kick · evict · closeZone · openZone · playing
  N. 모듈 · 앱 · protocol 의 코드(테스트 밖)와 design 의 책임 · 흐름 문서에 게임 명사가 없다
  E. node:child_process 와 엔진의 진입점 · 인자 짓기(ENGINE_* · hostArgv · agentArgv · bundleArgv)는 fleet/spawner.ts 에만.
     엔진 체크아웃의 파일 자리(VIEWER_*)는 fleet/spawner.ts 와 apps/main/static.ts(뷰어의 페이지 · 실물을 준다)에만
@@ -68,11 +72,14 @@ npm run mongo:up       로컬의 MongoDB(docker · replica set rs0, scripts/mong
 npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   ← 코드 손대면 이것
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다
-HOST_AUTH_KEY=… npm start [-- config.json]
-                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」(로그인) → 캐릭터를 만들고 「들어가기」 → /play?ws=<게이트웨이>. 클라이언트는 게이트웨이(ws://localhost:8002) 하나로 붙고 게이트웨이가 세계(호스트)와 잇는다 — 입장(세션) 없이 붙으면 4002. 캐릭터는 마지막에 있던 존(처음이면 zones 의 첫 줄)의 인스턴스(`<존>-<번호>`)에 서고, 값(묶음)은 CharacterStore 에서 그 호스트로 올라가고 내려온다(엔진의 --handoff). 한 계정은 한때에 캐릭터 하나. 인스턴스 하나의 슬롯은 존의 capacity — 차면 노드의 slots 안에서 인스턴스를 더 띄우고, 그것도 차면 대기열의 순번. stdin 은 Operator(help — instances · start · drain · stop …).
+HOST_AUTH_KEY=… OPERATOR_KEY=… npm start [-- config.json] [--role main|api|gateway|control|node]
+                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」(로그인) → 캐릭터를 만들고 「들어가기」 → /play?ws=<게이트웨이>. 클라이언트는 게이트웨이(ws://localhost:8002) 하나로 붙고 게이트웨이가 세계(호스트)와 잇는다 — 입장(세션) 없이 붙으면 4002. 캐릭터는 마지막에 있던 존(처음이면 zones 의 첫 줄)의 인스턴스(`<존>-<번호>`)에 서고, 값(묶음)은 CharacterStore 에서 그 호스트로 올라가고 내려온다(엔진의 --handoff). 한 계정은 한때에 캐릭터 하나. 인스턴스 하나의 슬롯은 존의 capacity — 차면 노드의 slots 안에서 인스턴스를 더 띄우고, 그것도 차면 대기열의 순번. stdin 은 Operator(help — nodes · instances · start · drain · stop · close · kick · ban …, OPERATOR_KEY 가 있을 때 — notes/auth-token.md §6).
+                       --role 이면 그 role 하나 — 같은 스토리지를 쓰는 프로세스들이 내부망으로 잇는다. api · gateway · node 는 활성 컨트롤 플레인을 스토리지의 자리(leader)로 찾는다. control 을 둘 띄우면 하나가 활성, 하나가 대기(흐름 13).
+                       노드를 내리면(SIGTERM) 그 사람은 다른 노드의 인스턴스로 옮겨지고(흐름 7 의 2) 남은 값을 저장하고 내린다. 한 서버에 노드 둘이면 NODE_NAME · NODE_PORT · NODE_PORTS 를 가른다
                        관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 보기 둘: 「서버」(프로세스 · 인스턴스 · 연결의 state 와 서버의 흐름)와 「사람」(인스턴스마다의 사람 · 그 사람의 state · 길 · 일생, #people). 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
                        env: PORT(Api 포트) · GATE_PORT(게이트웨이 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL · SERVICE_GATE_URL(프록시 뒤의 페이지 · 게이트웨이 주소) · SERVICE_STORAGE · SERVICE_ENGINE
+                       role: SERVICE_ROLE · SERVICE_INTERNAL_HOST(내부망의 이름) · CONTROL_PORT · NODE_PORT · GATE_RPC_PORT(내부 주소) · NODE_NAME · NODE_SLOTS · NODE_HOST(게이트웨이가 호스트에 닿는 이름) · NODE_PORTS=<from>-<to>(엔진의 포트 범위) · OPERATOR_KEY
                        스토리지: MONGODB_URI(표 · 캐릭터 · lease · 잠금) · SNAPSHOT_URI=s3://<bucket>/<prefix> + S3_ENDPOINT · AWS_*(Store). 없는 쪽은 SERVICE_STORAGE 의 디렉터리 (notes/storage.md)
-npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --viewer off]
-                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(서버 · 흐름의 길 · plan 진행표 · 사람, playwright 가 깔린 자리에서)
+npm run shot [-- --url http://localhost:8000 --out out/shot --query '&fx=off&scene=off&tiles=flat'(기본 — 헤드리스는 큰 세계의 3D 를 찍다 멈춘다) --monitor http://localhost:8001 --from <Monitor>,<Monitor>… --viewer off]
+                       떠 있는 서비스를 헤드리스 크로미움으로 — 게스트 페이지와 세계의 뷰어를, --monitor 면 관측 페이지도 찍는다(서버 · 흐름의 길 · plan 진행표 · 사람, playwright 가 깔린 자리에서). --from 이면 프로세스마다의 Monitor 를 함께(?from=)
 ```

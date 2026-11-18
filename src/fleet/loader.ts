@@ -4,7 +4,7 @@
 // 파일의 안을 보지 않는다 — 같은 값인가는 바이트의 해시로만 본다.
 
 import { createHash } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KEEP_DONE, LOAD_DONE, UNLOAD_DONE } from '../protocol/engine';
 import type { TraceEnd, TraceFn } from '../protocol/observe';
@@ -204,6 +204,41 @@ export class Loader {
       }
     }
     this.mark(5, 2, run, instance, failed > 0 ? 'failed' : 'ok', { loaded: mine?.size ?? 0, saved, lost }); // Loader.save
+  }
+
+  /**
+   * recover — 흐름 1 의 9. 지난 실행이 저장하지 못하고 남긴 캐릭터 파일(spool/<인스턴스>/<캐릭터>.json)을 저장하고 lease 를 푼다.
+   * 그 캐릭터의 lease 가 비어 있을 때만 쓴다 — 누가 들고 있으면 그 값이 더 새것이라 파일을 버린다. 저장한 수.
+   */
+  async recover(spool: string, holder: string, run: string): Promise<number> {
+    let saved = 0;
+    let dropped = 0;
+    let dirs: string[] = [];
+    try {
+      dirs = (await readdir(spool, { withFileTypes: true })).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => d.name);
+    } catch {
+      dirs = [];
+    }
+    let failed = false;
+    for (const dir of dirs) {
+      for (const f of (await readdir(join(spool, dir))).filter((x) => x.endsWith('.json'))) {
+        const character = f.slice(0, -'.json'.length);
+        const file = join(spool, dir, f);
+        try {
+          const lease = await this.leases.acquire(character, holder);
+          if (lease === null) dropped++;
+          else {
+            if (await this.values.write(character, lease, file)) saved++;
+            await this.leases.release(lease);
+          }
+          await rm(file, { force: true });
+        } catch {
+          failed = true; // 스토리지에 닿지 않는다 — 파일은 남는다(다음 시작이 다시 한다)
+        }
+      }
+    }
+    this.mark(1, 9, run, '-', failed ? 'failed' : 'ok', { saved, dropped }); // Loader.recover
+    return saved;
   }
 
   /** forget — 호스트가 죽었다. 그 인스턴스의 것을 놓는다 — lease 는 Recoverer 가 끊는다(흐름 12 의 3). */

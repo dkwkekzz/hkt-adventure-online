@@ -100,8 +100,8 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
       expect(o.frames).toBeGreaterThan(0);
     }
     expect(new Set(opened.flatMap((o) => o.bodies)).size).toBe(12); // 겹치지 않는다
-    const world = s.fleet.runner.get('main-1')!;
-    const status = (await s.fleet.console.command('main-1', 'status'))!;
+    const world = s.node!.runner.get('main-1')!;
+    const status = (await s.node!.console.command('main-1', 'status'))!;
     for (const x of [a, b, c]) expect(status).toContain(`${x.character}(`); // 엔진의 계정은 캐릭터
     expect(world.players).toBe(3);
     for (const o of opened) o.close();
@@ -123,7 +123,7 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     expect(world.lastStatus!.text).toMatch(/ · 지연 \d+$/);
     expect(world.lag).toBe(world.lastStatus!.lag);
     const copy = join(mkdtempSync(join(tmpdir(), 'svc-backup-')), 'b1');
-    expect(await s.fleet.console.command('main-1', `backup ${copy}`)).toBe(`backup — 다음 창 끝에 ${copy} 에 베낀다`);
+    expect(await s.node!.console.command('main-1', `backup ${copy}`)).toBe(`backup — 다음 창 끝에 ${copy} 에 베낀다`);
     for (let i = 0; i < 100 && world.backed === null; i++) await new Promise((r) => setTimeout(r, 50));
     expect(world.backed).toMatchObject({ dir: copy, error: null });
     expect(existsSync(join(copy, 'manifest.json'))).toBe(true); // 그 자체로 저장 자리 — 목록과 그것이 가리키는 파일
@@ -137,7 +137,7 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
     expect(b2.character).toBe(b.character); // 같은 계정의 같은 캐릭터 — 표에서
     const at2 = await post2('/enter', { token: b2.token });
     expect(at2['gate']).toBe(at['gate']);
-    expect(s2.fleet.runner.get('main-1')!.resumed).toBe(true);
+    expect(s2.node!.runner.get('main-1')!.resumed).toBe(true);
     expect(await s2.storage.characters.read(b2.character, join(mkdtempSync(join(tmpdir(), 'value-')), 'v.json'))).toBe(true); // 캐릭터의 값은 스토리지에
     expect((await connect(at2['gate']!, b2.token)).bodies).toHaveLength(4); // 그 값으로 다시 선다(세계의 번호는 새로)
     expect(s2.monitor.recent.find((t) => t.flow === 9 && t.step === 6)).toMatchObject({ counts: { found: 1 } });
@@ -162,7 +162,7 @@ describe.skipIf(!have)('진짜 엔진 — 인스턴스 여럿 · 비움 · 장�
       gateUrl: 'ws://localhost:3309',
       fleet: { ...base.fleet, engineDir: ENGINE, viewerOut: join(mkdtempSync(join(tmpdir(), 'viewer-')), 'viewer.js'), ports: [3310, 3319], clockMs: 60_000, node: { name: 'node-1', slots: 4 }, spool: mkdtempSync(join(tmpdir(), 'spool-')) },
     };
-    const s = await Service.start(config, 'engine-test-key', (l) => process.env['ENGINE_LOG'] !== undefined && console.log(l));
+    const s = await Service.start(config, 'engine-test-key', (l) => process.env['ENGINE_LOG'] !== undefined && console.log(l), 'operator-test-key');
     services.push(s);
     const post = async (path: string, body: unknown) => (await (await fetch(`http://localhost:${s.port}${path}`, { method: 'POST', body: JSON.stringify(body) })).json()) as Record<string, string>;
     const player = async (name: string) => {
@@ -178,15 +178,15 @@ describe.skipIf(!have)('진짜 엔진 — 인스턴스 여럿 · 비움 · 장�
     expect((await post('/enter', { token: b.token }))['gate']).toBe(gate);
     const wb = await watch(gate, b.token);
     await wb.opened(1);
-    expect(s.fleet.registry.all().map((i) => `${i.name} ${i.state}`)).toEqual(['main-1 ready', 'main-2 ready']); // 상한 1 — 둘째가 띄웠다
-    expect(s.fleet.loader.of('main-1')).toEqual([a.character]);
+    expect(s.fleet!.registry.all().map((i) => `${i.name} ${i.state}`)).toEqual(['main-1 ready', 'main-2 ready']); // 상한 1 — 둘째가 띄웠다
+    expect(s.node!.loader.of('main-1')).toEqual([a.character]);
 
     // 비움 — 하나를 main-1 에서 다른 인스턴스로(빈 곳이 없어 main-3 을 띄운다). 접속은 그대로, 뷰어는 다시 온 열림을 받는다
-    expect(await s.fleet.operator.command('drain main-1')).toMatch(/옮겼다 — 1$/);
+    expect(await s.fleet!.operator.command(s.console!, 'drain main-1')).toMatch(/옮겼다 — 1$/);
     await wa.opened(2);
     expect(wa.closed).toBeNull();
-    expect(s.fleet.loader.of('main-1')).toEqual([]);
-    expect(s.fleet.loader.of('main-3')).toEqual([a.character]);
+    expect(s.node!.loader.of('main-1')).toEqual([]);
+    expect(s.node!.loader.of('main-3')).toEqual([a.character]);
     const move = s.monitor.recent.find((t) => t.flow === 10 && t.step === 1)!.run;
     expect(s.monitor.recent.filter((t) => t.run === move && t.flow === 10).map((t) => t.step)).toEqual([1, 2, 3, 5, 6, 7, 4, 8, 9, 10, 11, 12]); // 한 run — 3 의 B 도 같은 run
     const frames = wa.frames;
@@ -194,14 +194,14 @@ describe.skipIf(!have)('진짜 엔진 — 인스턴스 여럿 · 비움 · 장�
     expect(wa.frames).toBeGreaterThan(frames); // 새 세계의 창이 흐른다
 
     // 장애 — main-3 의 호스트를 죽인다. lease 를 끊고 같은 이름으로 다시 띄워 마지막으로 저장한 값(내리며 쓴 것)으로 세운다
-    s.fleet.runner.get('main-3')!.host!.kill('SIGKILL');
+    s.node!.runner.get('main-3')!.host!.kill('SIGKILL');
     await wa.opened(3);
     expect(wa.closed).toBeNull();
     const rec = s.monitor.recent.find((t) => t.flow === 12 && t.step === 1)!.run;
     expect(s.monitor.recent.filter((t) => t.run === rec && t.flow === 12).map((t) => `${t.step}.${t.end}`)).toEqual(['1.ok', '2.ok', '3.ok', '4.ok', '5.ok']); // 6 은 없다 — 사람을 옮기며(5) 같은 이름으로 이미 다시 띄웠다
     expect(s.monitor.recent.find((t) => t.run === rec && t.flow === 9 && t.step === 6)).toMatchObject({ counts: { found: 1 } });
-    expect(s.fleet.registry.get('main-3')).toMatchObject({ state: 'ready', epoch: 2, restarts: 0 });
-    expect(s.fleet.loader.of('main-3')).toEqual([a.character]);
+    expect(s.fleet!.registry.get('main-3')).toMatchObject({ state: 'ready', epoch: 2, restarts: 0 });
+    expect(s.node!.loader.of('main-3')).toEqual([a.character]);
     expect(wb.closed).toBeNull(); // 다른 인스턴스의 사람은 모른다
     wa.ws.close(1000);
     wb.ws.close(1000);

@@ -33,9 +33,12 @@ const until = async (cond: () => boolean, ms = 3000): Promise<void> => {
 };
 
 let opened: SessionSocket[] = [];
+let clocks: NodeJS.Timeout[] = [];
 afterEach(() => {
   for (const s of opened) s.close();
+  for (const c of clocks) clearInterval(c);
   opened = [];
+  clocks = [];
 });
 
 /** 캐릭터 셋 — p1 · p2 는 계정 a1 의 것, p3 은 a2, p4 는 a3. 세계는 launch 가 세운다 — main 존은 인스턴스 main(과 more 로 더한 것), meadow 존은 meadow-1. */
@@ -74,7 +77,6 @@ async function up(over: Partial<SessionOptions['config']> & { capacity?: number 
       { name: 'meadow', dataset: 'dataset/meadow.json', capacity, spare: 0 },
     ],
     entry: 'main',
-    clockMs,
     database: db,
     characters,
     owner: async (c) => owners[c] ?? null,
@@ -110,6 +112,7 @@ async function up(over: Partial<SessionOptions['config']> & { capacity?: number 
     now: () => t,
   });
   opened.push(session);
+  if (clockMs < 60_000) clocks.push(setInterval(() => void session.tick('clock'), clockMs)); // 컨트롤 플레인의 Clock 의 셈
   const report = (closing = false) => session.report({ name: 'gate-1', address: 'ws://gate.test', closing, connections: [] }, 'rep');
   return {
     session,
@@ -200,7 +203,6 @@ function optionsLike(db: DatabaseSocket): SessionOptions {
     config: { pendingMs: 1000, graceMs: 1000, gateLimitMs: 1000, queueForgetMs: 5000 },
     zones: [{ name: 'main', dataset: 'd', capacity: 2, spare: 0 }],
     entry: 'main',
-    clockMs: 60_000,
     database: db,
     characters: { read: async () => false, write: async () => true, erase: async () => true, versions: async () => [], rollback: async () => false },
     owner: async (c) => (c === 'p3' ? { account: 'a2', name: '셋' } : null),
@@ -462,5 +464,49 @@ describe('Sessions.of · Mover.move — 흐름 12 의 4 · 5', () => {
     expect(kicked).toEqual(['gate-1 p3 1001']);
     expect(traces.find((x) => x.run === 'x2' && x.flow === 12 && x.step === 5)).toMatchObject({ end: 'failed', person: 'gone' });
     expect(session.count('main-2')).toBe(0);
+  });
+});
+
+describe('Reconciler.match — 흐름 5 의 9 · 13 의 5', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  const gate = (connections: { character: string; instance: string | null }[]) => ({ name: 'gate-1', address: 'ws://gate.test', closing: false, connections });
+
+  it('로드돼 있는데 세션이 없으면 두 번째 보고에서 내리게 한다. 세션이 있는데 로드돼 있지 않으면 두 번째 보고에서 세션을 지우고 1001 로 닫게 한다', async () => {
+    const { session, report, unloads, kicked, traces } = await up();
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    session.reconcile('node-1', [{ name: 'main', loaded: ['p3', 'p4'] }], 'n1');
+    await settle();
+    expect(unloads).toEqual([]); // 한 번은 방금 한 일과 엇갈린 보고일 수 있다
+    session.reconcile('node-1', [{ name: 'main', loaded: ['p3', 'p4'] }], 'n2');
+    await settle();
+    expect(unloads).toEqual(['main p4']);
+    session.reconcile('node-1', [{ name: 'main', loaded: [] }], 'n3');
+    await settle();
+    expect(kicked).toEqual([]);
+    session.reconcile('node-1', [{ name: 'main', loaded: [] }], 'n4');
+    await settle();
+    expect(kicked).toEqual(['gate-1 p3 1001']);
+    expect(session.playing('p3')).toBe(false);
+    expect(traces.find((x) => x.run === 'n4' && x.flow === 5 && x.step === 9 && x.person === 'gone')).toMatchObject({ account: 'a2', name: '셋', unit: 'main' });
+  });
+
+  it('표를 다시 세우는 가운데는 보고에서 세션을 세운다 — 로드된 캐릭터는 grace, 접속이 있으면 active. 그동안 새 입장은 잠시 뒤 다시이고 접속을 닫지 않는다', async () => {
+    const { session, report, kicked, traces } = await up();
+    report();
+    session.settle(true);
+    expect(await session.enter('p1', 'b1', 'r1')).toMatchObject({ busy: true });
+    session.reconcile('node-1', [{ name: 'main', loaded: ['p3'] }], 'n1');
+    await until(() => session.playing('p3'));
+    expect(traces.find((x) => x.flow === 13 && x.step === 5)).toMatchObject({ account: 'a2', name: '셋', unit: 'main', person: 'grace' });
+    session.report(gate([{ character: 'p3', instance: 'main' }, { character: 'p9', instance: 'main' }]), 'g1');
+    session.report(gate([{ character: 'p3', instance: 'main' }, { character: 'p9', instance: 'main' }]), 'g2');
+    expect(kicked).toEqual([]); // 세우는 가운데는 세션이 없는 접속도 닫지 않는다
+    expect(traces.find((x) => x.run === 'g1' && x.flow === 5 && x.step === 9 && x.person === 'active')).toMatchObject({ account: 'a2' });
+    session.settle(false);
+    session.report(gate([{ character: 'p3', instance: 'main' }, { character: 'p9', instance: 'main' }]), 'g3');
+    session.report(gate([{ character: 'p3', instance: 'main' }, { character: 'p9', instance: 'main' }]), 'g4');
+    expect(kicked).toEqual(['gate-1 p9 4002']); // 서고 나면 세션이 없는 접속은 두 번째에 닫게 한다
   });
 });

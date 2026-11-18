@@ -40,6 +40,7 @@ export class Recoverer {
     if (i === null || i.epoch !== epoch) return; // 이미 다른 세대가 섰다 — 그 세대의 일이 아니다
     this.trace({ flow: 12, step: 1, run, unit: name, end: 'ok' }); // Recoverer.recover
     this.log(`${name} fleet 수습한다 — ${why}`);
+    const stopping = i.state === 'stopping'; // 내리던 것 — 다시 띄우지 않는다(6)
     i.state = 'failed';
     i.port = null;
     i.restarts++;
@@ -59,6 +60,13 @@ export class Recoverer {
     await this.move(name, run); // 흐름 12 의 4 · 5 — 세션 모듈이 흔적을 남긴다
     const now = this.registry.get(name);
     if (now === null || now.state !== 'failed') return; // 사람을 옮기며 이미 다시 띄웠다(흐름 3 의 B)
+    if (stopping) {
+      now.state = 'stopped';
+      now.restarts--; // 죽은 것이 아니라 내리던 것이다
+      await this.registry.put(now).catch(() => {});
+      this.trace({ flow: 12, step: 6, run, unit: name, end: 'ok', state: 'stopped' }); // 내리던 것 — 다시 띄우지 않는다
+      return;
+    }
     if (now.restarts > this.restartLimit) {
       this.trace({ flow: 12, step: 6, run, unit: name, end: 'refused', state: 'failed', counts: { restarts: now.restarts } }); // 운영자가 본다
       this.log(`${name} fleet ${now.restarts} 번 죽었다 — failed 로 둔다(운영자: start ${now.zone})`);

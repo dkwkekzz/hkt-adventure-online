@@ -71,6 +71,18 @@ export interface SessionSocket {
   recover(instance: string, run: string): Promise<void>;
   /** Scaler 가 부른다 — 그 인스턴스에 잡힌 슬롯(Sessions.count) */
   count(instance: string): number;
+  /** 노드의 보고 — 로드된 캐릭터들을 세션과 맞춘다(Reconciler.match — 흐름 5 의 9 · 13 의 5) */
+  reconcile(node: string, instances: readonly { readonly name: string; readonly loaded: readonly string[] }[], run: string): void;
+  /** 컨트롤 플레인이 막 바뀌어 표가 서는 가운데인가(흐름 13) — 켜면 보고에서 세션을 다시 세우고 새 입장을 받지 않는다 */
+  settle(rebuilding: boolean): void;
+  /** 컨트롤 플레인의 Clock 가운데 세션의 단계 — 흐름 5 의 11 · 13 · 14 */
+  tick(run: string): Promise<void>;
+  /** 운영자 — kick(Router.kick 4000 · 세션을 지운다. 없으면 false) · 차단한 계정의 세션을 내보낸다 · 존을 닫고 연다(ZoneMap) · 세션이 있는가 */
+  kick(character: string, run: string): boolean;
+  evict(account: string, run: string): Promise<void>;
+  closeZone(zone: string): Promise<void>;
+  openZone(zone: string): Promise<void>;
+  playing(character: string): boolean;
   close(): void;
 }
 
@@ -102,8 +114,6 @@ export interface SessionOptions {
   readonly zones: readonly ZoneSpec[];
   /** 처음 서는 존 */
   readonly entry: string;
-  /** 간격 — 흐름 5 의 C 가운데 세션의 단계(Gates.dead · Sessions.expired · Queue.next) */
-  readonly clockMs: number;
   /** 표 `lastZone` · `zones` 와 캐릭터의 값(흐름 8 의 10) */
   readonly database: DatabaseSocket;
   readonly characters: CharacterStoreSocket;

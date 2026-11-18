@@ -37,16 +37,18 @@ HOST_AUTH_KEY=… MONGODB_URI=mongodb://localhost:27017/hkt \
   audit           `<ISO 시각> <run>` → {at, operator, line}  운영자의 명령마다
   leases          Character.id → {holder(<인스턴스>@<세대>), n, until}   값을 지금 든 인스턴스
   characterValues Character.id → {data, n, at, history}      캐릭터의 값(묶음) — 엔진의 건넴 파일 그대로
-  leader                                                    plan 08 이 쓴다
+  nodes           노드 이름 → {cordoned}                       운영자의 cordon — 노드 자체는 보고로 선다(메모리)
+  leader          → {holder(활성 컨트롤 플레인의 내부 주소), term, until}   흐름 13 — term 은 늘기만 한다
 물건(object storage 의 <prefix>/ = 디렉터리의 <root>/bucket/)
   <인스턴스>/current.tgz              지금의 Store — meta 의 epoch · rev
   <인스턴스>/backups/<UTC 시각>.tgz    백업(새것 backupKeep 개)
 이 서버(<root>/local/)
   <인스턴스>/                          엔진이 쓰는 Store 자리(--store)
   <인스턴스>.rev                       그 자리가 어느 판에서 났는가
-이 서버(<root>/spool/)
+이 서버(<root>/spool/<노드>/)            노드마다 — 한 서버에 노드 둘이어도 서로의 것을 건드리지 않는다
   <인스턴스>/<Character.id>.json       건넴 자리(--handoff) — 캐릭터의 값이 드나드는 파일. 저장하면 지운다
   .backup/                            도는 호스트의 backup 사본 — 올리면 지운다
+  <인스턴스>.pid                       그 노드가 띄운 엔진 프로세스 — 노드가 다시 뜨면 남은 것을 끝낸다(Runner.reap)
 ```
 
 - 디렉터리의 뒤에서 줄 하나는 `{"v": n, "value": …}` JSON 파일 하나다. 파일 이름은 key 를 감춘 것(`guest%3Aabc.json`).
@@ -65,4 +67,5 @@ purge main-1            Store 와 백업을 지운다
 ```
 
 - 도는 인스턴스는 `backupEvery` 박자마다 엔진의 `backup` 이 낸 사본(한 저장의 것)을 올리고 백업 하나를 남긴다. 도는 호스트의 Store 자리를 그대로 베끼지 않는다.
-- 명령마다 표 `audit` 에 한 줄이 남는다(운영자의 이름은 지금 `stdin`). 기록하지 못하면 명령을 하지 않는다.
+- 명령마다 표 `audit` 에 한 줄이 남는다(운영자의 이름 — 토큰의 `o<이름>`, [auth-token.md](auth-token.md) §6). 기록하지 못하면 명령을 하지 않는다.
+- 프로세스가 갈려 있으면 명령은 활성 컨트롤 플레인의 것이다 — 그 stdin 또는 `POST /operator`. 대기의 stdin 은 받지 않는다.

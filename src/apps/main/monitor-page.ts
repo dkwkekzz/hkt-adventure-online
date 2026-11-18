@@ -252,7 +252,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
 
   function personOf(who) {
     let p = persons.get(who);
-    if (!p) { p = { who, name: null, state: null, states: [], unit: null, sessions: [], entries: [], at: 0, last: null, edges: new Map() }; persons.set(who, p); }
+    if (!p) { p = { who, name: null, state: null, stateAt: 0, states: [], unit: null, unitAt: 0, sessions: [], entries: [], at: 0, last: null, edges: new Map() }; persons.set(who, p); }
     return p;
   }
   function count(edge, msg, p) {
@@ -260,11 +260,11 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     if (p) p.edges.set(edge.key, (p.edges.get(edge.key) || 0) + 1);
   }
   function hit(id, t) { const s = stat.get(id); if (!s) return; s.n++; s.last = t; s.at = Date.now(); if (t.end === 'refused' || t.end === 'failed') s.bad++; }
-  function addEntry(p, e) { p.entries.push(e); if (p.entries.length > 300) p.entries.shift(); if (e.t.at >= p.at) { p.at = e.t.at; p.last = e.t; } }
+  function addEntry(p, e) { p.entries.push(e); const n = p.entries.length; if (n > 1 && p.entries[n - 2].t.at > e.t.at) p.entries.sort((a, b) => a.t.at - b.t.at); if (p.entries.length > 300) p.entries.shift(); if (e.t.at >= p.at) { p.at = e.t.at; p.last = e.t; } }
 
   function ingest(src, t, live) {
     src.lastAt = Math.max(src.lastAt, t.at); total++;
-    const id = (src.base || '') + '|' + t.run;
+    const id = t.run; // 실행은 프로세스를 넘는다 — 글에 실린 run 이 같으면 어느 Monitor 의 것이든 한 실행
     let r = runs.get(id); if (!r) { r = { id, run: t.run, flow: t.flow, owner: ownerOf(t.flow), traces: [], entries: [], prev: null, who: null, unit: null, bad: false }; runs.set(id, r); }
     if (t.unit && t.unit !== '-') r.unit = t.unit;
     if (t.end === 'refused' || t.end === 'failed') r.bad = true;
@@ -285,8 +285,9 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     if (p) {
       if (t.name) p.name = t.name;
       if (t.session && !p.sessions.includes(t.session)) p.sessions.push(t.session);
-      if (t.unit && t.unit !== '-') p.unit = t.unit;
-      if (t.person) { p.state = t.person; p.states.push({ state: t.person, at: t.at }); }
+      // Monitor 여럿의 흔적은 때의 차례로 오지 않는다 — 더 늦은 흔적만 지금의 자리 · state 를 바꾼다
+      if (t.unit && t.unit !== '-' && t.at >= p.unitAt) { p.unit = t.unit; p.unitAt = t.at; }
+      if (t.person) { if (t.at >= p.stateAt) { p.state = t.person; p.stateAt = t.at; } p.states.push({ state: t.person, at: t.at }); p.states.sort((a, b) => a.at - b.at); }
       addEntry(p, entry);
     } else if (r.owner === 'person') { unknown.entries.unshift(entry); if (unknown.entries.length > 50) unknown.entries.length = 50; }
     if (r.owner === 'person' && r.traces.length === 0) r.unknownCounted = false;
@@ -295,6 +296,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     for (const x of ext) { const e = edgeOf(proc, x); if (e) count(e, { t, where }, p); hit(x, t); }
     hit(proc, t);
     r.traces.push(t); r.entries.push(entry); r.at = t.at; r.end = t.end; r.prev = proc;
+    if (t.unit && t.unit !== '-' && NODE_STEPS.has(t.flow + '.' + t.step)) nodeUnits.add(t.unit);
     if (t.unit !== '-' && (t.state !== undefined || t.counts !== undefined)) {
       const was = src.units.get(t.unit);
       src.units.set(t.unit, { unit: t.unit, state: t.state ?? (was ? was.state : null), counts: Object.assign({}, was && was.counts, t.counts), at: t.at });
@@ -365,10 +367,30 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
     if (!live.length) return { cls: 'down', text: '끊김', dot: 'failed', grade: g };
     const closing = live.some((s) => s.metrics.closing);
     const mine = live.some((s) => s.metrics.role === id);
-    return { cls: mine ? 'own' : 'main', text: (mine ? '제 프로세스 · ' : 'main 에 조립 · ') + (closing ? '내려가는 중' : '듣는 중'), dot: g.dot, grade: g };
+    // 같은 role 이 여럿 — 수와 끊긴 것, 컨트롤 플레인이면 활성 · 대기(흐름 13)
+    const many = ms.length > 1 ? ' × ' + ms.length + (live.length < ms.length ? ' · 끊김 ' + (ms.length - live.length) : '') : '';
+    const lead = live.map((s) => s.metrics.leader).filter(Boolean);
+    const leader = lead.length ? ' · ' + ['active', 'settling', 'standby'].map((r) => [r, lead.filter((x) => x === r).length]).filter(([, n]) => n > 0).map(([r, n]) => ({ active: '활성', settling: '서는 중', standby: '대기' })[r] + (lead.length > 1 ? ' ' + n : '')).join(' · ') : '';
+    return { cls: mine ? 'own' : 'main', text: (mine ? '제 프로세스' + many + ' · ' : 'main 에 조립 · ') + (closing ? '내려가는 중' : '듣는 중') + leader, dot: g.dot, grade: g };
   }
   const dotClass = (d) => 'st-' + (d === 'ok' ? 'ready' : d === 'failed' ? 'failed' : d === 'refused' ? 'grace' : 'stopped');
-  function allUnits() { const u = []; for (const s of sources) for (const x of s.units.values()) u.push(x); return u; }
+  /** 단위마다 하나 — 같은 인스턴스를 컨트롤 플레인과 노드가 같이 알린다. state 는 가장 늦게 알린 것(없으면 다른 것), 수는 합쳐서 */
+  /** 노드인 단위 — 노드를 단위로 남기는 단계(노드의 시작 · 알림 · 내려감)의 흔적에서 안다. 엔진 프로세스(인스턴스)와 따로 센다 */
+  const NODE_STEPS = new Set(['1.10', '1.11', '5.4', '5.7', '7.1', '13.4']);
+  const nodeUnits = new Set();
+  function allUnits(kind) {
+    const by = new Map();
+    for (const s of sources) for (const x of s.units.values()) {
+      const was = by.get(x.unit);
+      if (!was) { by.set(x.unit, { unit: x.unit, state: x.state, counts: Object.assign({}, x.counts), at: x.at }); continue; }
+      const late = x.at >= was.at;
+      if (x.state != null && (late || was.state == null)) was.state = x.state;
+      was.counts = late ? Object.assign(was.counts, x.counts) : Object.assign({}, x.counts, was.counts);
+      was.at = Math.max(was.at, x.at);
+    }
+    const all = [...by.values()];
+    return kind === 'node' ? all.filter((u) => nodeUnits.has(u.unit)) : all.filter((u) => !nodeUnits.has(u.unit));
+  }
   function conceptsOf(id) { return MAP.concepts.filter((c) => c.processes.includes(id) && c.processes.length < PROCS.length); }
   const peopleOn = (unit) => [...persons.values()].filter((p) => p.unit === unit && p.state === 'active').length;
 
@@ -569,6 +591,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       return '<div class="srv" data-node="' + id + '"><span class="dot ' + (ps.dot || '') + '"></span><span><b>' + esc(LABEL[id]) + '</b> <span class="al">' + id + '</span> <span class="sub">' + esc(ps.text) + '</span></span><span class="al">개념 ' + ps.grade.b + ' / ' + ps.grade.n + ' · 단계 ' + (s ? s.n : 0) + '</span></div>'; }).join('');
     const us = allUnits();
     h += '<h3>인스턴스 ' + us.length + '</h3>' + (us.length ? us.map((u) => '<div class="srv" data-node="engine"><span class="dot ' + (u.state === 'ready' ? 'ok' : u.state === 'failed' ? 'failed' : u.state === 'stopped' ? '' : 'wait') + '"></span><span><b>' + esc(u.unit) + '</b> <span class="sub">' + esc(u.state || '-') + '</span><br><span class="al">' + esc(kv(u.counts)) + '</span></span><span class="al">접속 중 ' + peopleOn(u.unit) + '</span></div>').join('') : '<p class="empty">인스턴스 없음 — 입장이 띄운다</p>');
+    const ns = allUnits('node');
+    if (ns.length) h += '<h3>노드 ' + ns.length + '</h3>' + ns.map((u) => '<div class="srv" data-node="node"><span class="dot ' + (u.counts && u.counts.closing ? 'wait' : 'ok') + '"></span><span><b>' + esc(u.unit) + '</b><br><span class="al">' + esc(kv(u.counts)) + '</span></span><span class="al">인스턴스 ' + ((u.counts && u.counts.instances) ?? 0) + '</span></div>').join('');
     const ops = [...runs.values()].filter((r) => r.owner === 'operator').sort((a, b) => b.at - a.at);
     h += '<h3>운영자의 명령 ' + ops.length + '</h3>' + (ops.length ? '<div class="acts">' + ops.slice(0, 20).map(actHtml).join('') + '</div>' : '<p class="empty">명령이 없었다</p>');
     const ms = [...machine.entries()].sort((a, b) => a[0] - b[0]);
@@ -653,7 +677,8 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
 
   function renderHead() {
     const m = sources.map((s) => s.metrics).filter(Boolean);
-    document.getElementById('who').textContent = m.length === 0 ? '—' : m.map((x) => 'Monitor ' + x.role + ' · build ' + x.build).join(' / ');
+    const lost = sources.filter((x) => !x.metrics && !x.open).map((x) => x.base || location.origin); // 한 번도 닿지 않은 Monitor — role 을 모른다
+    document.getElementById('who').textContent = (m.length === 0 ? '—' : m.map((x) => 'Monitor ' + x.role + ' · build ' + x.build).join(' / ')) + (lost.length ? ' / 닿지 않는다 — ' + lost.join(' · ') : '');
     const open = sources.filter((s) => s.open).length, closing = m.some((x) => x.closing);
     const dot = open === sources.length ? (closing ? 'refused' : 'ok') : 'failed';
     document.getElementById('conn').innerHTML = '<span class="dot ' + dot + '"></span>' + (open === sources.length ? (closing ? '내려가는 중' : '듣는 중') : '끊김 — 다시 붙는다');

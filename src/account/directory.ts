@@ -39,6 +39,25 @@ export class Directory {
     return id;
   }
 
+  /**
+   * sweep — 흐름 5 의 15. 캐릭터가 없고 before 보다 오래 오지 않은 계정을 지운다(표 accounts · accountInfo · characters 의 그 줄). 지운 수.
+   * 차단(bans)은 남긴다 — 같은 주체가 돌아와도 새 계정이라 닿지 않는다.
+   */
+  async sweep(before: number): Promise<number> {
+    let removed = 0;
+    for (const [key, raw] of await this.db.all('accounts')) {
+      if (typeof raw !== 'string') continue;
+      const info = (await this.db.get('accountInfo', raw)) as AccountInfo | null;
+      const chars = (await this.db.get('characters', raw)) as unknown[] | null;
+      if ((chars !== null && chars.length > 0) || (info !== null && info.seen >= before)) continue;
+      await this.db.remove('accounts', key);
+      await this.db.remove('accountInfo', raw);
+      await this.db.remove('characters', raw);
+      removed++;
+    }
+    return removed;
+  }
+
   /** idOf — 있는 것만. */
   async idOf(identity: Identity): Promise<string | null> {
     const id = await this.db.get('accounts', keyOf(identity));

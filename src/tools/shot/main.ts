@@ -1,4 +1,4 @@
-// 화면 확인 — npm run shot [-- --url http://localhost:8000 --out out/shot --wait 6000 --query '&fx=off&scene=off&tiles=flat' --monitor http://localhost:8001 --viewer off --flow 3]. 검사 밖.
+// 화면 확인 — npm run shot [-- --url http://localhost:8000 --out out/shot --wait 6000 --query '&fx=off&scene=off&tiles=flat' --monitor http://localhost:8001 --from http://localhost:8101,http://localhost:8102 --viewer off --flow 3]. 검사 밖.
 // --monitor 가 있으면 뷰어 뒤에 관측 페이지를 찍는다 — <out>/observe.png(서버 보기) · observe-flow.png(대신 하는 단계가 있는 서버의 흐름의 길) · observe-plan.png(plan 진행표, 대신이 가장 많은 plan 을 펴서) · observe-people.png(사람 보기, 첫 사람을 골라). --viewer off 면 게스트 페이지 · 뷰어를 건너뛴다.
 // --query 는 뷰어 페이지에 덧붙이는 질의 — 기본은 가벼운 그림(헤드리스의 소프트웨어 GPU 는 큰 세계의 3D 장면을 찍는 동안 멈춘다). 빈 글이면 그대로.
 // --flow N 이면 사람 보기에서 그 흐름을 골라 그 길을 찍는다 — <out>/observe-flow-N.png(사람의 흐름 2 · 3 · 8 · 9 · 10 · 11 은 사람 보기에 있다).
@@ -16,7 +16,7 @@ interface Page {
   waitForSelector(sel: string, o: { timeout: number }): Promise<unknown>;
   screenshot(o: { path: string; fullPage?: boolean }): Promise<unknown>;
   waitForURL(u: RegExp, o: { timeout: number }): Promise<void>;
-  waitForFunction(f: () => boolean, a: null, o: { timeout: number }): Promise<unknown>;
+  waitForFunction<A>(f: (a: A) => boolean, a: A, o: { timeout: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   textContent(sel: string): Promise<string | null>;
   url(): string;
@@ -38,6 +38,8 @@ async function main(): Promise<void> {
   const monitor = arg('--monitor', '');
   const viewer = arg('--viewer', 'on') !== 'off';
   const pickFlow = arg('--flow', '');
+  const from = arg('--from', ''); // 여러 Monitor 를 함께 — 관측 페이지의 ?from=
+  const page_ = `${monitor.replace(/\/$/, '')}/observe/page${from === '' ? '' : `?from=${encodeURIComponent(from)}`}`;
   let playwright: { chromium: { launch(o: object): Promise<{ newPage(o: object): Promise<Page>; close(): Promise<void> }> } };
   try {
     playwright = createRequire(import.meta.url)('playwright');
@@ -54,8 +56,8 @@ async function main(): Promise<void> {
         await page.close(); // 뷰어의 탭은 3D 를 그리느라 바쁘다 — 닫고 관측은 새 탭에서
         page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
       }
-      await page.goto(`${monitor.replace(/\/$/, '')}/observe/page#3`);
-      await page.waitForFunction(() => /듣는 중/.test(document.getElementById('conn')?.textContent ?? ''), null, { timeout: 10000 });
+      await page.goto(`${page_}#3`);
+      await page.waitForFunction((many: boolean) => (many ? /듣는 중|끊김/ : /듣는 중/).test(document.getElementById('conn')?.textContent ?? ''), from !== '', { timeout: 10000 }); // 여럿이면 내려간 프로세스는 끊김으로 보인다
       await page.waitForTimeout(800);
       console.log(`관측 ${await page.textContent('#total')} · ${await page.textContent('#conn')}`);
       await page.screenshot({ path: join(out, 'observe.png'), fullPage: true });
@@ -86,8 +88,8 @@ async function main(): Promise<void> {
         console.log(`찍었다 — ${join(out, 'observe-plan.png')}`);
       }
       const people = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
-      await people.goto(`${monitor.replace(/\/$/, '')}/observe/page#people`);
-      await people.waitForFunction(() => /듣는 중/.test(document.getElementById('conn')?.textContent ?? ''), null, { timeout: 10000 });
+      await people.goto(`${page_}#people`);
+      await people.waitForFunction((many: boolean) => (many ? /듣는 중|끊김/ : /듣는 중/).test(document.getElementById('conn')?.textContent ?? ''), from !== '', { timeout: 10000 });
       const someone = await people.$('#side [data-who]');
       if (someone !== null) await someone.click();
       await people.waitForTimeout(800);

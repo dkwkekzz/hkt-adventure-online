@@ -3,7 +3,7 @@
 // 호스트는 건넴 자리(spool/<인스턴스>)를 든다 — 사람의 묶음은 Loader 가 load 로 맡긴 것만 선다(엔진의 --handoff).
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXIT_REFUSED, RESUMED_HEAD } from '../protocol/engine';
 import type { StatusLine } from '../protocol/engine';
@@ -117,6 +117,61 @@ export class Runner {
     return this.servers.get(name) ?? null;
   }
 
+  /** 그 인스턴스의 프로세스 기록 — 노드가 다시 뜨면 reap 이 읽는다. */
+  private pidFile(name: string): string {
+    return join(this.spool, `${name}.pid`);
+  }
+
+  private writePids(server: Server): void {
+    const pids = [server.host?.pid, server.agent?.pid].filter((p): p is number => typeof p === 'number' && p > 0);
+    try {
+      mkdirSync(this.spool, { recursive: true });
+      if (pids.length === 0) rmSync(this.pidFile(server.name), { force: true });
+      else writeFileSync(this.pidFile(server.name), JSON.stringify(pids));
+    } catch {
+      // 기록하지 못해도 띄움은 그대로 — reap 이 그 프로세스를 모를 뿐이다
+    }
+  }
+
+  /**
+   * reap — 흐름 1 의 8. 지난 실행이 남긴 호스트 · 에이전트 프로세스를 끝낸다(프로세스 기록의 pid 가 엔진의 진입점을 돌고 있으면 그 묶음째).
+   * 끝낸 수. 노드가 다시 뜬 것이면 그 인스턴스들은 여기서 끝났다 — 컨트롤 플레인은 보고에 없는 것을 보고 흐름 12 로 간다.
+   */
+  reap(): number {
+    let reaped = 0;
+    if (!existsSync(this.spool)) return 0;
+    for (const f of readdirSync(this.spool).filter((x) => x.endsWith('.pid'))) {
+      const file = join(this.spool, f);
+      let pids: number[] = [];
+      try {
+        pids = JSON.parse(readFileSync(file, 'utf8')) as number[];
+      } catch {
+        pids = [];
+      }
+      for (const pid of pids) {
+        let cmd = '';
+        try {
+          cmd = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+        } catch {
+          continue; // 이미 없다(또는 /proc 가 없는 체제 — 남은 것은 운영자가 본다)
+        }
+        if (!/apps\/(server|agent)\/main\.ts/.test(cmd)) continue; // 다른 프로세스가 그 번호를 이어받았다
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            continue;
+          }
+        }
+        reaped++;
+      }
+      rmSync(file, { force: true });
+    }
+    return reaped;
+  }
+
   /** 흔적 하나 — 단위는 그 인스턴스. state 는 바뀐 뒤의 값. */
   private mark(flow: number, step: number, run: string, unit: string, end: TraceEnd, extra: { state?: string; counts?: Record<string, number> } = {}): void {
     this.ctx.trace({ flow, step, run, unit, end, ...extra });
@@ -153,6 +208,7 @@ export class Runner {
     server.host = host;
     host.onLine((stream, line) => this.line(spec.name, stream, line));
     host.onExit((code) => this.exited(spec.name, host, code));
+    this.writePids(server);
     this.ctx.log(`${spec.name} fleet 호스트를 띄운다 — pid ${host.pid} · 포트 ${port} · 세대 ${spec.epoch}`);
     this.mark(3, 15, run, spec.name, 'ok'); // Spawner.host
 
@@ -209,10 +265,12 @@ export class Runner {
       if (stream === 'stderr' || shown++ < 1) this.ctx.log(`${server.name} agent ${line}`); // 두뇌가 창마다 찍는다 — 첫 줄과 stderr 만
     });
     agent.onExit((code) => this.agentExited(server, agent, code));
+    this.writePids(server);
   }
 
   private agentExited(server: Server, agent: Process, code: number): void {
     if (server.agent === agent) server.agent = null;
+    this.writePids(server);
     this.ctx.log(`${server.name} agent 끝났다 — exit ${code}`);
     if (server.state !== 'ready' || server.host === null) return;
     server.agentRestarts++;
@@ -297,6 +355,7 @@ export class Runner {
     if (server === undefined || server.host !== host) return;
     server.host = null;
     server.listening = false;
+    this.writePids(server);
     this.ctx.console.drop(name);
     for (const b of server.backups.splice(0)) b.resolve({ now: null, error: '호스트가 끝났다' });
     server.agent?.kill();

@@ -54,7 +54,14 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portR
       restartLimit: 2,
       backupEvery: 0,
       backupKeep: 3,
+      reportLimitMs: 60_000,
+      closingMs: 1000,
     },
+    role: 'main',
+    rpc: { host: 'localhost', controlPort: 0, nodePort: 0, gatewayPort: 0, limitMs: 2000 },
+    leader: { ttlMs: 3000, settleMs: 2000 },
+    operators: ['console'],
+    accountIdleMs: 3600_000,
   };
 }
 
@@ -89,7 +96,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const { s, base } = await up();
     expect(await (await fetch(base + '/')).text()).toContain('/login');
     expect((await fetch(base + '/health')).status).toBe(404);
-    expect(await (await fetch(`http://localhost:${s.monitor.port}/health`)).text()).toBe('ok');
+    expect(await (await fetch(`http://localhost:${s.monitor.port}/health`)).text()).toBe('ok active'); // main 은 컨트롤 플레인을 든다 — 자리(흐름 13)도 답한다
     expect((await fetch(base + '/nope')).status).toBe(404);
   });
 
@@ -133,12 +140,12 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
 
     const ea = await post('/enter', { token: chosen.body['token'] });
     expect(ea.code).toBe(200);
-    expect(ea.body['gate']).toBe(`ws://localhost:${s.gateway.port}`); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
+    expect(ea.body['gate']).toBe(`ws://localhost:${s.gateway!.port}`); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
     expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(chosen.body['token'])}&ws=${encodeURIComponent(ea.body['gate'])}`);
     const b = await player('둘');
     const eb = await post('/enter', { token: b.token });
     expect(eb.body['gate']).toBe(ea.body['gate']);
-    expect(s.fleet.registry.all().map((i) => i.name)).toEqual(['main-1']); // 상한 안 — 같은 인스턴스
+    expect(s.fleet!.registry.all().map((i) => i.name)).toEqual(['main-1']); // 상한 안 — 같은 인스턴스
     // 다른 계정의 캐릭터는 고르지도 지우지도 못한다
     expect((await post('/choose', { token: b.account, character: made.body['character'].id })).body).toEqual({ why: '이 계정의 캐릭터가 아니다' });
     expect((await post('/delete', { token: b.account, character: made.body['character'].id })).code).toBe(400);
@@ -167,7 +174,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const { s, post, player } = await up();
     const a = await player('하나');
     const account = a.account.split('.')[1]!;
-    await s.banlist.ban(account, Date.now() + 60_000); // 운영자의 ban(흐름 6 — plan 08) 대신 표에
+    await s.banlist!.ban(account, Date.now() + 60_000); // 운영자의 ban(흐름 6 — plan 08) 대신 표에
     expect((await post('/enter', { token: a.token })).body).toEqual({ why: '차단된 계정이다' });
     expect((await post('/characters', { token: a.account })).body).toEqual({ why: '차단된 계정이다' });
     expect((await post('/login', { provider: 'guest', subject: a.subject })).body).toEqual({ why: '차단된 계정이다' });
@@ -223,12 +230,12 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     await first.s.stop();
     await first.s.stop(); // 두 번 불려도 한 번
     const second = await up(c);
-    expect(second.s.fleet.registry.get('main-1')?.state).toBe('stopped');
+    expect(second.s.fleet!.registry.get('main-1')?.state).toBe('stopped');
     const again = await second.player('-', a.subject);
     expect(again.account.split('.')[1]).toBe(a.account.split('.')[1]);
     expect(again.character).toEqual(a.character); // 캐릭터도 표에서
     expect((await second.post('/enter', { token: again.token })).code).toBe(200);
-    expect(second.s.fleet.runner.get('main-1')?.resumed).toBe(true);
+    expect(second.s.node!.runner.get('main-1')?.resumed).toBe(true);
   });
 
   it('다른 서버에서 같은 스토리지로 — 이 서버의 자리(local) 없이 표(db)와 Store(bucket)만으로 계정 · 배정 · 세계가 그대로', async () => {
@@ -250,8 +257,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(again.character).toEqual(a.character); // 같은 캐릭터
     const entered = await second.post('/enter', { token: again.token });
     expect(entered.code).toBe(200);
-    expect(second.s.fleet.runner.get('main-1')?.resumed).toBe(true); // 올라간 Store 를 내려 받아 이어간다
-    expect(second.s.fleet.registry.get('main-1')?.epoch).toBe(2); // 세대가 이어진다
+    expect(second.s.node!.runner.get('main-1')?.resumed).toBe(true); // 올라간 Store 를 내려 받아 이어간다
+    expect(second.s.fleet!.registry.get('main-1')?.epoch).toBe(2); // 세대가 이어진다
   });
 
   it('게이트웨이 — 받은 주소 하나로 붙어 호스트와 이어진다. 입장 없이 붙으면 4002. 사람은 9 의 8 에서 active, 닫으면 11 의 2 에서 grace', async () => {
@@ -282,7 +289,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
   it('Monitor.trace — 흐름 1 · 2 · 8 · 3 · 7 의 단계가 차례로 흔적을 남긴다. 한 입장은 run 하나로 Api · 세션 · 함대를 잇는다', async () => {
     const { s, post, player } = await up();
     const steps = (flow: number, run?: string) => s.monitor.recent.filter((t) => t.flow === flow && (run === undefined || t.run === run)).map((t) => `${t.step}.${t.end}`);
-    expect(steps(1)).toEqual(['7.ok', '1.ok', '2.ok', '4.wait', '5.ok', '3.wait']); // 4 · 5 — 게이트웨이가 듣고 알린다. 3(Api.listen)은 시작이 다 끝난 뒤에 남긴다
+    expect(steps(1)).toEqual(['1.ok', '7.ok', '8.ok', '9.ok', '10.ok', '11.ok', '4.wait', '5.ok', '2.ok', '6.ok', '3.wait']); // 스토리지 · 노드(7 ~ 10 → 컨트롤 플레인의 11) · 게이트웨이(4 · 5) · API 서버(2) · 컨트롤 플레인(6) — 3(Api.listen)은 시작이 다 끝난 뒤에 남긴다
     const a = await player('하나');
     expect(steps(2)).toEqual(['1.ok', '2.ok', '3.ok', '4.ok', '5.wait']);
     expect(steps(8)).toEqual(['1.ok', '2.ok', '3.ok', '4.wait', '1.ok', '2.ok', '3.ok', '5.wait', '1.ok', '2.ok', '3.ok', '6.ok', '7.wait']); // 보기 · 만들기 · 고르기
@@ -307,7 +314,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const monitor = s.monitor;
     await s.stop();
     const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);
-    expect(stop).toEqual(['7.', '8.', '4.stopping', '5.', '6.stopped', '10.', '11.']); // 게이트웨이가 알리고 닫고 · 내리고 · Store 를 올리고 · 줄을 stopped 로 · Api 를 닫고 · 스토리지를 닫는다
+    expect(stop).toEqual(['7.', '8.', '1.closing', '4.stopping', '5.', '6.stopped', '9.', '10.', '11.']); // 게이트웨이가 알리고 닫고 · 내리고 · Store 를 올리고 · 줄을 stopped 로 · Api 를 닫고 · 스토리지를 닫는다
     expect(monitor.units.get('main-1')?.state).toBe('stopped'); // 흐름 4 의 5 — 호스트가 끝났다
   });
 

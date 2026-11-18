@@ -42,6 +42,8 @@ export class Monitor {
   readonly units = new Map<string, UnitNow>();
   readonly tally = new Map<string, number>();
   closing = false;
+  /** 컨트롤 플레인의 자리 — Service 가 Elector 를 준다(흐름 14 의 1 — 활성인지 대기인지도 답한다) */
+  leader: () => string | null = () => null;
   port = 0;
   private readonly keep: number;
   private readonly every: number;
@@ -79,9 +81,10 @@ export class Monitor {
     this.trace = this.trace.bind(this);
   }
 
-  /** health — 흐름 14 의 1. 듣고 있으면 200, 내려가는 가운데면 503. */
+  /** health — 흐름 14 의 1. 듣고 있으면 200, 내려가는 가운데면 503. 컨트롤 플레인은 자리(active · settling · standby)를 덧붙인다. */
   health(): { code: number; text: string } {
-    return this.closing ? { code: 503, text: 'closing' } : { code: 200, text: 'ok' };
+    const leader = this.leader();
+    return this.closing ? { code: 503, text: 'closing' } : { code: 200, text: leader === null ? 'ok' : `ok ${leader}` };
   }
 
   /** metrics — 흐름 14 의 2 · 4. */
@@ -90,6 +93,7 @@ export class Monitor {
       role: this.role,
       build: this.build,
       closing: this.closing,
+      leader: this.leader(),
       at: Date.now(),
       units: [...this.units.values()],
       tally: Object.fromEntries(this.tally),

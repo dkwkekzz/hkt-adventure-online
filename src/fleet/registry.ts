@@ -42,6 +42,13 @@ export class Registry {
     return { registry, skipped };
   }
 
+  /** reload — 표를 스토리지에서 다시 읽는다(흐름 13 의 3 — 다른 컨트롤 플레인이 고쳤을 수 있다). */
+  async reload(): Promise<void> {
+    const { registry } = await Registry.load(this.db);
+    this.rows.clear();
+    for (const [k, v] of registry.rows) this.rows.set(k, v);
+  }
+
   all(): Instance[] {
     return [...this.rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
   }

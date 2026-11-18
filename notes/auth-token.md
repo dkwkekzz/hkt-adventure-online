@@ -153,3 +153,22 @@ SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start
 ```bash
 node -e 'const c=require("crypto");const id="tester",exp=Math.floor(Date.now()/1000)+3600,b=`hkt1.${id}.${exp}`;console.log(`${b}.${c.createHmac("sha256",process.env.HOST_AUTH_KEY).update(b).digest("base64url")}`)'
 ```
+
+## 6. 운영자의 토큰 — `OPERATOR_KEY`
+
+운영자의 명령(흐름 6)은 컨트롤 플레인이 받고, **다른 키**(`OPERATOR_KEY`)로 서명한 운영자의 토큰만 받는다. 사람 · 엔진의 키(`HOST_AUTH_KEY`)로 낸 토큰은 운영자의 것이 아니다.
+
+```text
+hkt1.o<운영자 이름>.<만료>.<sig>       sig = HMAC-SHA256(OPERATOR_KEY, …) — 모양은 §2 와 같다
+```
+
+- 머리 `o` 가 운영자의 토큰이다(`kindOf` — `operator`). 이름은 `service.config.json` 의 `operators` 에 있어야 한다. 명령마다 표 `audit` 에 그 이름이 남는다(흐름 6 의 3).
+- `OPERATOR_KEY` 가 없는 컨트롤 플레인은 운영자의 명령을 받지 않는다(흐름 6 의 2).
+- stdin 의 콘솔은 시작할 때 `operators` 의 첫 이름으로 1 년짜리 토큰을 스스로 낸다 — 그 프로세스의 stdin 을 쥔 사람이 그 운영자다. 대기의 컨트롤 플레인의 stdin 은 명령을 받지 않는다.
+- 밖에서는 활성 컨트롤 플레인의 내부 주소(`CONTROL_PORT`, 기본 8010)에 글 한 줄을 보낸다 — 대기면 `대기의 컨트롤 플레인이다 — 활성에게` 가 답이다. 활성의 주소는 스토리지의 자리(`leader` 의 holder)다.
+
+```bash
+export OPERATOR_KEY="$(openssl rand -base64 32)"
+TOKEN=$(node -e 'const c=require("crypto");const b=`hkt1.oconsole.${Math.floor(Date.now()/1000)+3600}`;console.log(`${b}.${c.createHmac("sha256",process.env.OPERATOR_KEY).update(b).digest("base64url")}`)')
+curl -s -X POST http://localhost:8010/operator -H "authorization: Bearer $TOKEN" -d 'instances'
+```

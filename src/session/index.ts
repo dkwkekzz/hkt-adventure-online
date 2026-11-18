@@ -12,6 +12,7 @@ import { Gates } from './gates';
 import { Mover } from './mover';
 import { Placer } from './placer';
 import { Queue } from './queue';
+import { Reconciler } from './reconciler';
 import { Router } from './router';
 import type { Session } from './session';
 import { Sessions } from './sessions';
@@ -121,9 +122,8 @@ export async function openSession(o: SessionOptions): Promise<SessionSocket> {
     fill(zone, (s, extra) => mark(11, 6, run, 'ok', s, extra)); // Queue.next
   };
 
-  /** 흐름 5 의 C 가운데 세션의 단계 — 끊긴 게이트웨이(11) · 만료(13) · 줄(14). 8(Gates.seen)은 보고가 올 때. */
-  const tick = async (): Promise<void> => {
-    const run = fresh();
+  /** 흐름 5 의 C 가운데 세션의 단계 — 끊긴 게이트웨이(11) · 만료(13) · 줄(14). 8(Gates.seen) · 9(Reconciler.match)는 보고가 올 때. 컨트롤 플레인의 Clock 이 부른다. */
+  const tick = async (run: string = fresh()): Promise<void> => {
     for (const gate of gates.dead()) {
       const on = [...sessions.rows.values()].filter((s) => s.gate === gate && s.state === 'active');
       o.trace({ flow: 5, step: 11, run, unit: '-', end: 'ok', counts: { sessions: on.length } }); // 단위는 `-` — 게이트웨이는 인스턴스가 아니다(게이트웨이 모듈과 같다)
@@ -148,18 +148,22 @@ export async function openSession(o: SessionOptions): Promise<SessionSocket> {
       fill(zone, (s, extra) => mark(5, 14, run, 'ok', s, extra)); // Queue.next
     }
   };
-  let ticking = false;
-  const timer = setInterval(() => {
-    if (ticking) return;
-    ticking = true;
-    void tick()
-      .catch((e: unknown) => o.log(`session 간격 실패 — ${(e as Error).message}`))
-      .finally(() => (ticking = false));
-  }, o.clockMs);
-  timer.unref();
+  /** 컨트롤 플레인이 막 바뀌어 표가 서는 가운데 — 보고에서 세션을 다시 세우고, 새 입장을 받지 않는다(흐름 13 의 5 · 6). */
+  let rebuilding = false;
+  const reconciler = new Reconciler({
+    sessions,
+    router,
+    unload: o.unload,
+    owner: o.owner,
+    kick: o.kick,
+    busy: (character) => mover.busy.has(character),
+    mark,
+    log: o.log,
+  });
 
   /** 흐름 3 의 3 ~ 8 · 20 — Api.enter 가 SessionRpc enter 로. */
   const enter = async (character: string, build: string, run: string): Promise<Entered | Waiting | Unattached> => {
+    if (rebuilding) return busy('컨트롤 플레인이 서는 가운데다 — 잠시 뒤 다시');
     let who: Awaited<ReturnType<Admission['check']>>;
     try {
       who = await admission.check(character, run);
@@ -334,12 +338,41 @@ export async function openSession(o: SessionOptions): Promise<SessionSocket> {
     drain,
     recover,
     count: (instance) => sessions.count(instance),
-
     detach,
     report: (r, run) => {
       gates.seen(r.name, r.address, r.closing);
       o.trace({ flow: 5, step: 8, run, unit: '-', end: 'ok', counts: { connections: r.connections.length, closing: r.closing ? 1 : 0 } }); // Gates.seen — 단위는 `-`(게이트웨이는 인스턴스가 아니다)
+      reconciler.gate(r, rebuilding, run); // Reconciler.match
     },
-    close: () => clearInterval(timer),
+    reconcile: (node, instances, run) => void reconciler.node(node, instances, (i) => o.ready(zoneMap.zoneOfInstance(i)?.name ?? '').find((x) => x.name === i)?.build ?? '-', rebuilding, run).catch((e: unknown) => o.log(`session 보고를 맞추지 못했다 — ${(e as Error).message}`)),
+    settle: (on) => {
+      rebuilding = on;
+      if (!on) return;
+      sessions.rows.clear(); // 표를 버린다 — 보고에서 다시 선다(흐름 13 의 5). 대기열은 비고, 클라이언트가 다시 물으면 새로 선다
+      for (const q of queues.values()) q.waiting.length = 0;
+      reconciler.strikes.clear();
+    },
+    tick: (run) => tick(run),
+    kick: (character, run) => {
+      const s = sessions.get(character);
+      if (s === null) return false;
+      router.kick(s, 4000, run); // 값은 노드의 보고를 맞추며(5 의 9) 내린다
+      sessions.drop(character);
+      mark(6, 4, run, 'ok', s, { unit: s.instance, person: 'gone' });
+      return true;
+    },
+    evict: async (account, run) => {
+      for (const s of sessions.held(account)) {
+        router.kick(s, 4000, run);
+        sessions.drop(s.character);
+        mark(6, 4, run, 'ok', s, { unit: s.instance, person: 'gone' });
+        if (s.state !== 'pending') await o.unload(s.instance, s.character, run);
+      }
+      for (const q of queues.values()) for (const w of [...q.waiting]) if (w.account === account) q.drop(w.character);
+    },
+    closeZone: (zone) => zoneMap.close(zone),
+    openZone: (zone) => zoneMap.open(zone),
+    playing: (character) => sessions.get(character) !== null,
+    close: () => {},
   };
 }

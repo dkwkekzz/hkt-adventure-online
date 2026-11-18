@@ -33,6 +33,13 @@ export class Sessions {
     return s;
   }
 
+  /** adopt — 보고에서 세션을 다시 세운다(흐름 13 의 5 — 값이 이미 그 인스턴스에 있다). grace 로, 만료는 graceMs 뒤 — 접속의 보고가 오면 active 로. */
+  adopt(character: string, account: string, name: string, instance: string, build: string): Session {
+    const s: Session = { id: `s${randomBytes(4).toString('hex')}`, character, account, name, build, instance, to: null, gate: null, state: 'grace', until: this.now() + this.graceMs };
+    this.rows.set(character, s);
+    return s;
+  }
+
   /** activate — active 로, 그 게이트웨이를 적는다. 세션이 없으면 null. */
   activate(character: string, gate: string): Session | null {
     const s = this.rows.get(character);

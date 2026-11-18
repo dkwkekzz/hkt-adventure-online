@@ -56,6 +56,8 @@ export interface Metrics {
   readonly role: string;
   readonly build: string;
   readonly closing: boolean;
+  /** 컨트롤 플레인의 자리 — active · settling · standby(흐름 13). 컨트롤 플레인이 아니면 없다 */
+  readonly leader?: string | null;
   readonly at: number;
   readonly units: readonly UnitNow[];
   readonly tally: Readonly<Record<string, number>>;

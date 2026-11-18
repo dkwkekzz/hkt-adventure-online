@@ -41,9 +41,23 @@ export interface ServiceConfig {
   readonly traceKeep: number;
   /** 이 서버의 빌드 — engine.lock 의 커밋(앞 12 자). 없으면 '-'. */
   readonly build: string;
+  /** 이 프로세스의 role — `main`(넷을 한 프로세스에) · `api` · `gateway` · `control` · `node`. env SERVICE_ROLE 가 덮는다 */
+  readonly role: Role;
+  /** 내부망의 글(SessionRpc · NodeRpc · Operator) — 이 서버가 내부망에서 보이는 이름 · role 마다 듣는 포트 · 글 하나의 한계 */
+  readonly rpc: { readonly host: string; readonly controlPort: number; readonly nodePort: number; readonly gatewayPort: number; readonly limitMs: number };
+  /** 활성 컨트롤 플레인의 자리 — 만료(ttlMs) · 표가 서기를 기다리는 한계(settleMs) — 흐름 13 */
+  readonly leader: { readonly ttlMs: number; readonly settleMs: number };
+  /** 운영자의 이름들 — OPERATOR_KEY 로 서명한 `o<이름>` 토큰 가운데 이 이름만 받는다(흐름 6 의 2). stdin 의 콘솔은 첫 이름 */
+  readonly operators: readonly string[];
+  /** 계정의 청소 — 캐릭터가 없고 이만큼 오지 않은 계정을 지운다(흐름 5 의 15) */
+  readonly accountIdleMs: number;
 }
 
-type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage' | 'pageUrl' | 'gateUrl'> & {
+export const ROLES = ['main', 'api', 'gateway', 'control', 'node'] as const;
+export type Role = (typeof ROLES)[number];
+
+type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage' | 'pageUrl' | 'gateUrl' | 'role'> & {
+  role?: Role;
   storageRoot: string;
   leaseMs: number;
   characterHistory: number;
@@ -77,7 +91,16 @@ export function bucketOf(env: NodeJS.ProcessEnv): BucketOptions | null {
  * build 는 그 파일 곁의 engine.lock 의 커밋.
  * pageUrl 은 SERVICE_PAGE_URL, 없으면 `http(s)://<publicHost>:<apiPort>/play` — 앞에 프록시가 서면 SERVICE_PAGE_URL 로 준다.
  * gateUrl(게이트웨이의 밖의 주소)은 SERVICE_GATE_URL, 없으면 `ws(s)://<publicHost>:<gateway.port>`.
+ * role 은 SERVICE_ROLE. 내부망: SERVICE_INTERNAL_HOST · CONTROL_PORT · NODE_PORT · GATE_RPC_PORT. 노드: NODE_NAME · NODE_SLOTS · NODE_HOST(게이트웨이가 호스트를 보는 이름).
+ * 노드마다 이름이 다르다(NODE_NAME). spool 은 `<storageRoot>/spool/<노드>` — 한 서버에 노드 둘이어도 서로의 pid · 캐릭터 파일을 건드리지 않는다. 포트 범위는 NODE_PORTS=`<from>-<to>` 로 가른다.
  */
+/** `<from>-<to>` — NODE_PORTS. */
+function portsOf(v: string): [number, number] {
+  const m = /^(\d+)-(\d+)$/.exec(v.trim());
+  if (m === null || Number(m[1]) > Number(m[2])) throw new Error(`NODE_PORTS 는 <from>-<to> — ${v}`);
+  return [Number(m[1]), Number(m[2])];
+}
+
 export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): ServiceConfig {
   const raw = JSON.parse(readFileSync(file, 'utf8')) as Raw;
   const base = dirname(resolve(file));
@@ -92,6 +115,9 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
   const gateway: GatewayConfig = { ...raw.gateway, port: num(env['GATE_PORT'], raw.gateway.port) };
   const { publicHost: _p, secure: _s, hostName, node, ...fleet } = raw.fleet;
   if (!Array.isArray(raw.zones) || raw.zones.length === 0) throw new Error(`설정에 존이 없다 — zones (${file})`);
+  const role = (env['SERVICE_ROLE'] ?? raw.role ?? 'main') as Role;
+  if (!ROLES.includes(role)) throw new Error(`모르는 role — ${role} (${ROLES.join(' · ')})`);
+  const rpcHost = env['SERVICE_INTERNAL_HOST'] ?? raw.rpc.host;
   const root = at(env['SERVICE_STORAGE'] ?? storageRoot);
   return {
     ...rest,
@@ -101,6 +127,14 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
       bucket: bucketOf(env),
       leaseMs,
       characterHistory,
+    },
+    role,
+    rpc: {
+      ...raw.rpc,
+      host: rpcHost,
+      controlPort: num(env['CONTROL_PORT'], raw.rpc.controlPort),
+      nodePort: num(env['NODE_PORT'], raw.rpc.nodePort),
+      gatewayPort: num(env['GATE_RPC_PORT'], raw.rpc.gatewayPort),
     },
     apiPort,
     monitorPort: num(env['MONITOR_PORT'], raw.monitorPort),
@@ -112,9 +146,10 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
       ...fleet,
       engineDir: at(env['SERVICE_ENGINE'] ?? raw.fleet.engineDir),
       viewerOut: at(raw.fleet.viewerOut),
-      hostName: hostName ?? 'localhost',
-      node: { name: node?.name ?? 'node-1', slots: node?.slots ?? 4 },
-      spool: join(root, 'spool'),
+      hostName: env['NODE_HOST'] ?? hostName ?? 'localhost',
+      node: { name: env['NODE_NAME'] ?? node?.name ?? 'node-1', slots: num(env['NODE_SLOTS'], node?.slots ?? 4) },
+      ports: env['NODE_PORTS'] === undefined ? raw.fleet.ports : portsOf(env['NODE_PORTS']),
+      spool: join(root, 'spool', env['NODE_NAME'] ?? node?.name ?? 'node-1'),
     },
   };
 }

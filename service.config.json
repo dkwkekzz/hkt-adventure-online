@@ -4,6 +4,21 @@
   "characterHistory": 5,
   "apiPort": 8000,
   "monitorPort": 8001,
+  "rpc": {
+    "host": "localhost",
+    "controlPort": 8010,
+    "nodePort": 8011,
+    "gatewayPort": 8012,
+    "limitMs": 5000
+  },
+  "leader": {
+    "ttlMs": 9000,
+    "settleMs": 10000
+  },
+  "operators": [
+    "console"
+  ],
+  "accountIdleMs": 2592000000,
   "gateway": {
     "port": 8002,
     "helloMs": 5000,
@@ -68,6 +83,8 @@
     "commandLimitMs": 3000,
     "restartLimit": 3,
     "backupEvery": 120,
-    "backupKeep": 20
+    "backupKeep": 20,
+    "reportLimitMs": 20000,
+    "closingMs": 15000
   }
 }
