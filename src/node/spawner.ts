@@ -1,4 +1,4 @@
-// Spawner — 엔진에 닿는 길 하나 (design/02-roles/fleet.md 의 Spawner, 흐름 1 · 흐름 3 의 5 · 7). 정적.
+// Spawner — 엔진에 닿는 길 하나 (design/02-roles/node.md 의 Spawner, 흐름 1 · 흐름 3 의 5 · 7). 정적.
 // 엔진의 인자는 protocol/engine.ts 가 든다. 거기 없는 인자를 쓰지 않는다. node:child_process 를 import 하는 것은 이 파일 하나다(경계 규칙 E).
 
 import { spawn } from 'node:child_process';

@@ -1,5 +1,8 @@
-// NodeRpc — 컨트롤 플레인 ↔ 노드 (design/README.md 의 연결 여덟, design/02-roles/fleet.md 의 소켓 표).
+// NodeRpc — 컨트롤 플레인(플릿 모듈) ↔ 노드(노드 모듈) (design/README.md 의 연결 여덟, design/02-roles/fleet.md · node.md 의 소켓 표).
 // 개발의 main 에서는 함수 부름이다 — 앱이 잇는다. 프로세스가 갈리면 내부망의 글이다(앱의 rpc) — 글마다 그 흐름의 run 과, 컨트롤 플레인이 보내는 것에는 term 이 실린다.
+
+/** lease 의 holder — 인스턴스의 이름과 세대(storage.md 의 Lease). 노드의 Loader 가 잡고 플릿의 Recoverer 가 끊는다 — 두 모듈의 약속. */
+export const leaseHolder = (instance: string, epoch: number): string => `${instance}@${epoch}`;
 
 /** 띄울 것 — 그 존의 데이터셋과 NPC 묶음(설정). */
 export interface LaunchSpec {

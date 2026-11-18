@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { fakeEngine, portRange, until } from '../../../fleet/tests/fake';
+import { fakeEngine, portRange, until } from '../../../node/tests/fake';
 import { loadConfig } from '../config';
 import type { ServiceConfig } from '../config';
 import { Service } from '../service';

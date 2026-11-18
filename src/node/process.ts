@@ -1,4 +1,4 @@
-// Process — 엔진 프로세스 하나(호스트 또는 에이전트) (design/02-roles/fleet.md 의 Process).
+// Process — 엔진 프로세스 하나(호스트 또는 에이전트) (design/02-roles/node.md 의 Process).
 // Spawner 가 만든다. 자식 프로세스를 직접 만들지 않는다 — 그것은 Spawner 하나의 일이다(경계 규칙 E). 여기는 줄을 나누고 쓰고 끝을 듣는다.
 
 import { createInterface } from 'node:readline';

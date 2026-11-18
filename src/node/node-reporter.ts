@@ -1,4 +1,4 @@
-// NodeReporter — 이 노드가 든 것을 컨트롤 플레인에 알린다 (design/02-roles/fleet.md 의 NodeReporter, 흐름 1 의 10 · 5 의 4 · 7 의 1 · 13 의 4).
+// NodeReporter — 이 노드가 든 것을 컨트롤 플레인에 알린다 (design/02-roles/node.md 의 NodeReporter, 흐름 1 의 10 · 5 의 4 · 7 의 1 · 13 의 4).
 // 보내는 것은 NodeRpc register · report(protocol/node.ts) — 받는 쪽은 앱이 준 ControlSocket(개발의 main 에서는 함수, 갈리면 내부망의 글).
 
 import type { ControlSocket, InstanceReport, NodeHello, NodeReport } from '../protocol/node';

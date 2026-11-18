@@ -6,7 +6,7 @@ import { OPERATOR_COMMANDS, OPERATOR_USAGE } from '../protocol/operator';
 import type { TraceEnd } from '../protocol/observe';
 import type { Fleet } from './fleet';
 import type { Instance } from './instance';
-import { freshRun } from './runner';
+import { freshRun } from './fleet';
 
 /** 앱이 주는 것 — 운영자의 토큰과 세션 · 계정의 개념. */
 export interface OperatorHooks {

@@ -53,7 +53,7 @@
 └──────┬─────────────────────────┬──────────────┘        │
        │                         │ NodeRpc               ▼
        │                 ┌ Node agent (node) × 서버 ────────────────┐
-       │                 │ fleet(프로세스 · 올리고 내리기)             │
+       │                 │ node(프로세스 · 올리고 내리기)              │
        │                 │   인스턴스 × n                            │
        │                 │     호스트(엔진, 밖) ◄── Link             │
        │                 │     NPC 에이전트(엔진, 밖)                │
@@ -62,7 +62,7 @@
 ┌ Storage — MongoDB(계정 · 캐릭터 · 표 · lease · 캐릭터의 값) + object storage(Store · 백업) ┐
 ```
 
-### 모듈 다섯과 그 개념
+### 모듈 여섯과 그 개념
 
 개념마다의 데이터 · 기능은 책임 문서가 든다. 여기는 무엇이 어디에 사는가만. 흐름의 단계는 그 개념이 사는 프로세스에서 일어난다 — 프로세스가 여럿이면 흐름의 앞 단계와 같은 곳(관측 페이지가 이 표로 단계를 놓는다, 흐름 14).
 
@@ -91,7 +91,8 @@
 | | Scheduler — 띄울 노드를 고른다 | control | |
 | | Scaler — 예비 용량을 맞춘다 | control | |
 | | Recoverer — 죽은 인스턴스의 뒤를 수습한다 | control | |
-| | Runner — 인스턴스의 프로세스를 띄우고 내린다 | node | |
+| | Clock — 간격마다 부른다 | control | |
+| 노드 node | Runner — 인스턴스의 프로세스를 띄우고 내린다 | node | [node.md](02-roles/node.md) |
 | | Spawner — 엔진 프로세스를 띄운다 | node · api(뷰어 묶기) | |
 | | Process — 엔진 프로세스 하나의 줄과 끝을 듣는다 | node · api(뷰어 묶기) | |
 | | Ports — 포트를 낸다 | node | |
@@ -100,7 +101,7 @@
 | | Loader — 캐릭터의 값을 올리고 내린다 | node | |
 | | Backuper — Store 를 백업해 올린다 | node | |
 | | NodeReporter — 노드가 든 것을 알린다 | node | |
-| | Clock — 간격마다 부른다 | gateway · control · node | |
+| | Clock — 간격마다 부른다 | node | |
 | 스토리지 storage | Database — 표의 줄을 읽고 쓴다 | api · control | [storage.md](02-roles/storage.md) |
 | | CharacterStore — 캐릭터의 값을 둔다 | node · control | |
 | | Leases — 값을 지금 누가 들고 있는가를 든다 | node · control | |

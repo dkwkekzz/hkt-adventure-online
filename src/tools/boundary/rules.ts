@@ -1,20 +1,20 @@
-// 경계 규칙 — 어느 층이 어느 층을 import 할 수 있는가(S · A · T · F · G · C · P), 앱이 모듈에 닿는 자리(P), 게임 명사(N), 엔진에 닿는 길(E).
+// 경계 규칙 — 어느 층이 어느 층을 import 할 수 있는가(S · A · T · F · D · G · C · P), 앱이 모듈에 닿는 자리(P), 게임 명사(N), 엔진에 닿는 길(E).
 // 이 파일은 판단만 한다 — 파일을 읽지 않는다. 읽고 걷는 것은 check.ts. 규칙의 뜻은 CLAUDE.md §경계.
 
 export type Layer =
   | { readonly kind: 'protocol' }
-  | { readonly kind: 'module'; readonly name: 'account' | 'storage' | 'fleet' | 'gateway' | 'session'; readonly index: boolean; readonly test: boolean }
+  | { readonly kind: 'module'; readonly name: 'account' | 'storage' | 'fleet' | 'node' | 'gateway' | 'session'; readonly index: boolean; readonly test: boolean }
   | { readonly kind: 'app'; readonly test: boolean }
   | { readonly kind: 'tool' };
 
-export const MODULES = ['account', 'storage', 'fleet', 'gateway', 'session'] as const;
+export const MODULES = ['account', 'storage', 'fleet', 'node', 'gateway', 'session'] as const;
 
 /** src 상대 경로 → 층. 어느 층도 아니면 null. */
 export function layerOf(rel: string): Layer | null {
   const parts = rel.split(/[\\/]/);
   const top = parts[0];
   if (top === 'protocol') return { kind: 'protocol' };
-  if (top === 'account' || top === 'storage' || top === 'fleet' || top === 'gateway' || top === 'session') return { kind: 'module', name: top, index: parts.length === 2 && parts[1] === 'index.ts', test: parts[1] === 'tests' };
+  if (top === 'account' || top === 'storage' || top === 'fleet' || top === 'node' || top === 'gateway' || top === 'session') return { kind: 'module', name: top, index: parts.length === 2 && parts[1] === 'index.ts', test: parts[1] === 'tests' };
   if (top === 'apps') return { kind: 'app', test: parts.includes('tests') };
   if (top === 'tools') return { kind: 'tool' };
   return null;
@@ -31,7 +31,7 @@ export function judgeImport(from: Layer, to: Layer): string | null {
     if (to.kind === 'module' && to.name === from.name) return null;
     // 모듈의 tests/ 는 세움에 다른 모듈의 index.ts(밖에 내보낸 것)를 쓸 수 있다 — 안은 보지 않는다
     if (from.test && to.kind === 'module' && (to.index || to.test)) return null;
-    const rule = { account: 'A', storage: 'T', fleet: 'F', gateway: 'G', session: 'C' }[from.name];
+    const rule = { account: 'A', storage: 'T', fleet: 'F', node: 'D', gateway: 'G', session: 'C' }[from.name];
     return `규칙 ${rule} — ${from.name} 는 protocol 만 import 한다 (${to.kind === 'module' ? to.name : to.kind})`;
   }
 
@@ -80,10 +80,10 @@ export function nounsIn(text: string): string[] {
 }
 
 /**
- * E. 엔진에 닿는 길은 Spawner 하나 — child_process 와 엔진의 진입점 · 인자 짓기는 fleet/spawner.ts 에만.
+ * E. 엔진에 닿는 길은 Spawner 하나 — child_process 와 엔진의 진입점 · 인자 짓기는 node/spawner.ts 에만.
  * 엔진 체크아웃의 파일을 읽는 것은 Spawner 와 Static(뷰어의 페이지 · 실물을 준다 — apps/main/static.ts) 둘뿐.
  */
-export const ENGINE_ONLY = 'fleet/spawner.ts';
+export const ENGINE_ONLY = 'node/spawner.ts';
 export const ENGINE_FILES = 'apps/main/static.ts';
 export const ENGINE_NAMES = ['ENGINE_WEB', 'ENGINE_TSX', 'ENGINE_HOST', 'ENGINE_AGENT', 'ENGINE_ESBUILD', 'VIEWER_ENTRY', 'hostArgv', 'agentArgv', 'bundleArgv'] as const;
 export const ENGINE_FILE_NAMES = ['ENGINE_WEB', 'VIEWER_PAGE', 'VIEWER_ASSETS', 'VIEWER_EXT'] as const;

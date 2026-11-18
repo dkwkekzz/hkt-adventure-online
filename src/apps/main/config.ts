@@ -8,8 +8,35 @@ import type { GatewayConfig } from '../../protocol/gateway';
 import type { SessionConfig } from '../../protocol/session';
 import type { BucketOptions, StorageOptions } from '../../protocol/storage';
 
+/** service.config.json 의 fleet — 컨트롤 플레인(플릿 모듈의 FleetConfig)과 노드(노드 모듈의 NodeConfig 로 앱이 옮긴다)가 같이 읽는다. */
+export type FleetSection = FleetConfig & {
+  readonly engineDir: string;
+  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름) */
+  readonly party: string;
+  /** 뷰어의 묶음이 놓일 자리(viewer.js) — API 서버가 시작 때 한 번 묶는다(흐름 1 의 2). Static 이 준다 */
+  readonly viewerOut: string;
+  readonly beat: number;
+  readonly sparse: number;
+  /** 엔진의 포트 범위 — env NODE_PORTS */
+  readonly ports: readonly [number, number];
+  /** 게이트웨이에서 이 노드의 호스트가 보이는 이름 — 내부망(Node.host) */
+  readonly hostName: string;
+  /** 이 서버의 노드 — 이름과 slots(띄울 수 있는 인스턴스의 수) */
+  readonly node: { readonly name: string; readonly slots: number };
+  /** 이 노드의 디렉터리 — 인스턴스마다 건넴 자리(캐릭터 파일) · 프로세스 기록 · 백업의 사본 */
+  readonly spool: string;
+  readonly startLimitMs: number;
+  readonly commandLimitMs: number;
+  /** 이만큼 Clock 마다 도는 인스턴스를 백업한다(흐름 5 의 3). 0 이면 하지 않는다 */
+  readonly backupEvery: number;
+  /** 인스턴스마다 남기는 백업의 수 */
+  readonly backupKeep: number;
+  /** 노드가 내려갈 때 사람이 옮겨지기를 기다리는 한계(흐름 7 의 3) */
+  readonly closingMs: number;
+};
+
 export interface ServiceConfig {
-  readonly fleet: FleetConfig;
+  readonly fleet: FleetSection;
   /** 존의 줄 — 이름 · 데이터셋 · 상한(capacity) · 예비 용량(spare) · NPC 묶음(npc — 없으면 fleet.npc.bodies). 처음 서는 존은 첫 줄 */
   readonly zones: readonly FleetZone[];
   /** 뷰어의 Keymap — 엔진 web 상대의 파일 또는 조작 틀의 폴더(틀 하나 = `<틀>.json` 하나). Static 이 /keymap.json 으로 준다. 없으면 null — 뷰어는 메뉴로만 고른다. */
@@ -61,7 +88,7 @@ type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage' | 'pageUrl' | 'gate
   storageRoot: string;
   leaseMs: number;
   characterHistory: number;
-  fleet: Omit<FleetConfig, 'ports' | 'hostName' | 'spool' | 'node'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string; node?: { name?: string; slots?: number } };
+  fleet: Omit<FleetSection, 'ports' | 'hostName' | 'spool' | 'node'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string; node?: { name?: string; slots?: number } };
 };
 
 /** SNAPSHOT_URI(`s3://<bucket>/<prefix>`)와 S3_ENDPOINT · AWS_* → object storage 의 자리. 없으면 null — Store 는 storageRoot 의 디렉터리로. */

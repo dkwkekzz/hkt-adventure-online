@@ -1,4 +1,4 @@
-// NodeAgent — 플릿 모듈의 노드의 반의 조립: Runner · Console · Ports · Loader · Backuper · NodeReporter · Clock (design/02-roles/fleet.md, design/README.md 의 노드 에이전트).
+// NodeAgent — 노드 모듈의 조립: Runner · Console · Ports · Loader · Backuper · NodeReporter · Clock (design/02-roles/node.md, design/README.md 의 노드 에이전트).
 // 이 서버의 인스턴스의 프로세스를 띄우고 내리고, 캐릭터의 값을 올리고 내린다. 무엇을 띄울지 · 누구를 올릴지는 컨트롤 플레인이 정한다 — 받는 것은 NodeRpc(NodeSocket),
 // 알리는 것은 앱이 준 ControlSocket(register · report · handoff · exited). 노드는 줄(Registry)을 모른다.
 // start 는 흐름 1 의 7 ~ 10, tick 은 흐름 5 의 A(1 ~ 4), launch 는 흐름 3 의 13 ~ 18, stop 은 흐름 7 의 3 ~ 5, close 는 흐름 7 의 1 · 3 ~ 5.

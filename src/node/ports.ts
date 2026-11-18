@@ -1,4 +1,4 @@
-// Ports — 샤드의 포트 (design/02-roles/fleet.md 의 Ports). 범위 안에서 센다. 포트를 들고 있지 않는다(엔진이 연다) —
+// Ports — 샤드의 포트 (design/02-roles/node.md 의 Ports). 범위 안에서 센다. 포트를 들고 있지 않는다(엔진이 연다) —
 // take 는 지금 열 수 있는지만 잠깐 열어 보고 닫는다. 다른 프로그램이 쓰는 포트를 배정하면 엔진의 dev 가 exit 2 로 끝나 그 샤드가 멈추기 때문이다.
 
 import { createServer } from 'node:net';

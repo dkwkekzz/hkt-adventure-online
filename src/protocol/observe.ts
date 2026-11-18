@@ -124,7 +124,7 @@ export interface MapLink {
   readonly pairs: readonly (readonly [string, string])[];
 }
 
-/** 개념 하나가 사는 곳 — README 「모듈 다섯과 그 개념」 · 「앱」. */
+/** 개념 하나가 사는 곳 — README 「모듈 여섯과 그 개념」 · 「앱」. */
 export interface MapConcept {
   readonly name: string;
   readonly module: string;

@@ -1,5 +1,6 @@
 // Instance (값) — 인스턴스 하나 = 호스트 하나 = Store 자리 하나 (design/02-roles/fleet.md 의 Instance). 표 `instances` 의 줄.
 // name · zone 은 불변. 나머지는 Registry 가 고친다.
+import { leaseHolder } from '../protocol/node';
 
 export type InstanceState = 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed';
 
@@ -29,5 +30,5 @@ export const numberOf = (zone: string, name: string): number | null => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-/** lease 의 holder — 인스턴스의 이름과 세대(storage.md 의 Lease). 다시 띄운 인스턴스는 앞 세대의 lease 를 들지 않는다. */
-export const holderOf = (i: Pick<Instance, 'name' | 'epoch'>): string => `${i.name}@${i.epoch}`;
+/** lease 의 holder(NodeRpc 의 약속) — 다시 띄운 인스턴스는 앞 세대의 lease 를 들지 않는다. */
+export const holderOf = (i: Pick<Instance, 'name' | 'epoch'>): string => leaseHolder(i.name, i.epoch);

@@ -1,4 +1,4 @@
-// Probe — 엔진의 stdout 한 줄을 읽는다 (design/02-roles/fleet.md 의 Probe, 흐름 4 의 1). 정적.
+// Probe — 엔진의 stdout 한 줄을 읽는다 (design/02-roles/node.md 의 Probe, 흐름 4 의 1). 정적.
 // 읽는 것은 머리글 · status 의 머리와 접속 칸 · 지연 · 떠남 줄 · backup 끝 줄 · 멈춤 · 명령의 답뿐이다. 세계 안을 모른다.
 
 import { ANSWER_HEAD, BACKUP_DONE, BACKUP_FAILED, DEPART_LINE, DEPART_NOBODY, HALT_HEAD, HOST_HEAD, READY_HEAD, UNKNOWN_HEAD, linkedAccounts, readStatus } from '../protocol/engine';

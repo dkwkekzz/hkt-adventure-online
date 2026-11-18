@@ -1,6 +1,6 @@
 // 게이트웨이 gateway (design/02-roles/gateway.md). 밖에 내보내는 것은 openGateway 하나 — 객체는 소켓(protocol/gateway.ts) 너머다.
 // 토큰은 앱이 준 verify 로만, 컨트롤 플레인에는 앱이 준 attach · detach · report(SessionRpc)로만 닿는다.
-// 간격(흐름 5 의 B — Keepalive.ping · GateReporter.report)은 여기서 돈다: Clock 은 플릿 모듈의 개념이라 모듈 경계 안에 같은 간격을 든다.
+// 간격(흐름 5 의 B — Keepalive.ping · GateReporter.report)은 여기서 돈다: Clock 은 플릿 · 노드 모듈의 개념이라 모듈 경계 안에 같은 간격을 든다.
 
 import { randomBytes } from 'node:crypto';
 import type { GatewayOptions, GatewaySocket } from '../protocol/gateway';

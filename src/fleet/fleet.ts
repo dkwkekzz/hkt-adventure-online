@@ -1,10 +1,11 @@
-// Fleet — 플릿 모듈의 컨트롤 플레인의 반의 조립: Registry · Nodes · Scheduler · Scaler · Recoverer · Operator (design/02-roles/fleet.md).
+// Fleet — 플릿 모듈의 조립(컨트롤 플레인): Registry · Nodes · Scheduler · Scaler · Recoverer · Operator (design/02-roles/fleet.md).
 // 어느 노드에 무엇이 있는가를 들고, 노드에는 NodeRpc(앱이 준 nodeOf — 개발의 main 에서는 같은 프로세스의 NodeAgent, 갈리면 내부망의 글)로만 닿는다.
 // 노드가 알리는 것(register · report · handoff · exited)을 받는다 — ControlSocket. launch 는 흐름 3 의 B, tick 은 흐름 5 의 C(10 · 12 와 세션의 11 · 13 · 14 · 계정의 15),
 // report 는 흐름 5 의 7(과 9 — 세션에 넘긴다) · 7 의 1 · 2, exited 는 흐름 7 의 6 또는 흐름 12, stop 은 흐름 7 의 3 ~ 6.
 // 누가 누구인가를 모른다 — 세션 모듈의 기능(count · move · drain · handoff · reconcile · tick)과 계정의 sweep 은 앱이 준 함수. 게임 명사를 모른다 — 존의 데이터셋 · NPC 묶음은 설정 값.
 // 활성(active)이 아니면 — 컨트롤 플레인이 막 바뀌어 표가 서는 가운데(흐름 13) — 띄우지도 내리지도 죽음을 판정하지도 않는다.
 
+import { randomBytes } from 'node:crypto';
 import type { ControlSocket, InstanceReport, NodeHello, NodeReport, NodeSocket } from '../protocol/node';
 import type { TraceFn } from '../protocol/observe';
 import type { ZoneSpec } from '../protocol/session';
@@ -16,45 +17,24 @@ import { Operator } from './operator';
 import type { OperatorHooks } from './operator';
 import { Recoverer } from './recoverer';
 import { Registry } from './registry';
-import { freshRun } from './runner';
 import { Scaler } from './scaler';
 import { Scheduler } from './scheduler';
 
-export { freshRun };
+/** 한 번의 실행의 이름(흐름 14 의 run) */
+export const freshRun = (): string => randomBytes(4).toString('hex');
 
-/** service.config.json 의 fleet — 컨트롤 플레인 · 노드가 같이 읽는다. */
+/** service.config.json 의 fleet 가운데 컨트롤 플레인이 읽는 것(노드의 것은 노드 모듈의 NodeConfig). */
 export interface FleetConfig {
-  readonly engineDir: string;
-  /** 사람의 묶음의 틀 — 엔진의 --party(body 이름). */
-  readonly party: string;
-  /** 뷰어의 묶음이 놓일 자리(viewer.js) — API 서버가 시작 때 한 번 묶는다(흐름 1 의 2). Static 이 준다. */
-  readonly viewerOut: string;
-  readonly beat: number;
-  readonly sparse: number;
-  /** NPC 계정과, 존의 줄에 npc 가 없을 때의 NPC 묶음 */
+  /** NPC 계정과, 존의 줄에 npc 가 없을 때의 NPC 묶음 — 띄울 때 노드에 준다(LaunchSpec) */
   readonly npc: { readonly account: string; readonly bodies: readonly string[] };
-  readonly ports: readonly [number, number];
-  /** 게이트웨이에서 이 노드의 호스트가 보이는 이름 — 내부망(Node.host) */
-  readonly hostName: string;
-  /** 이 서버의 노드 — 이름과 slots(띄울 수 있는 인스턴스의 수) */
-  readonly node: { readonly name: string; readonly slots: number };
-  /** 이 서버의 디렉터리 — 인스턴스마다 건넴 자리(캐릭터 파일) · 프로세스 기록 · 백업의 사본 */
-  readonly spool: string;
   readonly clockMs: number;
   /** 사람 없이 이만큼 Clock 이 지나면 쉬는 인스턴스다(Scaler). */
   readonly idleLimit: number;
-  readonly startLimitMs: number;
   readonly stopLimitMs: number;
-  readonly commandLimitMs: number;
+  /** 죽은 셈이 이만큼을 넘으면 다시 띄우지 않는다(흐름 12 의 6) */
   readonly restartLimit: number;
-  /** 이만큼 Clock 마다 도는 인스턴스를 백업한다(흐름 5 의 3). 0 이면 하지 않는다. */
-  readonly backupEvery: number;
-  /** 인스턴스마다 남기는 백업의 수 */
-  readonly backupKeep: number;
   /** 노드의 보고가 이만큼 없으면 끊긴 것이다(흐름 5 의 10) */
   readonly reportLimitMs: number;
-  /** 노드가 내려갈 때 사람이 옮겨지기를 기다리는 한계(흐름 7 의 3) */
-  readonly closingMs: number;
 }
 
 /** 존의 줄 — 세션 모듈의 Zone 에 이 존의 NPC 묶음(없으면 설정의 npc.bodies)을 더한 것. */

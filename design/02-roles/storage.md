@@ -58,11 +58,11 @@
 | 메시지 | 방향 | 보내는 것 | 답 |
 |---|---|---|---|
 | Database get · put · remove · all | 계정 · 세션 모듈 · 플릿 · Operator → 스토리지 | table · key(· value) | value 또는 null |
-| CharacterStore read · write | 플릿(Loader) → 스토리지 | Character.id · Lease · file | 됨 또는 거절 |
+| CharacterStore read · write | 노드(Loader) → 스토리지 | Character.id · Lease · file | 됨 또는 거절 |
 | CharacterStore erase · versions · rollback | 컨트롤 플레인 → 스토리지 | Character.id · 때 | 됨 · 때들 |
-| Leases acquire · renew · release | 플릿(Loader) → 스토리지 | Character.id · holder · Lease | Lease 또는 null |
+| Leases acquire · renew · release | 노드(Loader) → 스토리지 | Character.id · holder · Lease | Lease 또는 null |
 | Leases expire | 플릿(Recoverer) → 스토리지 | holder | 없음 |
-| SnapshotStore pull · push · copy · prune | 플릿(Runner · Backuper) → 스토리지 | 인스턴스 이름 · epoch · dir | dir · 백업 이름 · 거절 |
+| SnapshotStore pull · push · copy · prune | 노드(Runner · Backuper) → 스토리지 | 인스턴스 이름 · epoch · dir | dir · 백업 이름 · 거절 |
 | SnapshotStore copy · restore · list · purge | Operator → 스토리지 | 인스턴스 이름 · 백업 이름 | 백업 이름 · 목록 |
 | LeaderLock acquire · renew · resign | 컨트롤 플레인 → 스토리지 | holder · ttl · term | term 또는 null |
 | LeaderLock holder | 노드 · 게이트웨이 · API 서버 → 스토리지 | 없음 | 주소 · term |

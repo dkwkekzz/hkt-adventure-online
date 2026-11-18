@@ -38,6 +38,7 @@ describe('경계 검사', () => {
       ['A', { 'src/account/x.ts': "import { Fleet } from '../fleet';\n" }, /규칙 A/],
       ['T', { 'src/storage/x.ts': "import { Signer } from '../account';\n" }, /규칙 T/],
       ['F', { 'src/fleet/x.ts': "import { openStorage } from '../storage';\n" }, /규칙 F/],
+      ['D', { 'src/node/x.ts': "import { Fleet } from '../fleet';\n" }, /규칙 D/],
       ['G', { 'src/gateway/x.ts': "import { Signer } from '../account';\n" }, /규칙 G/],
       ['C', { 'src/session/x.ts': "import { Characters } from '../account';\n" }, /규칙 C/],
       ['P 세션', { 'src/apps/main/x.ts': 'export const f = (session: { rows: { clear(): void } }) => session.rows.clear();\n' }, /규칙 P — 앱이 session\.rows\.clear/],
@@ -46,7 +47,7 @@ describe('경계 검사', () => {
       ['P 스토리지', { 'src/apps/main/x.ts': "export const f = (storage: { database: { put(t: string): void } }) => storage.database.put('audit');\n" }, /규칙 P — 앱이 storage\.database\.put/],
       ['N', { 'src/fleet/x.ts': "export const who = 'wolf-pack-1';\n" }, /규칙 N — 게임 명사 wolf/],
       ['N 문서', { 'design/02-roles/x.md': '# 요정이 걷는다\n' }, /규칙 N/],
-      ['E', { 'src/fleet/x.ts': "import { spawn } from 'node:child_process';\nexport { spawn };\n" }, /규칙 E — child_process/],
+      ['E', { 'src/node/x.ts': "import { spawn } from 'node:child_process';\nexport { spawn };\n" }, /규칙 E — child_process/],
       ['E 인자', { 'src/apps/main/x.ts': "import { hostArgv } from '../../protocol/engine';\nexport { hostArgv };\n" }, /규칙 E — 엔진의 진입점/],
       ['E 파일', { 'src/apps/main/x.ts': "import { VIEWER_PAGE } from '../../protocol/engine';\nexport { VIEWER_PAGE };\n" }, /규칙 E — 엔진의 파일 자리/],
     ];

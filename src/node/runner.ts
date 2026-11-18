@@ -1,4 +1,4 @@
-// Runner — 인스턴스 하나의 프로세스를 띄우고 내린다 (design/02-roles/fleet.md 의 Runner).
+// Runner — 인스턴스 하나의 프로세스를 띄우고 내린다 (design/02-roles/node.md 의 Runner).
 // start 는 흐름 3 의 B(13 ~ 18), line · exited 는 흐름 4, stop 은 흐름 7 의 4. 노드의 반이다 — 줄(Registry)은 모른다. 끝은 컨트롤 플레인에 알린다(NodeRpc exited · handoff).
 // 호스트는 건넴 자리(spool/<인스턴스>)를 든다 — 사람의 묶음은 Loader 가 load 로 맡긴 것만 선다(엔진의 --handoff).
 
