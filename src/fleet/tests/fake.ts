@@ -36,7 +36,9 @@ export function fakeEngine(opts: { viewer?: boolean } = {}): string {
   mkdirSync(join(dir, 'out', 'character', 'fairy'), { recursive: true });
   writeFileSync(join(dir, 'out', 'character', 'fairy', 'b.glb'), 'glb');
   mkdirSync(join(web, 'dataset'), { recursive: true });
-  writeFileSync(join(web, 'dataset', 'keymap.json'), '{"keys":{}}\n');
+  mkdirSync(join(web, 'dataset', 'keymaps'), { recursive: true }); // 조작 틀의 폴더 — 틀 하나 = 파일 하나
+  writeFileSync(join(web, 'dataset', 'keymaps', 'over.json'), '{"form":"2.5d"}\n');
+  writeFileSync(join(web, 'dataset', 'keymaps', 'third.json'), '{"form":"3d"}\n');
   return dir;
 }
 

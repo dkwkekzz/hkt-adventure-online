@@ -25,7 +25,8 @@
   "characterTtl": 3600,
   "characterLimit": 4,
   "agentTtl": 300,
-  "keymap": "dataset/adventure-keymap.json",
+  "keymap": "dataset/keymaps",
+  "scheme": "over",
   "fleet": {
     "engineDir": "engine",
     "world": "main",

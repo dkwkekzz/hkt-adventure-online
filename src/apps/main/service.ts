@@ -53,6 +53,9 @@ export class Service {
     this.fleet = fleet;
     this.session = session;
     this.gateway = gateway;
+    const files = new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap, config.scheme);
+    // Keymap 을 찾지 못하면 뷰어는 단축키 없이 메뉴로만 고른다 — 엔진을 올려 자리가 바뀌어도 조용히 지나가지 않게 알린다
+    if (config.keymap !== null && files.keymapFile() === null) log(`service Keymap 이 없다 — ${files.keymap}${config.scheme === null ? '' : ` (조작 틀 ${config.scheme})`}. 뷰어는 메뉴로만 고른다`);
     this.api = openApi({
       directory: this.directory,
       characters,
@@ -62,7 +65,7 @@ export class Service {
       build: config.build,
       pageUrl: config.pageUrl,
       characterTtl: config.characterTtl,
-      files: new Static(config.fleet.engineDir, config.fleet.viewerOut, config.keymap),
+      files,
       log,
       trace: monitor.trace,
     });

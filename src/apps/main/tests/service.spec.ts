@@ -33,7 +33,8 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portR
     characterTtl: 600,
     characterLimit: 3,
     agentTtl: 60,
-    keymap: 'dataset/keymap.json',
+    keymap: 'dataset/keymaps',
+    scheme: 'over',
     fleet: {
       engineDir: fakeEngine(),
       world: 'main',
@@ -103,7 +104,10 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(await get('/assets/index.json')).toMatchObject({ code: 200, type: 'application/json; charset=utf-8', text: '{"x":1}\n' });
     expect(await get('/assets/images/a.png')).toMatchObject({ code: 200, type: 'image/png' });
     expect(await get('/assets/ext/fairy/b.glb')).toMatchObject({ code: 200, type: 'model/gltf-binary', text: 'glb' });
-    expect(await get('/keymap.json')).toMatchObject({ code: 200, text: '{"keys":{}}\n' });
+    expect(await get('/keymap.json')).toMatchObject({ code: 200, text: '{"form":"2.5d"}\n' }); // 조작 틀의 폴더 — 기본 틀(over)
+    expect(await get('/keymap.json?scheme=third')).toMatchObject({ code: 200, text: '{"form":"3d"}\n' }); // 페이지가 고른 틀
+    expect((await get('/keymap.json?scheme=nope')).code).toBe(404); // 없는 틀 — 뷰어는 메뉴로만
+    expect((await get('/keymap.json?scheme=..%2Fworld')).code).toBe(404);
     expect((await get('/assets/%2e%2e/apps/viewer/page.html')).code).toBe(404);
     expect((await get('/assets/ext/%2e%2e/%2e%2e/web/assets/index.json')).code).toBe(404);
     expect((await get('/assets/images')).code).toBe(404); // 폴더

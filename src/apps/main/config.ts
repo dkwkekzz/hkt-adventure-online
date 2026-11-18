@@ -10,8 +10,10 @@ import type { BucketOptions, StorageOptions } from '../../protocol/storage';
 
 export interface ServiceConfig {
   readonly fleet: FleetConfig;
-  /** 뷰어의 Keymap 파일 — 엔진 web 상대. Static 이 /keymap.json 으로 준다. 없으면 null. */
+  /** 뷰어의 Keymap — 엔진 web 상대의 파일 또는 조작 틀의 폴더(틀 하나 = `<틀>.json` 하나). Static 이 /keymap.json 으로 준다. 없으면 null — 뷰어는 메뉴로만 고른다. */
   readonly keymap: string | null;
+  /** 기본 조작 틀 — keymap 이 폴더일 때 페이지에 `?scheme=` 이 없으면 이 틀. null 이면 이름 순의 첫 틀. */
+  readonly scheme: string | null;
   /** 스토리지 — 개발의 뿌리(storageRoot) · lease 의 길이 · 캐릭터의 이력과 환경변수의 뒤. */
   readonly storage: StorageOptions;
   /** 게이트웨이 — 포트와 한계 · 주기(design/02-roles/gateway.md). env GATE_PORT 가 포트를 덮는다 */

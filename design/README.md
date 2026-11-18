@@ -214,8 +214,8 @@
 - 생애: API 서버의 Service.start 가 만든다.
 
 ### Static
-- 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(묶은 viewer.js) · keymap. 불변.
-- 기능: serve(path) 는 뷰어의 페이지 · 묶음 · 실물 · Keymap 을 준다. 파일의 안은 보지 않는다.
+- 데이터: web(엔진 체크아웃의 web 자리) · viewerOut(묶은 viewer.js) · keymap(파일 또는 조작 틀의 폴더) · scheme(기본 조작 틀). 불변.
+- 기능: serve(path, scheme) 는 뷰어의 페이지 · 묶음 · 실물 · Keymap 을 준다 — Keymap 은 페이지가 고른 조작 틀(`?scheme=`), 없으면 기본 조작 틀의 파일 하나. 파일의 안은 보지 않는다.
 - 생애: API 서버의 Service.start 가 만든다.
 
 ### Elector

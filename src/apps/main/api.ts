@@ -206,13 +206,14 @@ const VERBS: readonly string[] = ['characters', 'create', 'choose', 'delete'];
 export function openApi(parts: ApiParts): Server {
   return createServer((req, res) => {
     void (async () => {
-      const path = new URL(req.url ?? '/', 'http://x').pathname;
+      const url = new URL(req.url ?? '/', 'http://x');
+      const path = url.pathname;
       if (req.method === 'GET' && path === '/') {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         return void res.end(PAGE);
       }
       if (req.method === 'GET') {
-        const file = parts.files.serve(path);
+        const file = parts.files.serve(path, url.searchParams.get('scheme'));
         if (file !== null) {
           res.writeHead(200, { 'content-type': file.type, 'cache-control': 'no-cache' });
           return void res.end(file.body);

@@ -78,6 +78,12 @@ describe.skipIf(!have)('진짜 엔진 — 토큰 · 한 세계에 사람 여럿 
       return { subject: login['subject']!, account: login['token']!, character: id, token: chosen['token']! };
     };
 
+    // 뷰어의 Keymap — 설정의 자리가 이 엔진 체크아웃에 있다(없으면 뷰어는 단축키 없이 메뉴로만 고른다)
+    const keymap = await fetch(`http://localhost:${s.port}/keymap.json`);
+    expect(keymap.status).toBe(200);
+    expect(((await keymap.json()) as { keys?: unknown[] }).keys?.length).toBeGreaterThan(0);
+    expect(logs.some((l) => l.includes('Keymap 이 없다'))).toBe(false);
+
     const [a, b, c] = [await player(post, '하나'), await player(post, '둘'), await player(post, '셋')];
     const at = await post('/enter', { token: a.token });
     const bt = await post('/enter', { token: b.token });
