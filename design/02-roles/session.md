@@ -6,7 +6,7 @@
 - 인스턴스 하나에 배정하는 수는 그 존의 상한(`capacity`)을 넘지 않는다. 세는 것은 세션이다.
 - 세션은 스토리지에 두지 않는다. 컨트롤 플레인이 바뀌면 노드와 게이트웨이의 보고로 다시 선다(Reconciler).
 - 밖에 내보내는 것은 openSession 하나다. 그것이 내는 소켓 하나가 SessionRpc 의 받는 쪽이다(enter · forget · attach · detach · report) — 흐름의 단계를 차례로 부른다. 한 캐릭터의 enter · forget 은 한 번에 하나다.
-- 다른 모듈의 기능은 앱이 준 함수로만 닿는다 — 계정의 Characters.owner · remove · Banlist.banned, 플릿의 ready · launch(흐름 3 의 B) · address, Signer.issue, 게이트웨이의 kick(SessionRpc). 스토리지는 Storage 소켓(Database · CharacterStore).
+- 다른 모듈의 기능은 앱이 준 함수로만 닿는다 — 계정의 Characters.owner · remove · Banlist.banned, 플릿의 ready · launch(흐름 3 의 B) · address · load · unload(Loader — NodeRpc), Signer.issue, 게이트웨이의 reroute · kick(SessionRpc). 거꾸로 플릿이 부르는 세션의 기능(떠남 줄의 handoff — 흐름 10, 비움의 drain — 흐름 6, Recoverer 의 move — 흐름 12, Scaler 의 count)도 이 소켓에 있다 — 앱이 플릿에 함수로 준다. 스토리지는 Storage 소켓(Database · CharacterStore).
 - 값은 설정의 `session` — `capacity` · `pendingMs` · `graceMs` · `gateLimitMs` · `queueForgetMs`. 간격(흐름 5 의 C 가운데 세션의 단계 — Gates.dead · Sessions.expired · Queue.next)은 `clockMs` — 게이트웨이와 같이, 모듈 경계 때문에 openSession 이 제 간격을 든다.
 
 | 개념 | 책임 하나 |
@@ -24,8 +24,8 @@
 ## 개념
 
 ### Admission
-- 데이터: owner(캐릭터 → 그 캐릭터의 줄 — 계정 · 이름) · banned(계정 → bool) — 계정의 기능 둘, 앱이 준다. sessions(참조) · router(참조).
-- 기능: check(character) 는 캐릭터의 줄이 없거나 그 계정이 차단됐으면 거절한다. 그 계정의 다른 캐릭터가 세션을 들고 있으면 그것을 내보낸다 — 세션을 지우고 Router.kick(4000)(한 계정은 한때에 캐릭터 하나 — 나중 입장이 이긴다). 줄에 서 있던 다른 캐릭터는 줄에서 뺀다.
+- 데이터: owner(캐릭터 → 그 캐릭터의 줄 — 계정 · 이름) · banned(계정 → bool) — 계정의 기능 둘, 앱이 준다. unload(플릿의 기능 — 앱이 준다) · sessions(참조) · router(참조).
+- 기능: check(character) 는 캐릭터의 줄이 없거나 그 계정이 차단됐으면 거절한다. 그 계정의 다른 캐릭터가 세션을 들고 있으면 그것을 내보낸다 — 세션을 지우고 Router.kick(4000)(한 계정은 한때에 캐릭터 하나 — 나중 입장이 이긴다), 값이 인스턴스에 로드돼 있었으면(`active` · `grace`) 내리게 한다(Loader.unload — 흐름 11 의 3 과 같다). 줄에 서 있던 다른 캐릭터는 줄에서 뺀다.
 - 생애: Service.start 가 만든다.
 
 ### ZoneMap

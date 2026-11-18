@@ -25,16 +25,7 @@
 지금의 src 는 design 의 개념을 다 가르지 않았다(plan 01). 아래 단계는 설계의 개념 대신 지금의 코드가 그 일을 하고 흔적을 남긴다. 그 개념이 서는 plan 에서 흔적을 그 개념을 부르는 자리로 옮기고 이 줄에서 지운다.
 단계의 줄은 관측의 지도가 셈한 「대신」과 같다 — `src/apps/main/tests/monitor.spec.ts` 가 그 목록을 든다. 개념이 서면 지도가 먼저 바뀌고, 그 검사와 이 표를 같은 커밋에서 고친다.
 
-| 단계 | 지금 하는 코드 | 옮길 plan |
-|---|---|---|
-| 3 의 11 · 19 Registry.put | `Shard.boot` | 07 |
-| 3 의 17 · 5 의 1 Console.command | `Shard.boot` · `Fleet.tick` | 07 |
-| 4 의 3 Runner.line · 4 의 5 Runner.exited | `Shard.line` · `Shard.exited` | 07 |
-| 7 의 4 Runner.stop | `Shard.stop` | 07 |
-| 5 의 12 Scaler.balance | `Fleet.tick` | 07 |
-| 5 의 3 Backuper.backup | `Fleet.tick`(SnapshotStore.copy — 내려가 올린 세계만) | 07 |
-| 7 의 5 Backuper.upload | `Shard.exited` → `Fleet`(SnapshotStore.push — 백업은 5 의 3 이 다음 주기에) | 07 |
-| 6 의 4 (명령의 개념) | `Operator` | 08 |
+없다 — 흐름의 단계는 전부 그 개념이 부른다(plan 08 이 마지막 것 — 6 의 4 — 을 옮겼다). 명령의 표가 있는 단계(6 의 4)는 표의 개념이 다 서면 선다.
 
 ## 덧붙임
 
@@ -45,7 +36,7 @@
 
 서비스를 띄우고 입장 한 번 — 관측 페이지(`http://localhost:8001/observe/page`)에서 글이 클라이언트 → api → control → node → 엔진으로 움직이고, 엔진 프로세스 안의 인스턴스가 ready 가 된다. 흐름 3 을 고르면 api(1 · 2 · 9) · control(3 ~ 8 · 10 · 11 · 19) · node(12 ~ 18)와 SessionRpc 3 · 9 · NodeRpc 12 · 19 · Engine 15 ~ 18 · Storage 13 의 길이 놓인다.
 
-진행도: 흐름 4 를 고르면 3 · 5(Runner.line · Runner.exited)가 빗금 — 「대신 · shard → plan 07」, 6(Ports.free)이 흐림 — 「plan 07」. control 의 점은 노랑(개념 8 / 25). plan 진행표에서 07 을 펴면 그 plan 의 것인 서지 않은 단계(37, 대신 10)가 나온다.
+진행도: 대신 · 서지 않은 단계가 없다 — 흐름마다 다 섰다. 프로세스가 갈려 있으면 `?from=` 으로 프로세스마다의 Monitor 를 함께 읽고, 같은 role 이 여럿이면 상자에 그 수(× 2)와 컨트롤 플레인의 활성 · 대기가 보인다.
 
 ```bash
 npm run shot -- --viewer off --monitor http://localhost:8001    # observe · observe-flow · observe-plan · observe-people

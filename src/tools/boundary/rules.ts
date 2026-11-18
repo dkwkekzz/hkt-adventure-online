@@ -46,19 +46,23 @@ export function judgeImport(from: Layer, to: Layer): string | null {
 
 /**
  * P. 앱(테스트 밖)이 모듈의 객체에 부르는 것 — 흐름에서 트리거가 (밖)이거나 누가 가 Service · Api 인 단계, 그리고 Api 가 부르는 단계(로그인 · 캐릭터 — 흐름 2 · 8).
- * 그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — 개발의 main 에서 SessionRpc 는 함수 부름이다(session.enter · forget · attach · detach · report, gateway.kick).
- * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned, fleet.ready · launch · address).
+ * 그리고 프로세스 사이의 소켓을 잇는 자리 — 개발의 main 에서는 함수 부름, 갈리면 내부망의 글의 받는 쪽이다: SessionRpc(session.enter · forget · attach · detach · report, gateway.reroute · kick),
+ * NodeRpc(fleet.register · report · handoff · exited · load · unload · command, node.launch · stop · command · load · unload), 활성 컨트롤 플레인을 찾는 storage.leader.holder.
+ * 그리고 Elector 가 부르는 컨트롤 플레인의 자리(fleet.reload · settled · settle · standby, session.settle — 흐름 13), 컨트롤 플레인의 Clock(fleet.start · session.tick), 노드의 시작 · 내림(node.start · close).
+ * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned · ban · unban, directory.sweep, fleet.ready · launch · address,
+ * session.count · recover · drain · handoff · reconcile, 운영자의 것 session.kick · evict · closeZone · openZone · playing).
  * gateway.listen · close 는 흐름 1 의 4 · 5 와 흐름 7 의 7 · 8, session.close 는 세션의 간격 — Service.start · stop 이 그 role 의 개념을 세우고 내린다.
  */
 export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
-  directory: ['resolve'],
+  directory: ['resolve', 'sweep'],
   characters: ['list', 'create', 'owner', 'remove'],
-  banlist: ['banned'],
+  banlist: ['banned', 'ban', 'unban'],
   signer: ['issue', 'verify'],
-  fleet: ['start', 'stopAll', 'clock.stop', 'operator.command', 'ready', 'launch', 'address'],
-  session: ['enter', 'forget', 'attach', 'detach', 'report', 'close'],
-  storage: ['close'],
-  gateway: ['listen', 'close', 'kick'],
+  fleet: ['start', 'close', 'operator.command', 'ready', 'launch', 'address', 'load', 'unload', 'command', 'register', 'report', 'handoff', 'exited', 'reload', 'settled', 'settle', 'standby'],
+  node: ['start', 'close', 'launch', 'stop', 'command', 'load', 'unload'],
+  session: ['enter', 'forget', 'attach', 'detach', 'report', 'handoff', 'drain', 'recover', 'count', 'reconcile', 'settle', 'tick', 'kick', 'evict', 'closeZone', 'openZone', 'playing', 'close'],
+  storage: ['close', 'leader.holder'],
+  gateway: ['listen', 'close', 'reroute', 'kick'],
 };
 
 export function judgeAppCall(object: string, chain: string): string | null {

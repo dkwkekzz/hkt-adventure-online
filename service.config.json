@@ -4,6 +4,21 @@
   "characterHistory": 5,
   "apiPort": 8000,
   "monitorPort": 8001,
+  "rpc": {
+    "host": "localhost",
+    "controlPort": 8010,
+    "nodePort": 8011,
+    "gatewayPort": 8012,
+    "limitMs": 5000
+  },
+  "leader": {
+    "ttlMs": 9000,
+    "settleMs": 10000
+  },
+  "operators": [
+    "console"
+  ],
+  "accountIdleMs": 2592000000,
   "gateway": {
     "port": 8002,
     "helloMs": 5000,
@@ -14,7 +29,6 @@
     "ipLimit": 32
   },
   "session": {
-    "capacity": 32,
     "pendingMs": 60000,
     "graceMs": 30000,
     "gateLimitMs": 20000,
@@ -25,11 +39,18 @@
   "characterTtl": 3600,
   "characterLimit": 4,
   "agentTtl": 300,
-  "keymap": "dataset/adventure-keymap.json",
+  "zones": [
+    {
+      "name": "main",
+      "dataset": "dataset/glade.json",
+      "capacity": 32,
+      "spare": 0
+    }
+  ],
+  "keymap": "dataset/keymaps",
+  "scheme": "over",
   "fleet": {
     "engineDir": "engine",
-    "world": "main",
-    "dataset": "dataset/glade.json",
     "party": "fairy-1",
     "viewerOut": "out/viewer/viewer.js",
     "beat": 200,
@@ -51,12 +72,19 @@
     "publicHost": "localhost",
     "secure": false,
     "hostName": "localhost",
+    "node": {
+      "name": "node-1",
+      "slots": 4
+    },
     "clockMs": 5000,
     "idleLimit": 60,
     "startLimitMs": 90000,
     "stopLimitMs": 15000,
     "commandLimitMs": 3000,
     "restartLimit": 3,
-    "backupEvery": 120
+    "backupEvery": 120,
+    "backupKeep": 20,
+    "reportLimitMs": 20000,
+    "closingMs": 15000
   }
 }

@@ -247,3 +247,40 @@ describe('GateReporter.report · 흐름 1 의 4 · 5 · 7 의 7 · 8', () => {
     opened = opened.filter((o) => o.gate !== gate);
   });
 });
+
+describe('Connection.reroute — 흐름 10 의 12 · 12', () => {
+  it('호스트가 닫혀(1001) rerouting 인 접속의 뒤를 새 호스트로 바꿔 잇는다 — 클라이언트의 소켓은 그대로, 새 호스트의 열림이 그대로 간다. 그 사이의 글은 버린다', async () => {
+    const { gate, host, traces, detached, url } = await up();
+    const other = await fakeHost();
+    const c = await client(url, { step: 'Host 2', credential: 'ok-p1' });
+    await until(() => c.msgs.length >= 1);
+    host.sockets[0]!.close(1001); // 엔진의 unload — 세계가 그 묶음을 내보냈다
+    await new Promise((r) => setTimeout(r, 30));
+    c.ws.send(JSON.stringify({ step: 'Link 3', input: { body: 7, actionId: 'old' } })); // 닫힌 세계의 body 에 대한 글
+    gate.reroute('p1', { instance: 'main-2', address: other.url, token: 'host-p1-2' }, 'm1');
+    await until(() => c.msgs.length >= 2);
+    expect(c.msgs[1]).toEqual({ step: 'Link 1', open: { bodies: [7] } }); // 다시 온 열림 — 뷰어가 새 body 들을 맡는다
+    expect(other.credentials).toEqual(['host-p1-2']);
+    c.ws.send(JSON.stringify({ step: 'Link 3', input: { body: 7, actionId: 'new' } }));
+    await until(() => other.got.length === 1);
+    expect(other.got).toEqual([{ step: 'Link 3', input: { body: 7, actionId: 'new' } }]);
+    expect(traces.find((t) => t.flow === 10 && t.step === 12)).toMatchObject({ run: 'm1', unit: 'main-2', end: 'ok' });
+    expect(detached).toEqual([]); // 끊긴 적이 없다
+    expect(c.ws.readyState).toBe(WebSocket.OPEN);
+    gate.reroute('p1', { instance: 'main-3', address: host.url, token: 'host-p1-3' }, 'm2'); // 열린 뒤도 바로 바꾼다(옛 뒤를 닫는다)
+    await until(() => host.credentials.length === 2);
+    await until(() => c.msgs.filter((m) => m.step === 'Link 1').length === 3);
+    gate.reroute('nobody', { instance: 'x', address: host.url, token: 't' }, 'm3'); // 없는 접속 — 아무것도 하지 않는다
+    await other.close();
+  });
+
+  it('새 호스트가 한계 안에 열리지 않으면 닫는다(1001)', async () => {
+    const { gate, host, detached, url } = await up({ rerouteMs: 150 });
+    const c = await client(url, { step: 'Host 2', credential: 'ok-p1' });
+    await until(() => c.msgs.length >= 1);
+    gate.reroute('p1', { instance: 'main-2', address: 'ws://localhost:1', token: 't' }, 'm1');
+    expect(await c.closed).toBe(1001);
+    expect(detached).toEqual(['p1']);
+    expect(host.credentials).toEqual(['host-p1']);
+  });
+});

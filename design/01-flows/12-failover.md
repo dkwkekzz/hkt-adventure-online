@@ -16,7 +16,7 @@ Recoverer.recover → Registry.put → Leases.expire → Sessions.of → Mover.m
 | 3 | Leases.expire | 그 인스턴스가 든 lease 를 전부 끊는다. 값은 마지막으로 저장한 것이다 | |
 | 4 | Sessions.of | 거기 있던 세션들 | |
 | 5 | Mover.move | 사람마다 같은 존의 다른 인스턴스로 옮긴다(흐름 10 — 내림 없이 2 · 3 · 8 ~ 12). 그동안 게이트웨이는 클라이언트의 소켓을 든 채 기다린다. `grace` 인 세션은 옮기지 않고 지운다 | 사람이 다시 배정된다 |
-| 6 | Scheduler.place | 셈이 한계(`restartLimit`) 안이면 같은 이름으로 다시 띄운다(흐름 3 의 B) | |
+| 6 | Scheduler.place | 셈이 한계(`restartLimit`) 안이면 같은 이름으로 다시 띄운다(흐름 3 의 B). 내리던 인스턴스(`stopping` — 비움 · 노드의 내려감)는 다시 띄우지 않고 줄을 `stopped` 로 적는다 | |
 
 ## 실패하면
 

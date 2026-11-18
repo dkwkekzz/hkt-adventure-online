@@ -10,7 +10,8 @@ import { Process } from './process';
 
 function run(engineDir: string, bin: string, argv: string[], env: NodeJS.ProcessEnv): Process {
   const cwd = join(engineDir, ENGINE_WEB);
-  const child = spawn(join(cwd, bin), argv, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  // 제 프로세스 묶음으로 — tsx 는 엔진을 자식으로 띄운다. 신호는 묶음에 보내 엔진까지 닿게 한다(Process.kill)
+  const child = spawn(join(cwd, bin), argv, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
   return new Process(child);
 }
 

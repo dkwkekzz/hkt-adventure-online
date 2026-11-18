@@ -21,7 +21,7 @@ C  Queue.push → 순번
 |---|---|---|---|
 | 1 | Api.enter | 요청을 받는다. 이 API 서버의 빌드를 함께 넘긴다(SessionRpc enter) | |
 | 2 | Signer.verify | 캐릭터의 토큰을 푼다. 틀리거나 캐릭터의 토큰이 아니면 거절 | Character.id |
-| 3 | Admission.check | 그 캐릭터가 지금 들어와도 되는가(줄이 있는가 · 차단 · 한 계정에 세션 하나). 안 되면 거절 | Character |
+| 3 | Admission.check | 그 캐릭터가 지금 들어와도 되는가(줄이 있는가 · 차단 · 한 계정에 세션 하나). 안 되면 거절. 같은 계정의 다른 캐릭터의 세션은 내보낸다 — 접속을 닫게 하고(4000) 로드된 값은 내려 저장하게 한다 | Character |
 | 4 | Sessions.get | 이미 세션이 있으면 그대로 8 로. 대기열에 있으면 Queue.position 의 순번으로 21 로 | |
 | 5 | ZoneMap.zoneOf | 설 존을 정한다 — 마지막에 있던 존, 없으면 처음 서는 존. 닫혀 있으면 거절 | Zone |
 | 6 | Placer.pick | 그 존에서 같은 빌드이고 슬롯이 빈 인스턴스를 고른다. 없으면 B 로 | Instance |

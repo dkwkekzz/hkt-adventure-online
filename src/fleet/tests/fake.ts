@@ -36,7 +36,9 @@ export function fakeEngine(opts: { viewer?: boolean } = {}): string {
   mkdirSync(join(dir, 'out', 'character', 'fairy'), { recursive: true });
   writeFileSync(join(dir, 'out', 'character', 'fairy', 'b.glb'), 'glb');
   mkdirSync(join(web, 'dataset'), { recursive: true });
-  writeFileSync(join(web, 'dataset', 'keymap.json'), '{"keys":{}}\n');
+  mkdirSync(join(web, 'dataset', 'keymaps'), { recursive: true }); // 조작 틀의 폴더 — 틀 하나 = 파일 하나
+  writeFileSync(join(web, 'dataset', 'keymaps', 'over.json'), '{"form":"2.5d"}\n');
+  writeFileSync(join(web, 'dataset', 'keymaps', 'third.json'), '{"form":"3d"}\n');
   return dir;
 }
 
@@ -51,17 +53,17 @@ export function join_(port: number, account: string): Promise<() => void> {
   });
 }
 
-export const until = async (cond: () => boolean, ms = 5000): Promise<void> => {
+export const until = async (cond: () => boolean | Promise<boolean>, ms = 5000): Promise<void> => {
   const t0 = Date.now();
-  while (!cond()) {
+  while (!(await cond())) {
     if (Date.now() - t0 > ms) throw new Error('기다리다 지쳤다');
     await new Promise((r) => setTimeout(r, 10));
   }
 };
 
 // 테스트 파일(워커)마다 따로인 범위 — 워커끼리 겹치면 가짜 호스트가 포트를 두고 다툰다
-let next = 40000 + Number(process.env['VITEST_POOL_ID'] ?? '0') * 400 + Math.floor(Math.random() * 40) * 5;
-/** 테스트마다 다른 포트 범위 다섯. */
+let next = 20000 + Number(process.env['VITEST_POOL_ID'] ?? '0') * 400 + Math.floor(Math.random() * 40) * 5;
+/** 테스트마다 다른 포트 범위 다섯 — 커널이 나가는 연결에 주는 자리(32768 부터) 밑에서 고른다. 거기서 고르면 방금 연 연결의 포트와 엔진이 부딪친다. */
 export const portRange = (): [number, number] => {
   const from = next;
   next += 5;

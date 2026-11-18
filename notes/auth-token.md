@@ -76,7 +76,7 @@ curl -s -X POST http://localhost:8000/enter -H 'content-type: application/json' 
 답: `{"page":"http://<서비스>/play?token=…&ws=…","gate":"ws://<publicHost>:8002"}` — page 는 서비스가 주는 뷰어 페이지, gate 는 게이트웨이의 주소(모두 같다). 세계(호스트)의 주소는 오지 않는다 — 클라이언트는 게이트웨이 하나로 붙고, 게이트웨이가 호스트와 잇는다.
 
 - 세계가 내려가 있으면 여기서 띄운다. 처음은 몇 초 걸린다.
-- 세계의 슬롯(`session.capacity`)이 찼으면 `{"wait":N}`(200) — 대기열의 순번. 잠시 뒤 같은 것을 다시 묻는다. 슬롯이 나면 다음 물음이 주소를 받는다. `session.queueForgetMs` 동안 묻지 않으면 줄에서 빠진다.
+- 존의 인스턴스가 다 찼고(`zones[].capacity`) 더 띄울 곳도 없으면(`fleet.node.slots`) `{"wait":N}`(200) — 대기열의 순번. 잠시 뒤 같은 것을 다시 묻는다. 슬롯이 나면 다음 물음이 주소를 받는다. `session.queueForgetMs` 동안 묻지 않으면 줄에서 빠진다.
 - 한 계정은 한때에 캐릭터 하나 — 다른 캐릭터로 들어가면 앞 캐릭터의 접속은 4000 으로 닫힌다.
 - 입장의 세션은 `session.pendingMs` 안에 게이트웨이에 붙지 않으면 지워진다.
 - 실패는 `{"why":"…"}` — 토큰이 틀렸거나 만료 · 캐릭터의 토큰이 아니다 · 차단 · 닫힌 존이면 400, 세계를 띄우지 못했거나 게이트웨이가 없으면 503.
@@ -152,4 +152,23 @@ SERVICE_PUBLIC_HOST=play.example.com SERVICE_SECURE=1 npm start
 
 ```bash
 node -e 'const c=require("crypto");const id="tester",exp=Math.floor(Date.now()/1000)+3600,b=`hkt1.${id}.${exp}`;console.log(`${b}.${c.createHmac("sha256",process.env.HOST_AUTH_KEY).update(b).digest("base64url")}`)'
+```
+
+## 6. 운영자의 토큰 — `OPERATOR_KEY`
+
+운영자의 명령(흐름 6)은 컨트롤 플레인이 받고, **다른 키**(`OPERATOR_KEY`)로 서명한 운영자의 토큰만 받는다. 사람 · 엔진의 키(`HOST_AUTH_KEY`)로 낸 토큰은 운영자의 것이 아니다.
+
+```text
+hkt1.o<운영자 이름>.<만료>.<sig>       sig = HMAC-SHA256(OPERATOR_KEY, …) — 모양은 §2 와 같다
+```
+
+- 머리 `o` 가 운영자의 토큰이다(`kindOf` — `operator`). 이름은 `service.config.json` 의 `operators` 에 있어야 한다. 명령마다 표 `audit` 에 그 이름이 남는다(흐름 6 의 3).
+- `OPERATOR_KEY` 가 없는 컨트롤 플레인은 운영자의 명령을 받지 않는다(흐름 6 의 2).
+- stdin 의 콘솔은 시작할 때 `operators` 의 첫 이름으로 1 년짜리 토큰을 스스로 낸다 — 그 프로세스의 stdin 을 쥔 사람이 그 운영자다. 대기의 컨트롤 플레인의 stdin 은 명령을 받지 않는다.
+- 밖에서는 활성 컨트롤 플레인의 내부 주소(`CONTROL_PORT`, 기본 8010)에 글 한 줄을 보낸다 — 대기면 `대기의 컨트롤 플레인이다 — 활성에게` 가 답이다. 활성의 주소는 스토리지의 자리(`leader` 의 holder)다.
+
+```bash
+export OPERATOR_KEY="$(openssl rand -base64 32)"
+TOKEN=$(node -e 'const c=require("crypto");const b=`hkt1.oconsole.${Math.floor(Date.now()/1000)+3600}`;console.log(`${b}.${c.createHmac("sha256",process.env.OPERATOR_KEY).update(b).digest("base64url")}`)')
+curl -s -X POST http://localhost:8010/operator -H "authorization: Bearer $TOKEN" -d 'instances'
 ```

@@ -33,6 +33,13 @@ export class Sessions {
     return s;
   }
 
+  /** adopt — 보고에서 세션을 다시 세운다(흐름 13 의 5 — 값이 이미 그 인스턴스에 있다). grace 로, 만료는 graceMs 뒤 — 접속의 보고가 오면 active 로. */
+  adopt(character: string, account: string, name: string, instance: string, build: string): Session {
+    const s: Session = { id: `s${randomBytes(4).toString('hex')}`, character, account, name, build, instance, to: null, gate: null, state: 'grace', until: this.now() + this.graceMs };
+    this.rows.set(character, s);
+    return s;
+  }
+
   /** activate — active 로, 그 게이트웨이를 적는다. 세션이 없으면 null. */
   activate(character: string, gate: string): Session | null {
     const s = this.rows.get(character);
@@ -49,6 +56,23 @@ export class Sessions {
     if (s === undefined || s.state !== 'active' || s.gate !== gate) return null;
     s.state = 'grace';
     s.until = this.now() + this.graceMs;
+    return s;
+  }
+
+  /** reserve — 옮겨 갈 인스턴스에 슬롯을 잡아 둔다(흐름 10 의 3). 옮기는 가운데는 두 곳의 슬롯으로 센다. */
+  reserve(character: string, to: string): Session | null {
+    const s = this.rows.get(character);
+    if (s === undefined) return null;
+    s.to = to;
+    return s;
+  }
+
+  /** move — 세션의 인스턴스를 잡아 둔 곳으로 바꾼다(흐름 10 의 9). 잡아 둔 곳이 없으면 null. */
+  move(character: string): Session | null {
+    const s = this.rows.get(character);
+    if (s === undefined || s.to === null) return null;
+    s.instance = s.to;
+    s.to = null;
     return s;
   }
 

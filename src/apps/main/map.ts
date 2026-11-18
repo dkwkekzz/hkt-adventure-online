@@ -301,11 +301,16 @@ export function readMap(design: string, src: string, plan: string = join(design,
   const moduleOf = (name: string | null): string | null => concepts.find((c) => c.name === name)?.module ?? null;
   const flows: MapFlow[] = [];
   for (const f of readdirSync(dir).filter((f) => f.endsWith('.md')).sort()) {
-    const flow = readFlow(join(dir, f), readFileSync(join(dir, f), 'utf8'), (fl, st) => sites.has(`${fl}.${st}`));
+    const text = readFileSync(join(dir, f), 'utf8');
+    const flow = readFlow(join(dir, f), text, (fl, st) => sites.has(`${fl}.${st}`));
     if (flow === null) continue;
+    // 「아래 표의 개념」 — 단계의 개념이 그 흐름의 다른 표(명령마다의 개념)에 있다. 그 표의 개념이 다 섰으면 섰다
+    const tableConcepts = [...text.matchAll(/^\| `[^`]+`[^|]*\| ([^|]+) \|/gm)].flatMap((m) => [...m[1]!.matchAll(/\b([A-Z][A-Za-z]+)\./g)].map((x) => x[1]!));
+    const builtOf = (st: MapStep): ((name: string) => boolean) => (st.concept === null && st.who.startsWith('아래 표의 개념') && tableConcepts.length > 0 ? () => tableConcepts.every(built) : built);
     const steps = flow.steps.map((st) => {
       const at = filesOf(flow.flow, st.step);
-      const stand = standOf(flow.flow, st, built, at);
+      const below = st.concept === null && st.who.startsWith('아래 표의 개념') && tableConcepts.length > 0;
+      const stand = standOf(flow.flow, below ? { ...st, concept: '아래 표의 개념' } : st, builtOf(st), at);
       return { ...st, stand, sites: at, plan: stand === 'built' ? null : planOf(planTexts, flow.flow, st.concept, moduleOf(st.concept), st.concept !== null && built(st.concept)) };
     });
     flows.push({ ...flow, steps });

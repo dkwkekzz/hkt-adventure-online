@@ -21,10 +21,17 @@ export interface HostArgs {
   readonly sparse: number;
   /** `--party <body>` — 사람의 묶음의 틀. 처음 온 계정마다 그 틀에서 묶음이 서고(빈 것이 없으면 낳는다) 접속한 동안만 세계에 선다(ONLINE.md §1.3). */
   readonly party: string;
+  /**
+   * `--handoff <dir>` — 건넴 자리(ONLINE.md §1.3 · §1.4). 있으면 사람의 묶음은 밖이 `load` 로 맡긴 것만 서고(맡은 묶음이 없는 계정의 접속은 4002),
+   * 묶음의 값이 `<dir>/<account>.json` 으로 드나든다. 시작 때 저장에서 되찾은 낳은 묶음을 지운다. `--party` 가 있어야 한다(없으면 exit 2).
+   * 서비스가 캐릭터의 값을 들게 되면(Loader — plan 07) 준다. 없으면 엔진이 묶음을 제 저장에 든다.
+   */
+  readonly handoff?: string;
 }
 
 export function hostArgv(a: HostArgs): string[] {
-  return [ENGINE_HOST, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse), '--party', a.party];
+  const argv = [ENGINE_HOST, a.dataset, '--port', String(a.port), '--store', a.store, '--beat', String(a.beat), '--sparse', String(a.sparse), '--party', a.party];
+  return a.handoff === undefined ? argv : [...argv, '--handoff', a.handoff];
 }
 
 /**
@@ -83,26 +90,54 @@ export const EXIT_REFUSED = 2;
 /** 저장된 세계에서 이어갈 때의 머리글 둘째 줄. */
 export const RESUMED_HEAD = '저장된 세계에서 이어간다';
 
-/** Console 명령 여덟 — 엔진 protocol/console.ts 의 CONSOLE_COMMANDS. */
-export const CONSOLE_COMMANDS = ['pause', 'resume', 'save', 'step', 'stop', 'grant', 'revoke', 'status'] as const;
+/** Console 명령 열둘 — 엔진 protocol/console.ts 의 CONSOLE_COMMANDS. load · unload · keep 은 건넴 자리(--handoff)를 든 호스트만 받는다. */
+export const CONSOLE_COMMANDS = ['pause', 'resume', 'save', 'backup', 'step', 'stop', 'grant', 'revoke', 'load', 'unload', 'keep', 'status'] as const;
 export type ConsoleCommand = (typeof CONSOLE_COMMANDS)[number];
 
-/** status 답 글의 머리 — 엔진 protocol/console.ts 의 STATUS_HEAD 그대로. */
+/** status 답 글의 머리 — 엔진 protocol/console.ts 의 STATUS_HEAD 그대로. 글 전체는 `beats N · now M · 돈다|멈춤 · 접속 … · 명부 … · 지연 N`. */
 export const STATUS_HEAD = /^beats (\d+) · now (\d+) · (돈다|멈춤) · /;
+/** status 답 글의 꼬리 — 지난 창이 박자를 넘긴 밀리초(넘기지 않았거나 수동 박자면 0). 엔진 protocol/console.ts 의 STATUS_LAG 그대로. */
+export const STATUS_LAG = / · 지연 (\d+)$/;
 
 export interface StatusLine {
   readonly beats: number;
   readonly now: number;
   readonly paused: boolean;
+  /** 틱 지연(ms) — 꼬리가 없으면(옛 호스트) 0. */
+  readonly lag: number;
   readonly text: string;
 }
 
-/** 엔진 protocol/console.ts 의 readStatus 와 같다 — 모양이 아니면 null. */
+/** 엔진 protocol/console.ts 의 readStatus 와 같다 — 모양이 아니면 null(엔진의 것은 던진다). */
 export function readStatus(text: string): StatusLine | null {
   const m = STATUS_HEAD.exec(text);
   if (m === null) return null;
-  return { beats: Number(m[1]), now: Number(m[2]), paused: m[3] === '멈춤', text };
+  const lag = STATUS_LAG.exec(text);
+  return { beats: Number(m[1]), now: Number(m[2]), paused: m[3] === '멈춤', lag: lag === null ? 0 : Number(lag[1]), text };
 }
+
+/**
+ * 머리글 뒤에 오는 줄 — 답 글이 아니라 창 끝에 세계 · 호스트가 알리는 것(ONLINE.md §1.1 · §1.5). 정규식은 엔진 protocol/console.ts 그대로.
+ *   떠남 — `떠남 — <account> → <to>`. 규칙 depart 가 그 창에 둔 떠남 하나마다. account 는 그 body 를 맡은 계정(없으면 `-`),
+ *          to 는 컨텐츠의 글 — 서비스가 `<존>` 또는 `<존>@<공간>` 으로 읽는다. 묶음은 세계에 그대로 선다.
+ *   backup 끝 — `backup 끝 — <dir> · now N`. `backup <dir>` 의 답 뒤, 다음 창 끝의 저장을 dir 에 베낀 뒤. dir 은 그 자체로 저장 자리다.
+ *   backup 실패 — `backup 실패 — <dir> · <까닭>`. 세계는 그대로 돈다.
+ */
+export const DEPART_LINE = /^떠남 — (\S+) → (.+)$/;
+export const BACKUP_DONE = /^backup 끝 — (.+) · now (\d+)$/;
+export const BACKUP_FAILED = /^backup 실패 — (.+?) · (.*)$/;
+/** 떠남의 account 칸에서 맡은 계정이 없다는 글. */
+export const DEPART_NOBODY = '-';
+
+/**
+ * 건넴의 답 글(ONLINE.md §1.5) — 답 글 한 줄이 끝났음이다. 엔진 protocol/console.ts 그대로.
+ * load 의 body 는 `이름(번호)` 또는 번호를 `, ` 로. unload · keep 의 파일은 건넴 자리의 `<account>.json`.
+ * 건넴 자리가 없는 호스트는 `<명령> — 건넴 자리가 없다(…)`, 거부는 `<명령> 거절 — <까닭>`.
+ */
+export const LOAD_DONE = /^load — (\S+) 의 묶음 (.+)$/;
+export const UNLOAD_DONE = /^unload — (\S+) → (.+)$/;
+export const KEEP_DONE = /^keep — (?:(\d+) 묶음|(\S+) → (.+))$/;
+export const HANDOFF_REFUSED = /^(load|unload|keep) (?:거절 — (.+)|— 건넴 자리가 없다.*)$/;
 
 /**
  * status 글의 접속 칸 — `· 접속 ` 뒤 ` · 명부 ` 앞. 아무도 없으면 `-`. 항목은 `계정(body, body)` 이 공백으로 이어지고,
@@ -136,9 +171,14 @@ export const ANSWER_HEAD: Record<Exclude<ConsoleCommand, 'stop'>, RegExp> = {
   pause: /^paused/,
   resume: /^resumed/,
   save: /^save/,
+  // `backup — 다음 창 끝에 …` 또는 쓰는 법 `backup <dir>`. 뒤에 오는 끝 줄(backup 끝 · 실패)은 답이 아니다
+  backup: /^backup(?! 끝 — | 실패 — )/,
   step: /^step/,
   grant: /^grant/,
   revoke: /^revoke/,
+  load: /^load/,
+  unload: /^unload/,
+  keep: /^keep/,
   status: STATUS_HEAD,
 };
 export const UNKNOWN_HEAD = '모르는 명령 ';
