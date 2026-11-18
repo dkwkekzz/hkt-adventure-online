@@ -46,8 +46,8 @@ export function judgeImport(from: Layer, to: Layer): string | null {
 
 /**
  * P. 앱(테스트 밖)이 모듈의 객체에 부르는 것 — 흐름에서 트리거가 (밖)이거나 누가 가 Service · Api 인 단계, 그리고 Api 가 부르는 단계(로그인 · 캐릭터 — 흐름 2 · 8).
- * 그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — 개발의 main 에서 SessionRpc 는 함수 부름이다(session.enter · forget · attach · detach · report, gateway.kick).
- * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned, fleet.ready · launch · address).
+ * 그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — 개발의 main 에서 SessionRpc · NodeRpc 는 함수 부름이다(session.enter · forget · attach · detach · report · handoff, gateway.reroute · kick, fleet.load · unload).
+ * 그리고 같은 프로세스 안의 개념에 다른 모듈의 기능을 함수로 넘기는 자리 — 책임 문서가 「앱이 준다」고 적은 것(characters.owner · remove, banlist.banned, fleet.ready · launch · address, session.count · recover · drain).
  * gateway.listen · close 는 흐름 1 의 4 · 5 와 흐름 7 의 7 · 8, session.close 는 세션의 간격 — Service.start · stop 이 그 role 의 개념을 세우고 내린다.
  */
 export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
@@ -55,10 +55,10 @@ export const APP_CALLS: Readonly<Record<string, readonly string[]>> = {
   characters: ['list', 'create', 'owner', 'remove'],
   banlist: ['banned'],
   signer: ['issue', 'verify'],
-  fleet: ['start', 'stopAll', 'clock.stop', 'operator.command', 'ready', 'launch', 'address'],
-  session: ['enter', 'forget', 'attach', 'detach', 'report', 'close'],
+  fleet: ['start', 'stopAll', 'clock.stop', 'operator.command', 'ready', 'launch', 'address', 'load', 'unload'],
+  session: ['enter', 'forget', 'attach', 'detach', 'report', 'handoff', 'drain', 'recover', 'count', 'close'],
   storage: ['close'],
-  gateway: ['listen', 'close', 'kick'],
+  gateway: ['listen', 'close', 'reroute', 'kick'],
 };
 
 export function judgeAppCall(object: string, chain: string): string | null {

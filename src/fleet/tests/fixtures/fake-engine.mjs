@@ -5,9 +5,11 @@
 //          데이터셋 이름에 refuse 가 있으면 데이터셋 거부 — exit 2. silent 가 있으면 머리글을 찍지 않는다. nogrant 가 있으면 grant 에 모르는 명령으로 답한다
 //          status 의 꼬리는 ` · 지연 N` — N 은 stdin 의 `lag N`(시험의 손, 엔진에 없는 말)으로 바꾼다. 기본 0
 //          backup <dir> 은 답 뒤 다음 박자에 <dir>/snapshot.json 을 쓰고 `backup 끝 — <dir> · now N`. 시험의 손 `depart <account> <to>` 는 떠남 줄 하나를 찍는다
+//          --handoff <dir> 면 건넴: load <account> [공간](<dir>/<account>.json 의 {value, at} 으로 — 없으면 value 0) · unload <account>(선을 1001 로 닫고 파일에 쓴다) · keep [account].
+//          맡은 묶음이 없는 계정의 WebSocket 접속은 거절(4002). 시험의 손 `play <account>` 는 그 묶음의 value 를 하나 올린다(노는 셈). status 의 명부 칸 뒤에 ` · 묶음 <account>=<value>@<at> …`
 //   agent: --url 의 포트로 /join?account=<--account> 를 열고, 닫히면 exit 0
 import { createServer, get } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { WebSocketServer } from 'ws';
@@ -43,6 +45,14 @@ if (entry === 'apps/agent/main.ts') {
   let beats = 0;
   const links = new Map(); // account → res
   const grants = [];
+  const handoff = flag('--handoff');
+  const parties = new Map(); // account → {value, at}
+  const fileOf = (account) => join(handoff, `${account}.json`);
+  const keep = (account) => {
+    writeFileSync(fileOf(account) + '.tmp', JSON.stringify(parties.get(account)));
+    renameSync(fileOf(account) + '.tmp', fileOf(account));
+    return fileOf(account);
+  };
   let lag = 0;
   const backups = []; // 다음 박자에 베낄 자리
   const server = createServer((req, res) => {
@@ -69,6 +79,10 @@ if (entry === 'apps/agent/main.ts') {
         return ws.close(4002);
       }
       const account = m[1];
+      if (handoff !== null && !parties.has(account) && !grants.some((g) => g.endsWith(`→${account}`))) {
+        ws.send(JSON.stringify({ step: 'Link 1', reject: { why: '맡은 묶음이 없다' } }));
+        return ws.close(4002);
+      }
       links.get(account)?.end();
       const link = { end: () => ws.close(1001) };
       links.set(account, link);
@@ -90,7 +104,7 @@ if (entry === 'apps/agent/main.ts') {
       }
     }
   }, 20);
-  const status = () => `beats ${beats} · now ${now} · 돈다 · 접속 ${[...links.keys()].map((a) => `${a}(b1, b2)`).join(' ') || '-'} · 명부 ${grants.join(' ') || '(비었다)'} · 지연 ${lag}`;
+  const status = () => `beats ${beats} · now ${now} · 돈다 · 접속 ${[...links.keys()].map((a) => `${a}(b1, b2)`).join(' ') || '-'} · 명부 ${grants.join(' ') || '(비었다)'}${parties.size === 0 ? '' : ` · 묶음 ${[...parties].map(([a, p]) => `${a}=${p.value}@${p.at ?? '-'}`).join(' ')}`} · 지연 ${lag}`;
   let stopping = false;
   const stop = () => {
     if (stopping) return;
@@ -132,6 +146,37 @@ if (entry === 'apps/agent/main.ts') {
       }
     }
     else if (name === 'lag') lag = Number(rest[0] ?? 0); // 시험의 손 — 답하지 않는다
+    else if (name === 'play') { const p = parties.get(rest[0]); if (p) p.value++; } // 시험의 손 — 노는 셈
+    else if ((name === 'load' || name === 'unload' || name === 'keep') && handoff === null) console.log(`${name} — 건넴 자리가 없다(--handoff <dir> 로 띄운 호스트만)`);
+    else if (name === 'load') {
+      const [account, at] = rest;
+      if (account === undefined) console.log('load <account> [공간 이름 또는 번호]');
+      else if (parties.has(account)) console.log(`load 거절 — ${account} 은 이미 맡은 묶음이 있다`);
+      else {
+        const was = existsSync(fileOf(account)) ? JSON.parse(readFileSync(fileOf(account), 'utf8')) : { value: 0, at: null };
+        parties.set(account, { value: was.value, at: at ?? was.at ?? null });
+        console.log(`load — ${account} 의 묶음 b1, b2`);
+      }
+    } else if (name === 'unload') {
+      const account = rest[0];
+      if (account === undefined) console.log('unload <account>');
+      else if (!parties.has(account)) console.log(`unload 거절 — ${account} 은 맡은 묶음이 없다`);
+      else {
+        links.get(account)?.end(); // 1001 — 세계가 그 묶음을 내보냈다
+        links.delete(account);
+        const file = keep(account);
+        parties.delete(account);
+        console.log(`unload — ${account} → ${file}`);
+      }
+    } else if (name === 'keep') {
+      const account = rest[0];
+      if (account !== undefined && !parties.has(account)) console.log(`keep 거절 — ${account} 은 맡은 묶음이 없다`);
+      else if (account !== undefined) console.log(`keep — ${account} → ${keep(account)}`);
+      else {
+        for (const a of parties.keys()) keep(a);
+        console.log(`keep — ${parties.size} 묶음`);
+      }
+    }
     else if (name === 'depart') console.log(`떠남 — ${rest[0] ?? '-'} → ${rest[1] ?? ''}`); // 시험의 손 — 규칙 depart 대신
     else if (name === 'mute') {} // 답하지 않는다 — 한계 시험
     else console.log(`모르는 명령 ${name} — pause · resume · save · step · stop · grant · revoke · status`);

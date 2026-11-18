@@ -8,7 +8,7 @@
 
 | | 무엇 |
 |---|---|
-| ☐ | 노드 — Runner · NodeReporter, 컨트롤 플레인의 Nodes · Reconciler, NodeRpc |
+| ☐ | 노드 — Runner · NodeReporter, 컨트롤 플레인의 Nodes · Reconciler, NodeRpc. 노드의 시작(흐름 1 의 8 · 9 — Runner.reap · Loader.recover)과 내려감(흐름 7 의 1 · 2 — 사람을 다른 노드로 옮기는 Mover.move) |
 | ☐ | SessionRpc — API 서버 · 게이트웨이 ↔ 컨트롤 플레인 |
 | ☐ | 운영자 — 흐름 6 의 명령 전부(세션의 `close` · `open` — ZoneMap, `kick` — Router, `ban` · `unban` — Banlist 를 포함), 운영자의 토큰(`OPERATOR_KEY` — Signer.verify, 흐름 6 의 2) · audit |
 | ☐ | 컨트롤 플레인의 Clock — 흐름 5 의 C 를 한 간격에(지금은 세션 모듈 · 플릿이 제 간격을 든다), Directory.sweep(흐름 5 의 15 — 하루에 한 번) |

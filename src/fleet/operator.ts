@@ -1,20 +1,21 @@
-// Operator — 운영자의 글 한 줄 → 답 글 한 줄 (design/02-roles/fleet.md 의 Operator, 흐름 6).
-// 흔적은 1(글을 받았다) · 3(표 audit 에 적었다 — Database.put) · 4(명령을 맡은 개념의 일 — backup · restore 는 SnapshotStore 를 부른 자리에서) · 5(답).
-// start · stop 은 같은 run 으로 흐름 3 의 B · 흐름 7 의 4 를 잇는다. 운영자의 이름은 토큰(흐름 6 의 2 — plan 08) 전이라 stdin 이다.
+// Operator — 운영자의 글 한 줄 → 답 글 한 줄 (design/README.md 의 Operator, 흐름 6).
+// 흔적은 1(글을 받았다) · 3(표 audit 에 적었다 — Database.put) · 4(명령을 맡은 개념의 일) · 5(답).
+// start · stop · drain 은 같은 run 으로 흐름 3 의 B · 흐름 7 의 3 ~ 6 · 흐름 10 을 잇는다. 운영자의 이름은 토큰(흐름 6 의 2 — plan 08) 전이라 stdin 이다.
+// 지금은 플릿의 명령만 — 노드 · 세션 · 계정 · 캐릭터의 명령은 plan 08.
 
 import { OPERATOR_COMMANDS, OPERATOR_USAGE } from '../protocol/operator';
 import type { TraceEnd } from '../protocol/observe';
 import type { Fleet } from './fleet';
-import { freshRun } from './shard';
-import type { Shard } from './shard';
+import type { Instance } from './instance';
+import { freshRun } from './runner';
 
-const head = (s: Shard): string => {
-  const status = s.lastStatus === null ? '-' : `beats ${s.lastStatus.beats} · now ${s.lastStatus.now} · 지연 ${s.lag}`;
-  return `${s.name} · ${s.state} · port ${s.row.port ?? '-'} · ${status} · 사람 ${s.players}${s.why === null ? '' : ` · ${s.why}`}`;
+/** 인스턴스 한 줄 — 이름 · state · 노드 · 포트 · 세대 · 사람(세션) 수 · 지연 · 비우는 가운데 · 까닭. */
+const head = (fleet: Fleet, i: Instance): string => {
+  const server = fleet.runner.get(i.name);
+  const status = server?.lastStatus == null || i.state !== 'ready' ? '' : ` · beats ${server.lastStatus.beats} · now ${server.lastStatus.now} · 지연 ${server.lag}`;
+  const why = server?.why == null || i.state === 'ready' ? '' : ` · ${server.why}`;
+  return `${i.name} · ${i.state}${i.draining ? '(비우는 가운데)' : ''} · ${i.node} · port ${i.port ?? '-'} · 세대 ${i.epoch} · 사람 ${server?.players ?? 0} · 세션 ${fleet.hooks.count(i.name)} · 로드 ${fleet.loader.of(i.name).length}${status}${i.restarts > 0 ? ` · 죽은 셈 ${i.restarts}` : ''}${why}`;
 };
-
-/** 세계 하나에 거는 명령 — shards · help 밖. */
-const ON_WORLD: readonly string[] = OPERATOR_COMMANDS.filter((c) => c !== 'shards' && c !== 'help');
 
 interface Answer {
   readonly end: TraceEnd;
@@ -56,85 +57,88 @@ export class Operator {
       return `실패 — 기록하지 못했다(하지 않는다) — ${(e as Error).message}`;
     }
     const answer = await this.act(name, world, rest, run);
-    const shard = world === undefined ? null : this.fleet.shardOf(world);
-    if (answer.traced !== true) trace({ flow: 6, step: 4, run, unit, end: answer.end, ...(shard === null ? {} : { state: shard.state }) });
+    const i = world === undefined ? null : this.fleet.registry.get(world);
+    if (answer.traced !== true) trace({ flow: 6, step: 4, run, unit, end: answer.end, ...(i === null ? {} : { state: i.state }) });
     trace({ flow: 6, step: 5, run, unit, end: 'wait' });
     return answer.text;
   }
 
   /** 명령 하나를 맡은 개념에 넘긴다 — 흐름 6 의 4. */
-  private async act(name: string, world: string | undefined, rest: string[], run: string): Promise<Answer> {
+  private async act(name: string, target: string | undefined, rest: string[], run: string): Promise<Answer> {
     const ok = (text: string): Answer => ({ end: 'ok', text });
     const no = (text: string): Answer => ({ end: 'refused', text });
-    if (name === 'shards') {
-      const all = [...this.fleet.shards.values()];
-      return ok(all.length === 0 ? '샤드 없음' : all.map(head).join('\n'));
+    const fleet = this.fleet;
+    if (name === 'instances') {
+      const all = fleet.registry.all().filter((i) => target === undefined || i.zone === target);
+      return ok(all.length === 0 ? '인스턴스 없음' : all.map((i) => head(fleet, i)).join('\n'));
     }
-    if (!ON_WORLD.includes(name)) return no(`모르는 명령 ${name} — ${OPERATOR_USAGE}`);
-    if (world === undefined) return no(`${name} <world> — ${OPERATOR_USAGE}`);
-    const shard = this.fleet.shardOf(world);
-    if (shard === null) return no(`세계가 없다 — ${world}`);
-    const down = shard.state === 'stopped' || shard.state === 'failed';
-
+    if (target === undefined) return no(`${name} <${name === 'start' ? 'zone' : 'instance'}> — ${OPERATOR_USAGE}`);
+    if (name === 'start') {
+      if (fleet.zoneOf(target) === null) return no(`모르는 존 — ${target}`);
+      for (const i of fleet.registry.all()) {
+        if (i.zone !== target || i.state !== 'failed') continue;
+        i.restarts = 0; // 운영자가 보았다 — 셈을 비우고 다시 띄운다
+        await fleet.registry.put(i);
+      }
+      try {
+        const up = await fleet.launch(target, fleet.build, run); // Scheduler.place ⇒ 흐름 3 의 B
+        return up ? ok(fleet.registry.all().filter((i) => i.zone === target).map((i) => head(fleet, i)).join('\n')) : no('띄울 곳이 없다 — 노드의 slots 가 찼다');
+      } catch (e) {
+        return { end: 'failed', text: `실패 — ${(e as Error).message}` };
+      }
+    }
+    const i = fleet.registry.get(target);
+    if (i === null) return no(`인스턴스가 없다 — ${target}`);
+    const down = i.state === 'stopped' || i.state === 'failed';
+    const traced = (end: TraceEnd, text: string): Answer => {
+      fleet.trace({ flow: 6, step: 4, run, unit: target, end, state: fleet.registry.get(target)?.state ?? i.state });
+      return { end, text, traced: true };
+    };
     try {
       switch (name) {
-        case 'status':
-          return ok([head(shard), shard.lastStatus?.text ?? '(status 없음)', `백업 ${(await this.fleet.storage.snapshots.list(world)).join(' ') || '없음'}`].join('\n'));
-        case 'start':
-          shard.restarts = 0;
-          await shard.start(run);
-          return ok(head(shard));
+        case 'drain':
+        case 'undrain': {
+          await fleet.registry.drain(target, name === 'drain'); // Registry.drain
+          if (name === 'undrain') return ok(head(fleet, i));
+          const moved = await fleet.hooks.drain(target, run); // 남은 사람은 같은 존의 다른 인스턴스로 ⇒ 흐름 10. 비면 흐름 5 의 12 가 내린다
+          return ok(`${head(fleet, i)}\n옮겼다 — ${moved}`);
+        }
         case 'stop':
-          await shard.stop(run);
-          return ok(head(shard));
+          if (down) return no(`이미 내려가 있다 — ${i.state}`);
+          await fleet.stop(target, run); // Runner.stop ⇒ 흐름 7 의 3 ~ 6
+          return ok(head(fleet, fleet.registry.get(target) ?? i));
+        case 'remove':
+          if (!down) return no(`내린 뒤에 지운다 — stop ${target}`);
+          await fleet.registry.remove(target); // Registry.remove — Store 와 백업은 남는다(purge)
+          return ok(`지웠다 — ${target}`);
         case 'host': {
           const text = rest.join(' ');
-          if (text === '') return no('host <world> <Console 글>');
-          if (text.split(/\s+/)[0] === 'stop') return no(`stop 은 stop ${world} 로`);
-          const answer = await shard.command(text);
+          if (text === '') return no('host <instance> <Console 글>');
+          if (text.split(/\s+/)[0] === 'stop') return no(`stop 은 stop ${target} 로`);
+          const answer = await fleet.console.command(target, text); // Console.command
           return answer === null ? { end: 'failed', text: '(답 없음 — 호스트가 내려가 있거나 한계 안에 답이 없다)' } : ok(answer);
         }
-        case 'backup': {
-          if (!down) return no(`내린 뒤에 백업한다 — stop ${world}`);
-          const trace = (end: TraceEnd): void => this.fleet.trace({ flow: 6, step: 4, run, unit: world, end, state: shard.state });
-          try {
-            const made = await this.fleet.storage.snapshots.copy(world); // SnapshotStore.copy
-            shard.dirty = false;
-            trace('ok');
-            return { end: 'ok', text: `백업했다 — ${made}`, traced: true };
-          } catch (e) {
-            trace('failed');
-            return { end: 'failed', text: `실패 — ${(e as Error).message}`, traced: true };
-          }
-        }
+        case 'backup':
+          if (!down) return no(`내린 뒤에 백업한다 — stop ${target} (도는 인스턴스는 흐름 5 의 3 이 백업한다)`);
+          return traced('ok', `백업했다 — ${await fleet.storage.snapshots.copy(target)}`); // SnapshotStore.copy
         case 'restore': {
           const backup = rest[0];
-          if (backup === undefined) return no('restore <world> <백업>');
-          if (!down) return no(`내린 뒤에 되돌린다 — stop ${world}`);
-          const trace = (end: TraceEnd): void => this.fleet.trace({ flow: 6, step: 4, run, unit: world, end, state: shard.state });
-          try {
-            await this.fleet.storage.snapshots.restore(world, backup); // SnapshotStore.restore — 다음 띄움의 pull 이 내려 받는다
-          } catch (e) {
-            trace('failed');
-            return { end: 'failed', text: `실패 — ${(e as Error).message}`, traced: true };
-          }
-          shard.restarts = 0;
-          shard.why = null;
-          shard.state = 'stopped';
-          trace('ok');
-          return { end: 'ok', text: `되돌렸다 — ${backup}`, traced: true };
+          if (backup === undefined) return no('restore <instance> <백업>');
+          if (!down) return no(`내린 뒤에 되돌린다 — stop ${target}`);
+          await fleet.storage.snapshots.restore(target, backup); // SnapshotStore.restore — 다음 띄움의 pull 이 내려 받는다
+          i.restarts = 0;
+          i.state = 'stopped';
+          await fleet.registry.put(i);
+          return traced('ok', `되돌렸다 — ${backup}`);
         }
-        case 'revoke-port': {
-          if (!down) return no(`내린 뒤에 비운다 — stop ${world}`);
-          if (shard.row.port !== null) this.fleet.ports.free(shard.row.port);
-          shard.row.port = null;
-          await this.fleet.assignment.put(world, shard.row);
-          return ok(`포트를 비웠다 — 다음 입장이 새로 받는다`);
-        }
+        case 'purge':
+          if (!down) return no(`내린 뒤에 지운다 — stop ${target}`);
+          await fleet.storage.snapshots.purge(target); // SnapshotStore.purge
+          return traced('ok', `Store 와 백업을 지웠다 — ${target}`);
       }
     } catch (e) {
       return { end: 'failed', text: `실패 — ${(e as Error).message}` };
     }
-    return no('');
+    return no(`모르는 명령 ${name} — ${OPERATOR_USAGE}`);
   }
 }

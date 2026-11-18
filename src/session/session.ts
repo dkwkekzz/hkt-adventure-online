@@ -13,7 +13,7 @@ export interface Session {
   readonly name: string;
   readonly build: string;
   instance: string;
-  /** 옮겨 갈 곳(흐름 10 — plan 07) */
+  /** 옮겨 갈 곳 — 잡아 둔 슬롯(흐름 10 의 3). 옮기는 가운데만 */
   to: string | null;
   /** 이어진 게이트웨이 — pending 이면 null */
   gate: string | null;

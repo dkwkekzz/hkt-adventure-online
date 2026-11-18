@@ -67,8 +67,18 @@ export class Process {
     if (this.alive) this.child.stdin?.write(`${line}\n`);
   }
 
+  /** kill — 프로세스 묶음에 신호를 보낸다(Spawner 가 묶음의 머리로 띄웠다 — tsx 가 띄운 엔진까지 닿는다). 묶음이 없으면 그 프로세스에만. */
   kill(signal: NodeJS.Signals = 'SIGTERM'): void {
-    if (this.alive) this.child.kill(signal);
+    if (!this.alive) return;
+    if (this.pid > 0) {
+      try {
+        process.kill(-this.pid, signal);
+        return;
+      } catch {
+        // 묶음이 없다 — 아래로
+      }
+    }
+    this.child.kill(signal);
   }
 
   onLine(listener: (stream: Stream, line: string) => void): void {

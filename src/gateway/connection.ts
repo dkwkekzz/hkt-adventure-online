@@ -1,7 +1,8 @@
 // Connection — 클라이언트의 소켓과 호스트의 소켓을 잇는다 (design/02-roles/gateway.md 의 Connection, 흐름 9 의 10 · 11 · 흐름 11 의 1).
 // 글의 안을 풀지 않는다 — 호스트로 가는 첫 글(`Host 2`)의 자격만 attach 가 준 토큰으로 바꾼다. 나머지는 받은 그대로(글 · 바이너리) 넘긴다.
 // 호스트 쪽이 닫히면: 엔진의 거절 코드(4000 ~ 4999)이거나 아직 열리기 전이면 그 코드로 바로 닫는다. 아니면 rerouting 으로 한계(rerouteMs)까지
-// 기다린다 — 다른 호스트로 잇는 것(Connection.reroute, 흐름 10 · 12)은 plan 07 이 세운다. 한계가 지나면 1001.
+// 기다린다 — 컨트롤 플레인이 다른 호스트로 잇게 하면(reroute — 흐름 10 · 12) 클라이언트의 소켓은 그대로 뒤만 바뀐다. 한계가 지나면 1001.
+// 새 호스트의 첫 답(`Link 1` 의 열림)은 그대로 클라이언트에 간다 — 뷰어는 같은 선에 다시 온 열림으로 새 세계의 body 들을 맡는다(엔진의 면).
 
 import WebSocket from 'ws';
 import type { RawData } from 'ws';
@@ -41,6 +42,8 @@ export class Connection {
   private readonly meter: Meter = { start: 0, n: 0 };
   private readonly pending: { data: RawData; binary: boolean }[] = [];
   private attached = false;
+  /** 클라이언트의 첫 글 — 새 호스트에도 자격만 바꿔 보낸다 */
+  private hello: Record<string, unknown> = {};
   private relayed = false;
   private timer: NodeJS.Timeout | null = null;
 
@@ -64,19 +67,48 @@ export class Connection {
   open(to: Attached, hello: Record<string, unknown>): void {
     if (this.state === 'closed') return;
     this.attached = true;
+    this.hello = hello;
+    this.connect(to, () => this.mark(9, 10, 'ok'));
+  }
+
+  /** 호스트에 소켓 하나 — 열리면 첫 글을 그 토큰으로, 쌓인 글을 보낸다. 지난 뒤의 소켓이 늦게 닫혀도 지금의 뒤를 건드리지 않는다. */
+  private connect(to: Attached, opened: () => void): void {
     this.instance = to.instance;
     const up = new WebSocket(to.address, { maxPayload: 64 * 1024 * 1024 });
     this.upstream = up;
     up.on('open', () => {
-      if (this.state === 'closed') return up.close(1000);
-      up.send(JSON.stringify({ ...hello, credential: to.token }));
+      if (this.state === 'closed' || this.upstream !== up) return up.close(1000);
+      up.send(JSON.stringify({ ...this.hello, credential: to.token }));
       for (const m of this.pending.splice(0)) up.send(m.data, { binary: m.binary });
       this.state = 'open';
-      this.mark(9, 10, 'ok');
+      opened();
     });
-    up.on('message', (data, binary) => this.fromHost(data, binary));
-    up.on('close', (code) => this.hostClosed(code));
+    up.on('message', (data, binary) => {
+      if (this.upstream === up) this.fromHost(data, binary);
+    });
+    up.on('close', (code) => {
+      if (this.upstream === up) this.hostClosed(code);
+    });
     up.on('error', (e) => this.ctx.log(`${this.character} gateway 호스트 쪽 ${e.message}`));
+  }
+
+  /**
+   * reroute — 흐름 10 의 12(흐름 12 도). 뒤를 새 호스트로 바꿔 잇는다 — 클라이언트의 소켓은 그대로다. 옛 뒤가 아직 열려 있으면 닫는다.
+   * 그 사이 클라이언트의 글은 버린다(닫힌 세계의 body 에 대한 것이다). run 은 그 이동(흐름 10)의 것.
+   */
+  reroute(to: Attached, run: string): void {
+    if (this.state === 'closed' || !this.attached) return;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    const old = this.upstream;
+    this.upstream = null;
+    if (old !== null && (old.readyState === WebSocket.OPEN || old.readyState === WebSocket.CONNECTING)) old.close(1000);
+    this.state = 'rerouting';
+    this.connect(to, () => this.ctx.trace({ flow: 10, step: 12, run, unit: to.instance, end: 'ok' })); // Connection.reroute — 클라이언트 ◇
+    this.timer = setTimeout(() => {
+      if (this.state === 'rerouting') this.close(1001, '새 호스트가 열리지 않았다');
+    }, this.ctx.rerouteMs);
+    this.timer.unref();
   }
 
   /** relay — 흐름 9 의 11. 호스트의 글을 클라이언트로. 첫 글(열림 · 거절)을 넘기면 클라이언트를 기다린다(◇). */
@@ -95,15 +127,17 @@ export class Connection {
     const bytes = Array.isArray(data) ? data.reduce((n, b) => n + b.length, 0) : data instanceof ArrayBuffer ? data.byteLength : data.length;
     if (!this.ctx.limiter.check(bytes, this.meter)) return; // 버린다 — 수는 RateLimiter 가 센다
     const up = this.upstream;
-    if (up !== null && up.readyState === WebSocket.OPEN) up.send(data, { binary });
-    else if (this.state === 'opening') this.pending.push({ data, binary });
+    if (up !== null && up.readyState === WebSocket.OPEN && this.state === 'open') up.send(data, { binary });
+    else if (this.state === 'opening') this.pending.push({ data, binary }); // 뒤가 열리면 보낸다. rerouting 의 글은 버린다 — 닫힌 세계의 body 에 대한 것이다
   }
 
   private hostClosed(code: number): void {
     if (this.state === 'closed') return;
     this.upstream = null;
     if (this.state === 'opening' || (code >= 4000 && code <= 4999)) return this.close(code, '호스트가 닫았다');
+    if (this.state === 'rerouting') return; // 새 뒤를 기다리는 가운데 — 그 한계가 센다
     this.state = 'rerouting'; // 다른 호스트로 잇기를 기다린다 — 한계가 지나면 닫는다
+    if (this.timer !== null) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.close(1001, '호스트가 돌아오지 않았다'), this.ctx.rerouteMs);
     this.timer.unref();
   }

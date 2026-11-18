@@ -14,7 +14,6 @@
     "ipLimit": 32
   },
   "session": {
-    "capacity": 32,
     "pendingMs": 60000,
     "graceMs": 30000,
     "gateLimitMs": 20000,
@@ -25,12 +24,18 @@
   "characterTtl": 3600,
   "characterLimit": 4,
   "agentTtl": 300,
+  "zones": [
+    {
+      "name": "main",
+      "dataset": "dataset/glade.json",
+      "capacity": 32,
+      "spare": 0
+    }
+  ],
   "keymap": "dataset/keymaps",
   "scheme": "over",
   "fleet": {
     "engineDir": "engine",
-    "world": "main",
-    "dataset": "dataset/glade.json",
     "party": "fairy-1",
     "viewerOut": "out/viewer/viewer.js",
     "beat": 200,
@@ -52,12 +57,17 @@
     "publicHost": "localhost",
     "secure": false,
     "hostName": "localhost",
+    "node": {
+      "name": "node-1",
+      "slots": 4
+    },
     "clockMs": 5000,
     "idleLimit": 60,
     "startLimitMs": 90000,
     "stopLimitMs": 15000,
     "commandLimitMs": 3000,
     "restartLimit": 3,
-    "backupEvery": 120
+    "backupEvery": 120,
+    "backupKeep": 20
   }
 }

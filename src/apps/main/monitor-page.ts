@@ -447,7 +447,7 @@ th { color: var(--mute); font-weight: 500; } td.mono { font-family: var(--mono);
       el('circle', { cx: x0 + 12, cy: y + 1, r: 5, class: 'st-' + (u.state || 'stopped') }, g);
       txt(u.unit + '  ' + (u.state || '-'), { x: x0 + 24, y: y + 5, 'font-size': 12, 'font-weight': 600 }, g);
       const c = u.counts || {};
-      txt(['사람 ' + (c.players ?? 0), c.lag !== undefined ? '지연 ' + c.lag + 'ms' : c.port !== undefined ? ':' + c.port : ''].filter(Boolean).join(' · '), { x: x0 + B.w - 36, y: y + 5, class: 'mute mono', 'font-size': 11, 'text-anchor': 'end' }, g);
+      txt([(c.players ?? 0) + '명', c.lag !== undefined ? c.lag + 'ms' : c.port !== undefined ? ':' + c.port : ''].filter(Boolean).join(' · '), { x: x0 + B.w - 36, y: y + 5, class: 'mute mono', 'font-size': 11, 'text-anchor': 'end' }, g);
       y += 31;
     }
     if (us.length > 4) txt('+' + (us.length - 4) + ' 더', { x: x0, y: y + 4, class: 'mute', 'font-size': 11 }, g);

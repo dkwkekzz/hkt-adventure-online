@@ -38,8 +38,9 @@ afterEach(() => {
   opened = [];
 });
 
-/** 캐릭터 셋 — p1 · p2 는 계정 a1 의 것, p3 은 a2, p4 는 a3. 세계는 launch 가 세운다. */
-async function up(over: Partial<SessionOptions['config']> = {}, clockMs = 60_000) {
+/** 캐릭터 셋 — p1 · p2 는 계정 a1 의 것, p3 은 a2, p4 는 a3. 세계는 launch 가 세운다 — main 존은 인스턴스 main(과 more 로 더한 것), meadow 존은 meadow-1. */
+async function up(over: Partial<SessionOptions['config']> & { capacity?: number } = {}, clockMs = 60_000) {
+  const { capacity = 2, ...config } = over;
   const db = memory();
   const traces: TraceInput[] = [];
   const kicked: string[] = [];
@@ -50,6 +51,14 @@ async function up(over: Partial<SessionOptions['config']> = {}, clockMs = 60_000
   const banned = new Set<string>();
   let up_ = false;
   let room = true; // 띄울 곳이 있는가
+  const more: string[] = []; // main 존의 다른 인스턴스
+  let meadow = false;
+  const loaded: string[] = []; // `<인스턴스> <캐릭터>[ <공간>]` — 지금 올라 있는 것
+  const loads: string[] = [];
+  const unloads: string[] = [];
+  const rerouted: string[] = [];
+  const fail = { load: null as string | null, unload: null as string | null };
+  const live = (zone: string): string[] => (zone === 'main' ? [...(up_ ? ['main'] : []), ...more] : zone === 'meadow' && meadow ? ['meadow-1'] : []);
   let t = 1000;
   const characters: CharacterStoreSocket = {
     read: async () => false,
@@ -59,8 +68,11 @@ async function up(over: Partial<SessionOptions['config']> = {}, clockMs = 60_000
     rollback: async () => false,
   };
   const session = await openSession({
-    config: { capacity: 2, pendingMs: 1000, graceMs: 1000, gateLimitMs: 1000, queueForgetMs: 5000, ...over },
-    zones: [{ name: 'main', dataset: 'dataset/world.json', capacity: over.capacity ?? 2 }],
+    config: { pendingMs: 1000, graceMs: 1000, gateLimitMs: 1000, queueForgetMs: 5000, ...config },
+    zones: [
+      { name: 'main', dataset: 'dataset/world.json', capacity, spare: 0 },
+      { name: 'meadow', dataset: 'dataset/meadow.json', capacity, spare: 0 },
+    ],
     entry: 'main',
     clockMs,
     database: db,
@@ -68,14 +80,29 @@ async function up(over: Partial<SessionOptions['config']> = {}, clockMs = 60_000
     owner: async (c) => owners[c] ?? null,
     banned: async (a) => banned.has(a),
     remove: async (c) => void removed.push(c),
-    ready: (zone) => (up_ && zone === 'main' ? [{ name: 'main', build: 'b1' }] : []),
+    ready: (zone) => live(zone).map((name) => ({ name, build: 'b1' })),
     launch: async (zone, build, run) => {
       launched.push(`${zone} ${build} ${run}`);
-      if (up_ || !room) return false;
+      if (!room) return false;
+      if (zone === 'meadow' && !meadow) return (meadow = true);
+      if (zone !== 'main' || up_) return false;
       up_ = true;
       return true;
     },
-    address: (i) => (up_ && i === 'main' ? 'ws://node:3100' : null),
+    address: (i) => (live('main').includes(i) || live('meadow').includes(i) ? `ws://node/${i}` : null),
+    load: async (instance, c, spot) => {
+      loads.push(`${instance} ${c}${spot === null ? '' : ` ${spot}`}`);
+      if (fail.load !== null && instance.startsWith(fail.load)) return '호스트가 로드하지 않았다';
+      loaded.push(`${instance} ${c}`);
+      return null;
+    },
+    unload: async (instance, c) => {
+      unloads.push(`${instance} ${c}`);
+      const i = loaded.indexOf(`${instance} ${c}`);
+      if (i >= 0) loaded.splice(i, 1);
+      return fail.unload;
+    },
+    reroute: (gate, c, to) => void rerouted.push(`${gate} ${c} ${to.instance} ${to.address} ${to.token}`),
     issue: (c) => `host-${c}`,
     kick: (gate, c, code) => void kicked.push(`${gate} ${c} ${code}`),
     trace: (x) => void traces.push(x),
@@ -95,6 +122,12 @@ async function up(over: Partial<SessionOptions['config']> = {}, clockMs = 60_000
     banned,
     report,
     setRoom: (v: boolean) => (room = v),
+    more,
+    loaded,
+    loads,
+    unloads,
+    rerouted,
+    fail,
     down: () => (up_ = false),
     tick: (ms: number) => (t += ms),
     people: (account: string) => traces.filter((x) => x.account === account && x.person !== undefined).map((x) => `${x.flow}.${x.step} ${x.person}`),
@@ -164,8 +197,8 @@ describe('Sessions.hold · Placer.pick · Gates.pick — 흐름 3 의 4 ~ 8', ()
 /** 세계가 늘 떠 있는 세션 모듈 — 표만 db 의 것. */
 function optionsLike(db: DatabaseSocket): SessionOptions {
   return {
-    config: { capacity: 2, pendingMs: 1000, graceMs: 1000, gateLimitMs: 1000, queueForgetMs: 5000 },
-    zones: [{ name: 'main', dataset: 'd', capacity: 2 }],
+    config: { pendingMs: 1000, graceMs: 1000, gateLimitMs: 1000, queueForgetMs: 5000 },
+    zones: [{ name: 'main', dataset: 'd', capacity: 2, spare: 0 }],
     entry: 'main',
     clockMs: 60_000,
     database: db,
@@ -176,8 +209,11 @@ function optionsLike(db: DatabaseSocket): SessionOptions {
     ready: () => [{ name: 'main', build: 'b1' }],
     launch: async () => false,
     address: () => 'ws://node:1',
+    load: async () => null,
+    unload: async () => null,
     issue: (c) => c,
     kick: () => {},
+    reroute: () => {},
     trace: () => {},
     log: () => {},
   };
@@ -224,8 +260,8 @@ describe('Sessions.get · Sessions.activate · Sessions.suspend — 흐름 9 의
     report();
     expect(await session.attach('p3', 'gate-1', 'c0')).toEqual({ why: '세션이 없다 — 먼저 입장' });
     await session.enter('p3', 'b1', 'r1');
-    expect(await session.attach('p3', 'gate-1', 'c1')).toEqual({ instance: 'main', address: 'ws://node:3100', token: 'host-p3' });
-    expect(traces.filter((x) => x.run === 'c1').map((x) => `${x.flow}.${x.step}.${x.end} ${x.account} ${x.name}`)).toEqual(['9.3.ok a2 셋', '9.8.ok a2 셋', '9.9.ok a2 셋']);
+    expect(await session.attach('p3', 'gate-1', 'c1')).toEqual({ instance: 'main', address: 'ws://node/main', token: 'host-p3' });
+    expect(traces.filter((x) => x.run === 'c1').map((x) => `${x.flow}.${x.step}.${x.end} ${x.account} ${x.name}`)).toEqual(['9.3.ok a2 셋', '9.4.ok a2 셋', '9.8.ok a2 셋', '9.9.ok a2 셋']);
     session.detach('p3', 'gate-2', 'c1'); // 다른 게이트웨이의 늦은 닫힘
     expect(traces.some((x) => x.flow === 11)).toBe(false);
     session.detach('p3', 'gate-1', 'c1');
@@ -273,7 +309,7 @@ describe('Placer.pick · Queue — 값', () => {
   it('Placer.pick 은 같은 빌드에 자리가 있는 것 가운데 가장 찬 것', () => {
     const sessions = new Sessions(1000, 1000, () => 0);
     const placer = new Placer(sessions, () => [{ name: 'z-1', build: 'b' }, { name: 'z-2', build: 'b' }, { name: 'z-3', build: 'c' }]);
-    const zone = { name: 'z', dataset: 'd', capacity: 2, closed: false };
+    const zone = { name: 'z', dataset: 'd', capacity: 2, spare: 0, closed: false };
     sessions.hold('p1', 'a1', 'x', 'z-2', 'b');
     expect(placer.pick(zone, 'b')).toEqual({ instance: 'z-2', count: 1 });
     sessions.hold('p2', 'a2', 'y', 'z-2', 'b');
@@ -310,5 +346,121 @@ describe('Sessions.get · Characters.remove · CharacterStore.erase · ZoneMap.f
     expect([removed, erased]).toEqual([['p3'], ['p3']]);
     expect(await db.get('lastZone', 'p3')).toBeNull();
     expect(traces.filter((x) => x.run === 'f2').map((x) => `${x.flow}.${x.step}.${x.end} ${x.account}`)).toEqual(['8.8.ok a2', '8.9.ok a2', '8.10.ok a2', '8.11.ok a2']);
+  });
+});
+
+describe('Loader.load(9 의 4) · Loader.unload(11 의 3 · 3 의 3) — 세션이 부르는 플릿의 기능', () => {
+  it('pending 의 접속은 값을 그 인스턴스에 올린다. grace 로 돌아오면 올리지 않는다. 올리지 못하면 세션을 지우고 거절', async () => {
+    const { session, report, loads, fail, traces, people } = await up();
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    expect(loads).toEqual(['main p3']);
+    session.detach('p3', 'gate-1', 'c1');
+    await session.attach('p3', 'gate-1', 'c2'); // 유예 안 — 값이 이미 있다
+    expect(loads).toEqual(['main p3']);
+    fail.load = 'main';
+    await session.enter('p4', 'b1', 'r2');
+    expect(await session.attach('p4', 'gate-1', 'c3')).toEqual({ why: '호스트가 로드하지 않았다' });
+    expect(traces.find((x) => x.run === 'c3' && x.step === 4)).toMatchObject({ end: 'refused', person: 'gone' });
+    expect(people('a3')).toEqual(['3.7 pending', '9.4 gone']);
+    expect(await session.attach('p4', 'gate-1', 'c4')).toEqual({ why: '세션이 없다 — 먼저 입장' });
+  });
+
+  it('유예가 지나면 값을 내려 저장한 뒤 세션을 지운다. 같은 계정의 다른 캐릭터에 내보낸 세션의 값도 내린다', async () => {
+    const { session, report, tick, unloads, traces } = await up({}, 20);
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    session.detach('p3', 'gate-1', 'c1');
+    tick(1500);
+    report();
+    await until(() => traces.some((x) => x.flow === 11 && x.step === 4));
+    expect(unloads).toEqual(['main p3']);
+    expect(traces.filter((x) => x.flow === 11).map((x) => `${x.step}.${x.end}`)).toEqual(['2.wait', '3.ok', '4.ok', '5.ok']);
+
+    await session.enter('p1', 'b1', 'r2');
+    await session.attach('p1', 'gate-1', 'c2');
+    await session.enter('p2', 'b1', 'r3'); // 같은 계정 — p1 을 내보낸다
+    expect(unloads).toEqual(['main p3', 'main p1']);
+  });
+});
+
+describe('Mover.move · Router.reroute — 흐름 10', () => {
+  it('떠남 줄 — 갈 존에 인스턴스를 띄워 슬롯을 잡고, 내리고, 그 공간에 올리고, 세션 · 마지막 존을 옮기고, 게이트웨이에 새 주소와 토큰을 보낸다', async () => {
+    const { session, report, db, loads, unloads, rerouted, loaded, launched, traces, people } = await up();
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    session.handoff('main', 'p3', 'meadow@들머리', 'm1');
+    await until(() => rerouted.length === 1);
+    expect(launched.at(-1)).toBe('meadow b1 m1'); // 갈 존에 슬롯이 없었다 — 띄웠다(흐름 3 의 B)
+    expect(unloads).toEqual(['main p3']);
+    expect(loads).toEqual(['main p3', 'meadow-1 p3 들머리']);
+    expect(loaded).toEqual(['meadow-1 p3']); // 값은 한때에 한 인스턴스에만
+    expect(rerouted).toEqual(['gate-1 p3 meadow-1 ws://node/meadow-1 host-p3']);
+    expect(await db.get('lastZone', 'p3')).toBe('meadow');
+    expect(traces.filter((x) => x.run === 'm1' && x.flow === 10).map((x) => `${x.step}.${x.end}`)).toEqual(['1.ok', '2.ok', '3.ok', '4.ok', '8.ok', '9.ok', '10.ok', '11.ok']);
+    expect(traces.find((x) => x.run === 'm1' && x.step === 9)).toMatchObject({ account: 'a2', name: '셋', unit: 'meadow-1' });
+    expect(people('a2')).toEqual(['3.7 pending', '9.8 active']); // 옮겨도 사람의 state 는 active 그대로
+    session.detach('p3', 'gate-1', 'c1');
+    expect(await session.attach('p3', 'gate-1', 'c2')).toMatchObject({ instance: 'meadow-1' }); // 다시 붙어도 옮긴 곳
+
+    session.handoff('meadow-1', 'p3', 'nowhere', 'm2'); // 모르는 존 — 제자리에
+    expect(traces.find((x) => x.run === 'm2')).toMatchObject({ flow: 10, step: 1, end: 'refused' });
+    session.handoff('main', 'p3', 'meadow', 'm3'); // 그 인스턴스에 없다 — 늦은 줄
+    expect(traces.some((x) => x.run === 'm3')).toBe(false);
+  });
+
+  it('비움(drain) — 같은 존의 다른 인스턴스로. 내리지 못하면(저장 실패) 제자리에 다시 올리고, 갈 곳에 올리지 못해도 제자리로', async () => {
+    const { session, report, more, loads, unloads, rerouted, fail } = await up({ capacity: 3 });
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    await session.enter('p4', 'b1', 'r2'); // pending — 슬롯만 옮긴다
+    expect(await session.drain('main', 'd0')).toBe(0); // 갈 곳이 없다 — 띄울 곳도 없다(main 은 이미 섰다)
+    more.push('main-2');
+    fail.unload = '값을 저장하지 못했다';
+    expect(await session.drain('main', 'd1')).toBe(1); // p4 만 — p3 은 제자리
+    expect(loads).toEqual(['main p3', 'main p3']); // 되돌렸다
+    fail.unload = null;
+    fail.load = 'main-2';
+    expect(await session.drain('main', 'd2')).toBe(0);
+    expect(loads.at(-1)).toBe('main p3'); // 갈 곳에 올리지 못해 제자리로
+    fail.load = null;
+    expect(await session.drain('main', 'd3')).toBe(1);
+    expect(unloads.at(-1)).toBe('main p3');
+    expect(rerouted).toEqual(['gate-1 p3 main-2 ws://node/main-2 host-p3']);
+    expect(await session.attach('p4', 'gate-1', 'c2')).toMatchObject({ instance: 'main-2' }); // pending 은 옮긴 곳에서 올린다
+    expect(session.count('main')).toBe(0);
+    expect(session.count('main-2')).toBe(2);
+  });
+});
+
+describe('Sessions.of · Mover.move — 흐름 12 의 4 · 5', () => {
+  it('죽은 인스턴스의 grace 는 지우고, 나머지는 내림 없이 다른 인스턴스로. 옮길 곳이 없으면 접속을 닫는다(1001)', async () => {
+    const { session, report, more, unloads, loads, kicked, rerouted, traces, setRoom, down } = await up();
+    report();
+    await session.enter('p3', 'b1', 'r1');
+    await session.attach('p3', 'gate-1', 'c1');
+    await session.enter('p1', 'b1', 'r2');
+    await session.attach('p1', 'gate-1', 'c2');
+    session.detach('p1', 'gate-1', 'c2'); // grace
+    down(); // main 이 죽었다
+    more.push('main-2');
+    await session.recover('main', 'x1');
+    expect(unloads).toEqual([]); // 떠나는 곳이 죽었다 — 내림이 없다
+    expect(loads).toEqual(['main p3', 'main p1', 'main-2 p3']);
+    expect(rerouted).toEqual(['gate-1 p3 main-2 ws://node/main-2 host-p3']);
+    expect(traces.find((x) => x.run === 'x1' && x.flow === 12 && x.step === 4)).toMatchObject({ unit: 'main', counts: { sessions: 2 } });
+    expect(traces.filter((x) => x.run === 'x1' && x.flow === 12 && x.step === 5).map((x) => `${x.account} ${x.person ?? '-'}`).sort()).toEqual(['a1 gone', 'a2 -']);
+    expect(await session.attach('p1', 'gate-1', 'c3')).toEqual({ why: '세션이 없다 — 먼저 입장' });
+
+    more.length = 0; // main-2 도 죽었다 — 갈 곳도 띄울 곳도 없다
+    setRoom(false);
+    await session.recover('main-2', 'x2');
+    expect(kicked).toEqual(['gate-1 p3 1001']);
+    expect(traces.find((x) => x.run === 'x2' && x.flow === 12 && x.step === 5)).toMatchObject({ end: 'failed', person: 'gone' });
+    expect(session.count('main-2')).toBe(0);
   });
 });

@@ -8,26 +8,27 @@ design/       설계. 목표 · 구조(모듈 다섯 · 프로세스 넷 · 연�
 plan/         design 을 src 에 세우는 순서와 상태. plan 하나 = 파일 하나(README.md 가 진행표). 다음은 진행표의 첫 ☐ · ◐
 notes/        사람이 읽는 설명서 — 이미 선 것을 쓰는 법(auth-token.md — 키 · 토큰의 설정 · 발급 · 주입, storage.md — 스토리지의 뒤 · 자리, mongodb-local.md — 로컬의 진짜 MongoDB). 설계가 아니다. 설계 · 코드가 바뀌면 같은 커밋에서 고친다
 src/
-  protocol/   소켓 선언 — api(로그인 · 캐릭터 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · gateway(게이트웨이 소켓 · 설정) · session(SessionRpc — enter · forget · attach · detach · report · kick, 세션의 설정 · openSession 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, protocol 밖을 import 하지 않는다
+  protocol/   소켓 선언 — api(로그인 · 캐릭터 · 입장) · engine(엔진의 면을 베낀 것) · storage(Database · CharacterStore · Leases · SnapshotStore · LeaderLock 과 openStorage 의 값) · gateway(게이트웨이 소켓 · 설정) · session(SessionRpc — enter · forget · attach · detach · report · reroute · kick, 플릿과 주고받는 handoff · drain · recover · count, 존의 줄 · 세션의 설정 · openSession 의 값) · operator · observe(흔적 · 수치 · 흐름의 지도). 타입 · 데이터뿐, protocol 밖을 import 하지 않는다
   account/    계정 (design/02-roles/account.md) — Directory · Characters · Banlist · Signer · Identity · Account · Character · Token. Account.id 는 a…, Character.id 는 p…(엔진의 계정) — 토큰의 종류는 id 의 머리(kindOf)
   storage/    스토리지 (design/02-roles/storage.md) — Database · CharacterStore · Leases · SnapshotStore · LeaderLock. 밖에 내보내는 것은 openStorage 하나
               뒤는 둘씩 — 문서: MongoDB(mongo) · 디렉터리(docs), 물건: S3 호환(s3) · 디렉터리(bucket). Store 는 tar.gz 하나(pack)
   gateway/    게이트웨이 (design/02-roles/gateway.md) — Acceptor · Connection · RateLimiter · Keepalive · GateReporter. 밖에 내보내는 것은 openGateway 하나. 소켓은 ws
-  session/    세션 (design/02-roles/session.md) — Admission · ZoneMap · Zone · Placer · Sessions · Session · Queue · Gates · Router(kick). 밖에 내보내는 것은 openSession 하나 — 그 소켓이 SessionRpc 의 받는 쪽
-              다른 모듈의 기능(Characters.owner · remove · Banlist.banned · 플릿의 ready · launch · address · Signer.issue · 게이트웨이의 kick)은 앱이 준 함수. 간격(흐름 5 의 11 · 13 · 14)은 제 것
-  fleet/      함대 (design/02-roles/fleet.md) — Fleet · Shard · Assignment · Ports · Spawner · Process · Probe · Clock · Operator. 세션에 주는 것은 ready · launch(흐름 3 의 B) · address
+  session/    세션 (design/02-roles/session.md) — Admission · ZoneMap · Zone · Placer · Sessions · Session · Queue · Gates · Mover(흐름 10 · 12 의 5) · Router(reroute · kick). 밖에 내보내는 것은 openSession 하나 — 그 소켓이 SessionRpc 의 받는 쪽
+              다른 모듈의 기능(Characters.owner · remove · Banlist.banned · 플릿의 ready · launch · address · load · unload · Signer.issue · 게이트웨이의 reroute · kick)은 앱이 준 함수. 간격(흐름 5 의 11 · 13 · 14)은 제 것
+  fleet/      함대 (design/02-roles/fleet.md) — 컨트롤 플레인의 반 Registry · Instance · Scheduler · Scaler · Recoverer, 노드의 반 Runner · Console · Loader · Backuper · Ports · Spawner · Process · Probe · Clock, 그리고 Operator.
+              Fleet 이 조립한다(노드는 지금 이 서버의 것 하나 — NodeRpc 는 함수 부름). 세션에 주는 것은 ready · launch(흐름 3 의 B) · address · load · unload, 받는 것은 count · move · drain · handoff
   apps/main/  서비스 프로세스 — Service(흐름 1 · 7) · Api(http — GET / 게스트 페이지 · POST /login · /characters · /create · /choose · /delete · /enter) · Static(뷰어의 /play · /viewer.js · /assets · /keymap.json) · stdin 의 Operator · 설정
               Monitor(흐름 14 — 내부 주소의 /health · /metrics · /observe · /observe/page) · map(design 에서 뽑는 관측의 지도 — 프로세스 · 연결 · 개념이 사는 곳 · 흐름) · monitor-page(관측 페이지 — 구조의 그림)
   tools/      boundary(경계 검사) · index(설계 색인 · 코드의 흔적이 흐름에 있는가) · shot(화면 확인, 검사 밖)
 engine.lock   엔진의 저장소와 핀한 커밋. scripts/engine.sh 가 engine/ 에 세운다(git 밖)
-service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데이터셋 · 사람의 묶음의 틀(party) · 세션(인스턴스의 상한 capacity · 만료 · 유예 · 한계) · 캐릭터(수 · 토큰 수명) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 게이트웨이(포트 · 한계) · Monitor 의 포트 · 흔적의 상한 · 한계 · 주기. 게임 명사는 여기에만
+service.config.json   서비스의 값 — 엔진 자리 · 존의 줄(zones — 이름 · 데이터셋 · 인스턴스 하나의 상한 capacity · 예비 용량 spare · NPC 묶음, 처음 서는 존은 첫 줄) · 사람의 묶음의 틀(party) · 노드(fleet.node — 이름 · slots) · 세션(만료 · 유예 · 한계) · 캐릭터(수 · 토큰 수명) · keymap · 뷰어 묶음의 자리 · NPC 묶음 · 포트 범위 · 게이트웨이(포트 · 한계) · Monitor 의 포트 · 흔적의 상한 · 한계 · 주기. 게임 명사는 여기에만
 ```
 
 ## 지키는 것
 
 - **설계는 `design/method.md` 의 방식으로만 쓴다.** 흐름에 없는 호출, 책임에 없는 데이터는 구현에 없다. 구현에 필요한 것이 설계에 없으면 코드보다 먼저 설계를 고친다. 개념 하나 = 파일 하나, 이름은 책임 문서 그대로. 테스트는 그 모듈의 `tests/` 에, 이름은 흐름의 `개념.기능`.
 - **결합은 프로세스 경계다.** 엔진의 코드를 import 하지 않는다. 엔진에 닿는 길은 `fleet/spawner.ts` 하나, 엔진의 면은 `protocol/engine.ts` 하나에 베낀다. 엔진을 올리면(`engine.lock`) `ONLINE.md` §1 을 다시 읽고 `protocol/engine.ts` 를 같은 커밋에서 고친다.
-- **게임 상태의 진실은 엔진의 Store 다.** 서비스는 Store 디렉터리의 안을 읽지도 쓰지도 않는다 — 통째로 베끼고 되돌리기만. 명부는 Console 의 `grant` · `revoke` 로만.
+- **게임 상태의 진실은 엔진이 쓴 것이다** — 세계는 Store 디렉터리, 캐릭터의 값은 건넴 파일(`--handoff` 의 `<Character.id>.json` — CharacterStore 가 든다). 서비스는 그 안을 읽지도 쓰지도 않는다 — 통째로 베끼고 옮기고 되돌리기만. 명부는 Console 의 `grant` · `revoke` 로만, 캐릭터의 묶음은 `load` · `unload` · `keep` 으로만.
 - **게임 명사는 `service.config.json` 에만.** 모듈 · 앱의 코드와 책임 · 흐름 문서에 없다(규칙 N).
 - **엔진에 손대는 것은 엔진이 "(밖)" 으로 비워 둔 자리뿐이다**(`ONLINE.md` §3.2). 엔진 저장소에 PR 로 들고, 들어간 커밋을 `engine.lock` 에 핀한다.
 - **확인한 것만 실행 근거로 쓴다.** 실행한 검증과 예상만 한 것을 구분해 보고한다. 화면이 직관 확인이면 그 세션에서 `npm run shot` 으로 찍어 보인다.
@@ -51,8 +52,8 @@ service.config.json   서비스의 값 — 엔진 자리 · 세계 이름 · 데
     모듈의 tests/ 는 세움에 다른 모듈의 index.ts 를 쓸 수 있다. 두 모듈을 같이 세우는 조립 테스트는 apps/*/tests/ 에
  P. apps 는 모듈의 index.ts 만 import 하고, 모듈의 객체에 부르는 것은 흐름에서 Service · Api 가 부르는 단계뿐이다 —
     directory.resolve · characters.list · create · owner · banlist.banned · signer.issue · signer.verify · fleet.start · fleet.stopAll · fleet.clock.stop · fleet.operator.command · storage.close · gateway.listen · gateway.close · session.close
-    그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — SessionRpc 의 session.enter · forget · attach · detach · report, gateway.kick
-    그리고 개념에 다른 모듈의 기능을 함수로 넘기는 자리(책임 문서가 「앱이 준다」고 적은 것) — characters.owner · remove, banlist.banned, fleet.ready · launch · address
+    그리고 프로세스 사이의 소켓을 함수로 잇는 자리 — SessionRpc 의 session.enter · forget · attach · detach · report, gateway.reroute · kick, NodeRpc 의 fleet.load · unload · session.handoff
+    그리고 개념에 다른 모듈의 기능을 함수로 넘기는 자리(책임 문서가 「앱이 준다」고 적은 것) — characters.owner · remove, banlist.banned, fleet.ready · launch · address, session.count · recover · drain
  N. 모듈 · 앱 · protocol 의 코드(테스트 밖)와 design 의 책임 · 흐름 문서에 게임 명사가 없다
  E. node:child_process 와 엔진의 진입점 · 인자 짓기(ENGINE_* · hostArgv · agentArgv · bundleArgv)는 fleet/spawner.ts 에만.
     엔진 체크아웃의 파일 자리(VIEWER_*)는 fleet/spawner.ts 와 apps/main/static.ts(뷰어의 페이지 · 실물을 준다)에만
@@ -68,7 +69,7 @@ npm run check          경계 검사 + 설계 색인 + tsc + 테스트 전부   
                        engine/ 이 있으면 진짜 엔진 위의 조립(src/apps/main/tests/engine.spec.ts)도 돈다. ENGINE_DIR 로 다른 체크아웃을
 npm run index          설계 색인 — 흐름의 단계 `개념.기능` 이 책임에 있는가를 흐름마다 찍고, 코드의 흔적 (흐름, #) 이 흐름의 표에 있는가를 본다
 HOST_AUTH_KEY=… npm start [-- config.json]
-                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」(로그인) → 캐릭터를 만들고 「들어가기」 → /play?ws=<게이트웨이>. 클라이언트는 게이트웨이(ws://localhost:8002) 하나로 붙고 게이트웨이가 세계(호스트)와 잇는다 — 입장(세션) 없이 붙으면 4002. 사람은 모두 같은 세계(설정의 world)에 붙고 캐릭터마다 자기 묶음을 맡는다. 한 계정은 한때에 캐릭터 하나. 세계의 슬롯은 session.capacity — 넘으면 대기열의 순번. stdin 은 Operator(help).
+                       서비스 — 시작 때 뷰어를 한 번 묶고, http://localhost:8000/ 의 게스트 페이지 → 「들어가기」(로그인) → 캐릭터를 만들고 「들어가기」 → /play?ws=<게이트웨이>. 클라이언트는 게이트웨이(ws://localhost:8002) 하나로 붙고 게이트웨이가 세계(호스트)와 잇는다 — 입장(세션) 없이 붙으면 4002. 캐릭터는 마지막에 있던 존(처음이면 zones 의 첫 줄)의 인스턴스(`<존>-<번호>`)에 서고, 값(묶음)은 CharacterStore 에서 그 호스트로 올라가고 내려온다(엔진의 --handoff). 한 계정은 한때에 캐릭터 하나. 인스턴스 하나의 슬롯은 존의 capacity — 차면 노드의 slots 안에서 인스턴스를 더 띄우고, 그것도 차면 대기열의 순번. stdin 은 Operator(help — instances · start · drain · stop …).
                        관측은 http://localhost:8001/observe/page(Monitor 의 내부 주소) — 보기 둘: 「서버」(프로세스 · 인스턴스 · 연결의 state 와 서버의 흐름)와 「사람」(인스턴스마다의 사람 · 그 사람의 state · 길 · 일생, #people). 흐름을 고르면 그 길이 그림 위에 놓인다. /health · /metrics 도 거기.
                        env: PORT(Api 포트) · GATE_PORT(게이트웨이 포트) · MONITOR_PORT · SERVICE_PUBLIC_HOST · SERVICE_SECURE=1(https/wss 주소) · SERVICE_PAGE_URL · SERVICE_GATE_URL(프록시 뒤의 페이지 · 게이트웨이 주소) · SERVICE_STORAGE · SERVICE_ENGINE
                        스토리지: MONGODB_URI(표 · 캐릭터 · lease · 잠금) · SNAPSHOT_URI=s3://<bucket>/<prefix> + S3_ENDPOINT · AWS_*(Store). 없는 쪽은 SERVICE_STORAGE 의 디렉터리 (notes/storage.md)

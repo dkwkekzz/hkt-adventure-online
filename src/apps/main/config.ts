@@ -2,14 +2,16 @@
 // 서명 키는 설정 파일에 두지 않는다 — 환경변수 HOST_AUTH_KEY(엔진과 같은 이름). 스토리지의 자리 · 자격도 환경변수(MONGODB_URI · SNAPSHOT_URI · S3_ENDPOINT · AWS_*).
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
-import type { FleetConfig } from '../../fleet';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { FleetConfig, FleetZone } from '../../fleet';
 import type { GatewayConfig } from '../../protocol/gateway';
 import type { SessionConfig } from '../../protocol/session';
 import type { BucketOptions, StorageOptions } from '../../protocol/storage';
 
 export interface ServiceConfig {
   readonly fleet: FleetConfig;
+  /** 존의 줄 — 이름 · 데이터셋 · 상한(capacity) · 예비 용량(spare) · NPC 묶음(npc — 없으면 fleet.npc.bodies). 처음 서는 존은 첫 줄 */
+  readonly zones: readonly FleetZone[];
   /** 뷰어의 Keymap — 엔진 web 상대의 파일 또는 조작 틀의 폴더(틀 하나 = `<틀>.json` 하나). Static 이 /keymap.json 으로 준다. 없으면 null — 뷰어는 메뉴로만 고른다. */
   readonly keymap: string | null;
   /** 기본 조작 틀 — keymap 이 폴더일 때 페이지에 `?scheme=` 이 없으면 이 틀. null 이면 이름 순의 첫 틀. */
@@ -45,7 +47,7 @@ type Raw = Omit<ServiceConfig, 'fleet' | 'build' | 'storage' | 'pageUrl' | 'gate
   storageRoot: string;
   leaseMs: number;
   characterHistory: number;
-  fleet: Omit<FleetConfig, 'ports' | 'hostName'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string };
+  fleet: Omit<FleetConfig, 'ports' | 'hostName' | 'spool' | 'node'> & { ports: [number, number]; publicHost: string; secure: boolean; hostName?: string; node?: { name?: string; slots?: number } };
 };
 
 /** SNAPSHOT_URI(`s3://<bucket>/<prefix>`)와 S3_ENDPOINT · AWS_* → object storage 의 자리. 없으면 null — Store 는 storageRoot 의 디렉터리로. */
@@ -88,11 +90,13 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
   const secure = env['SERVICE_SECURE'] === undefined ? raw.fleet.secure : env['SERVICE_SECURE'] === '1';
   const { storageRoot, leaseMs, characterHistory, ...rest } = raw;
   const gateway: GatewayConfig = { ...raw.gateway, port: num(env['GATE_PORT'], raw.gateway.port) };
-  const { publicHost: _p, secure: _s, hostName, ...fleet } = raw.fleet;
+  const { publicHost: _p, secure: _s, hostName, node, ...fleet } = raw.fleet;
+  if (!Array.isArray(raw.zones) || raw.zones.length === 0) throw new Error(`설정에 존이 없다 — zones (${file})`);
+  const root = at(env['SERVICE_STORAGE'] ?? storageRoot);
   return {
     ...rest,
     storage: {
-      root: at(env['SERVICE_STORAGE'] ?? storageRoot),
+      root,
       mongodbUri: env['MONGODB_URI'] || null,
       bucket: bucketOf(env),
       leaseMs,
@@ -109,6 +113,8 @@ export function loadConfig(file: string, env: NodeJS.ProcessEnv = process.env): 
       engineDir: at(env['SERVICE_ENGINE'] ?? raw.fleet.engineDir),
       viewerOut: at(raw.fleet.viewerOut),
       hostName: hostName ?? 'localhost',
+      node: { name: node?.name ?? 'node-1', slots: node?.slots ?? 4 },
+      spool: join(root, 'spool'),
     },
   };
 }

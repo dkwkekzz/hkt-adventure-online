@@ -52,6 +52,23 @@ export class Sessions {
     return s;
   }
 
+  /** reserve — 옮겨 갈 인스턴스에 슬롯을 잡아 둔다(흐름 10 의 3). 옮기는 가운데는 두 곳의 슬롯으로 센다. */
+  reserve(character: string, to: string): Session | null {
+    const s = this.rows.get(character);
+    if (s === undefined) return null;
+    s.to = to;
+    return s;
+  }
+
+  /** move — 세션의 인스턴스를 잡아 둔 곳으로 바꾼다(흐름 10 의 9). 잡아 둔 곳이 없으면 null. */
+  move(character: string): Session | null {
+    const s = this.rows.get(character);
+    if (s === undefined || s.to === null) return null;
+    s.instance = s.to;
+    s.to = null;
+    return s;
+  }
+
   drop(character: string): Session | null {
     const s = this.rows.get(character) ?? null;
     this.rows.delete(character);

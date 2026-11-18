@@ -93,7 +93,7 @@
 
 ### Loader
 - 데이터: leases(참조) · values(참조 — CharacterStore) · console(참조) · spool.
-- 기능: load(instance, character, spot) 는 lease 를 받고 값을 캐릭터 파일에 내려 받아 호스트에 로드시킨다(파일이 없으면 엔진이 틀에서 낳는다). unload(instance, character) 는 호스트에 언로드시켜 캐릭터 파일을 받아 저장하고 lease 를 푼다. save(instance) 는 로드된 캐릭터 전부의 값을 한 번에 쓰게 해 저장한다(lease 는 그대로). recover 는 spool 에 남은 캐릭터 파일을 저장하고 lease 를 푼다.
+- 기능: load(instance, character, spot) 는 lease 를 받고 값을 캐릭터 파일에 내려 받아 호스트에 로드시킨다(파일이 없으면 엔진이 틀에서 낳는다). unload(instance, character) 는 호스트에 언로드시켜 캐릭터 파일을 받아 저장하고 lease 를 푼다. save(instance) 는 로드된 캐릭터 전부의 값을 한 번에 쓰게 해(`keep`) lease 를 늦추고 저장한다 — 지난 저장과 같은 값은 다시 쓰지 않는다. 저장 주기는 Clock 의 간격이고 `leaseMs` 보다 짧다. lease 를 잃은 캐릭터(늦추기 · 쓰기가 거절)는 호스트에서 언로드시키고 값은 버린다(흐름 5 의 「실패하면」). recover 는 spool 에 남은 캐릭터 파일을 저장하고 lease 를 푼다.
 - 생애: Service.start 가 만든다.
 
 ### Backuper

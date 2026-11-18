@@ -47,6 +47,9 @@ export function openGateway(o: GatewayOptions): GatewaySocket {
       timer = setInterval(tick, o.clockMs);
       timer.unref();
     },
+    reroute(character, to, run): void {
+      acceptor.connections.get(character)?.reroute(to, run); // SessionRpc reroute — Connection.reroute 가 흐름 10 의 12 를 남긴다
+    },
     kick(character: string, code: number, _run: string): void {
       acceptor.connections.get(character)?.close(code, '컨트롤 플레인이 닫게 했다'); // SessionRpc kick — Connection.close 가 흐름 11 의 1 을 남긴다
     },

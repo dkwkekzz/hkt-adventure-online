@@ -15,15 +15,15 @@ afterEach(async () => {
   services = [];
 });
 
-/** 포트 다섯 — 넷은 호스트, 마지막은 게이트웨이. */
+/** 포트 다섯 — 넷은 호스트. 게이트웨이는 빈 포트(0)에 서고 제 주소를 알린다(gateUrl 이 비면 `ws://localhost:<port>`). */
 function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portRange()): ServiceConfig {
   const ports: [number, number] = [range[0], range[1] - 1];
-  const gatePort = range[1];
   return {
-    gateway: { port: gatePort, helloMs: 2000, rerouteMs: 500, pongMs: 5000, maxBytes: 65536, maxRate: 100, ipLimit: 32 },
-    session: { capacity: 8, pendingMs: 60_000, graceMs: 60_000, gateLimitMs: 120_000, queueForgetMs: 60_000 },
+    gateway: { port: 0, helloMs: 2000, rerouteMs: 500, pongMs: 5000, maxBytes: 65536, maxRate: 100, ipLimit: 32 },
+    session: { pendingMs: 60_000, graceMs: 60_000, gateLimitMs: 120_000, queueForgetMs: 60_000 },
+    zones: [{ name: 'main', dataset: 'dataset/world.json', capacity: 8, spare: 0 }],
     pageUrl: 'http://play.test/play',
-    gateUrl: `ws://localhost:${gatePort}`,
+    gateUrl: '',
     storage: { root: storageRoot, mongodbUri: null, bucket: null, leaseMs: 1000, characterHistory: 2 },
     apiPort: 0,
     monitorPort: 0,
@@ -37,8 +37,6 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portR
     scheme: 'over',
     fleet: {
       engineDir: fakeEngine(),
-      world: 'main',
-      dataset: 'dataset/world.json',
       party: 'lead-1',
       viewerOut: join(storageRoot, 'viewer', 'viewer.js'),
       beat: 200,
@@ -46,6 +44,8 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portR
       npc: { account: 'npc', bodies: ['b1'] },
       ports,
       hostName: 'localhost',
+      node: { name: 'node-1', slots: 4 },
+      spool: join(storageRoot, 'spool'),
       clockMs: 60_000,
       idleLimit: 3,
       startLimitMs: 5000,
@@ -53,6 +53,7 @@ function config(storageRoot = mkdtempSync(join(tmpdir(), 'svc-')), range = portR
       commandLimitMs: 1000,
       restartLimit: 2,
       backupEvery: 0,
+      backupKeep: 3,
     },
   };
 }
@@ -132,12 +133,12 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
 
     const ea = await post('/enter', { token: chosen.body['token'] });
     expect(ea.code).toBe(200);
-    expect(ea.body['gate']).toBe(`ws://localhost:${s.config.gateway.port}`); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
+    expect(ea.body['gate']).toBe(`ws://localhost:${s.gateway.port}`); // 게이트웨이 하나 — 호스트의 주소는 가지 않는다
     expect(ea.body['page']).toBe(`http://play.test/play?token=${encodeURIComponent(chosen.body['token'])}&ws=${encodeURIComponent(ea.body['gate'])}`);
     const b = await player('둘');
     const eb = await post('/enter', { token: b.token });
     expect(eb.body['gate']).toBe(ea.body['gate']);
-    expect(s.fleet.shards.size).toBe(1);
+    expect(s.fleet.registry.all().map((i) => i.name)).toEqual(['main-1']); // 상한 안 — 같은 인스턴스
     // 다른 계정의 캐릭터는 고르지도 지우지도 못한다
     expect((await post('/choose', { token: b.account, character: made.body['character'].id })).body).toEqual({ why: '이 계정의 캐릭터가 아니다' });
     expect((await post('/delete', { token: b.account, character: made.body['character'].id })).code).toBe(400);
@@ -193,7 +194,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
 
   it('대기열 — 상한을 넘는 입장은 순번을 받고(200), 슬롯이 나면(유예가 지나 11 의 4 ~ 6) 다음 물음이 주소를 받는다', async () => {
     const c = config();
-    const { s, post, player } = await up({ ...c, session: { ...c.session, capacity: 1, graceMs: 200 }, fleet: { ...c.fleet, clockMs: 50, idleLimit: 10_000 } });
+    const { s, post, player } = await up({ ...c, zones: [{ ...c.zones[0]!, capacity: 1 }], session: { ...c.session, graceMs: 200 }, fleet: { ...c.fleet, clockMs: 50, idleLimit: 10_000, node: { name: 'node-1', slots: 1 } } });
     const a = await player('하나');
     const b = await player('둘');
     const gate = (await post('/enter', { token: a.token })).body['gate'] as string;
@@ -222,12 +223,12 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     await first.s.stop();
     await first.s.stop(); // 두 번 불려도 한 번
     const second = await up(c);
-    expect(second.s.fleet.shardOf('main')?.state).toBe('stopped');
+    expect(second.s.fleet.registry.get('main-1')?.state).toBe('stopped');
     const again = await second.player('-', a.subject);
     expect(again.account.split('.')[1]).toBe(a.account.split('.')[1]);
     expect(again.character).toEqual(a.character); // 캐릭터도 표에서
     expect((await second.post('/enter', { token: again.token })).code).toBe(200);
-    expect(second.s.fleet.shardOf('main')?.resumed).toBe(true);
+    expect(second.s.fleet.runner.get('main-1')?.resumed).toBe(true);
   });
 
   it('다른 서버에서 같은 스토리지로 — 이 서버의 자리(local) 없이 표(db)와 Store(bucket)만으로 계정 · 배정 · 세계가 그대로', async () => {
@@ -235,10 +236,9 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const first = await up(c);
     const a = await first.player('하나');
     await first.post('/enter', { token: a.token });
-    const port = first.s.fleet.shardOf('main')!.row.port;
     await new Promise((r) => setTimeout(r, 100));
     await first.s.stop(); // 흐름 7 의 5 — 내려간 Store 를 올렸다
-    expect(first.s.monitor.recent.find((t) => t.flow === 7 && t.step === 5)).toMatchObject({ end: 'ok', unit: 'main' });
+    expect(first.s.monitor.recent.find((t) => t.flow === 7 && t.step === 5)).toMatchObject({ end: 'ok', unit: 'main-1' });
     // 다른 서버 — 같은 MongoDB(db/) · 같은 object storage(bucket/), 빈 local
     const other = mkdtempSync(join(tmpdir(), 'svc-other-'));
     cpSync(join(c.storage.root, 'db'), join(other, 'db'), { recursive: true });
@@ -250,9 +250,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(again.character).toEqual(a.character); // 같은 캐릭터
     const entered = await second.post('/enter', { token: again.token });
     expect(entered.code).toBe(200);
-    expect(second.s.fleet.shardOf('main')?.row.port).toBe(port); // 같은 배정(포트)
-    expect(second.s.fleet.shardOf('main')?.resumed).toBe(true); // 올라간 Store 를 내려 받아 이어간다
-    expect(second.s.fleet.shardOf('main')?.row.epoch).toBe(2); // 세대가 이어진다
+    expect(second.s.fleet.runner.get('main-1')?.resumed).toBe(true); // 올라간 Store 를 내려 받아 이어간다
+    expect(second.s.fleet.registry.get('main-1')?.epoch).toBe(2); // 세대가 이어진다
   });
 
   it('게이트웨이 — 받은 주소 하나로 붙어 호스트와 이어진다. 입장 없이 붙으면 4002. 사람은 9 의 8 에서 active, 닫으면 11 의 2 에서 grace', async () => {
@@ -273,11 +272,11 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const who = s.monitor.recent.find((t) => t.flow === 2 && t.step === 5 && t.who !== undefined)!.who;
     expect(s.monitor.recent.filter((t) => t.person !== undefined && t.who === who).map((t) => `${t.flow}.${t.step} ${t.person}`)).toEqual(['2.5 login', '3.7 pending', '9.8 active', '11.2 grace']);
     const run = s.monitor.recent.find((t) => t.flow === 9 && t.step === 10)!.run;
-    expect(s.monitor.recent.filter((t) => t.run === run).map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['9.1.ok', '9.2.ok', '9.3.ok', '9.8.ok', '9.9.ok', '9.10.ok', '9.11.wait', '11.1.ok', '11.2.wait']); // 접속 하나 = run 하나
+    expect(s.monitor.recent.filter((t) => t.run === run).map((t) => `${t.flow}.${t.step}.${t.end}`)).toEqual(['9.1.ok', '9.2.ok', '9.3.ok', '9.5.ok', '9.6.ok', '9.7.ok', '9.4.ok', '9.8.ok', '9.9.ok', '9.10.ok', '9.11.wait', '11.1.ok', '11.2.wait']); // 접속 하나 = run 하나 — 값을 올린 뒤(4 는 5 ~ 7 이 끝나야 끝난다) 잇는다
     // 한 사람의 입장 · 접속 · 끊김이 한 세션으로 묶이고, 캐릭터 이름이 실린다
     const session = s.monitor.recent.find((t) => t.flow === 3 && t.step === 7 && t.who === who)!.session!;
     expect(session).toMatch(/^s[0-9a-f]{8}$/);
-    expect(s.monitor.recent.filter((t) => t.who === who && t.session !== undefined).map((t) => `${t.flow}.${t.step} ${t.session === session} ${t.name}`)).toEqual(['3.7 true 하나', '3.8 true 하나', '9.3 true 하나', '9.8 true 하나', '9.9 true 하나', '11.2 true 하나']);
+    expect(s.monitor.recent.filter((t) => t.who === who && t.session !== undefined).map((t) => `${t.flow}.${t.step} ${t.session === session} ${t.name}`)).toEqual(['3.7 true 하나', '3.8 true 하나', '9.3 true 하나', '9.4 true 하나', '9.8 true 하나', '9.9 true 하나', '11.2 true 하나']);
   });
 
   it('Monitor.trace — 흐름 1 · 2 · 8 · 3 · 7 의 단계가 차례로 흔적을 남긴다. 한 입장은 run 하나로 Api · 세션 · 함대를 잇는다', async () => {
@@ -290,8 +289,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     await post('/enter', { token: a.token });
     const run = s.monitor.recent.find((t) => t.flow === 3)!.run;
     // api(1 · 2) → control(3 ~ 6, 없으면 B 로 띄우고 6 을 다시 · 7 · 8) → api(9)
-    expect(steps(3, run)).toEqual(['1.ok', '2.ok', '3.ok', '4.ok', '5.ok', '6.refused', '14.ok', '11.ok', '13.ok', '15.ok', '16.ok', '17.ok', '18.ok', '19.ok', '6.ok', '7.ok', '8.ok', '9.wait']);
-    expect(s.monitor.units.get('main')).toMatchObject({ state: 'ready' });
+    expect(steps(3, run)).toEqual(['1.ok', '2.ok', '3.ok', '4.ok', '5.ok', '6.refused', '10.ok', '11.ok', '13.ok', '14.ok', '15.ok', '16.ok', '17.ok', '18.ok', '12.ok', '19.ok', '6.ok', '7.ok', '8.ok', '9.wait']); // 12(Runner.start)는 13 ~ 18 이 끝나야 끝난다
+    expect(s.monitor.units.get('main-1')).toMatchObject({ state: 'ready' });
     await post('/enter', { token: 'nope' });
     expect(s.monitor.tally.get('3.2.refused')).toBe(1);
     const account = a.account.split('.')[1]!;
@@ -308,8 +307,8 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     const monitor = s.monitor;
     await s.stop();
     const stop = monitor.recent.filter((t) => t.flow === 7).map((t) => `${t.step}.${t.state ?? ''}`);
-    expect(stop).toEqual(['7.', '8.', '4.stopping', '5.', '10.', '11.']); // 게이트웨이가 알리고 닫고 · 내리고 · Store 를 올리고 · Api 를 닫고 · 스토리지를 닫는다
-    expect(monitor.units.get('main')?.state).toBe('stopped'); // 흐름 4 의 5 — 호스트가 끝났다
+    expect(stop).toEqual(['7.', '8.', '4.stopping', '5.', '6.stopped', '10.', '11.']); // 게이트웨이가 알리고 닫고 · 내리고 · Store 를 올리고 · 줄을 stopped 로 · Api 를 닫고 · 스토리지를 닫는다
+    expect(monitor.units.get('main-1')?.state).toBe('stopped'); // 흐름 4 의 5 — 호스트가 끝났다
   });
 
   it('loadConfig — 상대 경로는 파일의 자리에서, env 가 몇 칸을 덮는다', () => {
@@ -327,7 +326,7 @@ describe('Service — 흐름 1 · 2 · 3 · 7', () => {
     expect(read.monitorPort).toBe(9002);
     expect(read.build).toBe('-'); // 곁에 engine.lock 이 없다
     expect(read.pageUrl).toBe('https://play.test:9001/play');
-    expect(read.gateUrl).toBe(`wss://play.test:${c.gateway.port}`);
+    expect(read.gateUrl).toBe('wss://play.test:0');
     expect(loadConfig(file, { GATE_PORT: '9003', SERVICE_GATE_URL: 'wss://play.test/gate' }).gateway.port).toBe(9003);
     expect(loadConfig(file, { SERVICE_GATE_URL: 'wss://play.test/gate' }).gateUrl).toBe('wss://play.test/gate');
     expect(loadConfig(file, { SERVICE_PAGE_URL: 'https://play.test/play' }).pageUrl).toBe('https://play.test/play');

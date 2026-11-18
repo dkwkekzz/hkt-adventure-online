@@ -83,26 +83,46 @@ export class Service {
     try {
       storage = await openStorage(config.storage); // 흐름 1 의 1 — 닿지 않으면 시작 거부
       const signer = new Signer(key, config.tokenTtl);
-      const fleet = await Fleet.open(config.fleet, storage, key, (account) => signer.issue(account, config.agentTtl), log, monitor.trace, run); // 흐름 1 의 7
+      // 세션 ↔ 플릿 · 게이트웨이는 서로를 부른다(SessionRpc · NodeRpc 는 함수 부름) — 세션 · 게이트웨이는 아래에서 선다
+      let session: SessionSocket | null = null;
+      let gateway: GatewaySocket | null = null;
+      const fleet = await Fleet.open(
+        config.fleet,
+        config.zones,
+        config.build,
+        storage,
+        key,
+        (account) => signer.issue(account, config.agentTtl),
+        {
+          count: (instance) => session?.count(instance) ?? 0, // Scaler
+          move: async (instance, r) => await session?.recover(instance, r), // Recoverer ⇒ 흐름 12 의 4 · 5
+          drain: async (instance, r) => (await session?.drain(instance, r)) ?? 0, // Operator 의 drain ⇒ 흐름 10
+          handoff: (instance, character, to, r) => session?.handoff(instance, character, to, r), // NodeRpc handoff ⇒ 흐름 10
+        },
+        log,
+        monitor.trace,
+        run,
+      ); // 흐름 1 의 7
       const characters = new Characters(storage.database, config.characterLimit);
       const banlist = new Banlist(storage.database);
-      // SessionRpc 는 함수 부름 — 세션 ↔ 게이트웨이는 서로를 부른다(attach · detach · report ↔ kick). 게이트웨이는 아래에서 선다
-      let gateway: GatewaySocket | null = null;
-      const session = await openSession({
+      session = await openSession({
         config: config.session,
-        zones: [{ name: config.fleet.world, dataset: config.fleet.dataset, capacity: config.session.capacity }],
-        entry: config.fleet.world,
+        zones: config.zones.map((z) => ({ name: z.name, dataset: z.dataset, capacity: z.capacity, spare: z.spare })),
+        entry: config.zones[0]!.name,
         clockMs: config.fleet.clockMs,
         database: storage.database,
         characters: storage.characters,
         owner: (character) => characters.owner(character),
         banned: (account) => banlist.banned(account),
         remove: (character) => characters.remove(character),
-        ready: (zone) => fleet.ready(zone).map((name) => ({ name, build: config.build })), // 빌드는 이 서버의 것 하나 — 노드마다의 빌드는 plan 08
-        launch: (zone, _build, r) => fleet.launch(zone, r),
+        ready: (zone) => fleet.ready(zone), // 빌드는 인스턴스의 것 — 지금은 이 서버의 것 하나(노드마다의 빌드는 plan 08)
+        launch: (zone, build, r) => fleet.launch(zone, build, r),
         address: (instance) => fleet.address(instance),
+        load: (instance, character, spot, r) => fleet.load(instance, character, spot, r), // NodeRpc load
+        unload: (instance, character, r) => fleet.unload(instance, character, r), // NodeRpc unload
         issue: (character) => signer.issue(character, config.agentTtl), // 호스트에 줄 토큰 — 접속 한 번에만 쓴다
         kick: (_gate, character, code, r) => gateway?.kick(character, code, r), // 게이트웨이는 지금 하나
+        reroute: (_gate, character, to, r) => gateway?.reroute(character, to, r),
         trace: monitor.trace,
         log,
       });
